@@ -1,68 +1,22 @@
-# ===== Python =====
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-.ipynb_checkpoints/
+# 只上传 Python 源码, 其余一律忽略(数据/文档/图/中间产物等)
+# 规则: 先忽略一切, 再仅放行目录递归 + .py + 本文件
 
-# ===== 虚拟环境 =====
+# 忽略所有
+*
+
+# 但允许进入子目录(否则 git 无法递归到 .py)
+!*/
+
+# 仅放行 Python 源码
+!*.py
+
+# 放行本忽略文件自身(使规则纳入版本控制)
+!.gitignore
+
+# 始终排除虚拟环境、IDE 与缓存(含其中的 .py / .gitignore)
 .venv/
 venv/
 env/
-
-# ===== IDE =====
+__pycache__/
 .idea/
 .vscode/
-
-# ===== 原始/处理后数据 (不上传) =====
-*.csv
-*.tsv
-*.parquet
-*.feather
-*.xlsx
-*.xls
-*.pkl
-*.pickle
-*.npy
-*.npz
-*.h5
-*.hdf5
-*.mat
-data/
-raw_data/
-processed/
-datasets/
-
-# ===== 实验结果 / 输出 =====
-results/
-outputs/
-output/
-figures/
-figs/
-plots/
-logs/
-*.log
-runs/
-wandb/
-
-# ===== 模型 / 检查点 =====
-models/
-checkpoints/
-*.ckpt
-*.pt
-*.pth
-*.onnx
-
-# ===== 图片 (通常是结果图, 如需上传单张请用 git add -f) =====
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.pdf
-
-# ===== 系统文件 =====
-.DS_Store
-Thumbs.db
-
-# 注意: Git 无法按体积自动过滤. 请勿手动 add 超过 100MB 的文件.
-# 如确需上传某个被忽略的小文件, 用: git add -f 文件名
