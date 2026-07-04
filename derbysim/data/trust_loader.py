@@ -18,7 +18,8 @@ _KEEP = [
     "event_type", "planned_timestamp", "actual_timestamp", "gbtt_timestamp",
     "timetable_variation", "variation_status", "platform", "loc_stanox",
     "reporting_stanox", "next_report_stanox", "delay_monitoring_point",
-    "offroute_ind", "train_id", "current_train_id", "toc_id", "direction_ind",
+    "offroute_ind", "train_id", "current_train_id", "train_service_code",
+    "toc_id", "direction_ind",
 ]
 
 
@@ -39,7 +40,6 @@ def build_trust_subset() -> dict:
     df["signed_variation"] = signed_variation(df["timetable_variation"], df["variation_status"])
     df["lateness"] = df["signed_variation"].clip(lower=0)
     df["earliness"] = (-df["signed_variation"]).clip(lower=0)
-    # 有效性: 有带符号延误 且 非 OFF ROUTE 且 有实际时刻
     df["valid"] = (
         df["signed_variation"].notna()
         & (df["variation_status"] != "OFF ROUTE")

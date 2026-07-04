@@ -13,7 +13,6 @@ from derbysim import config
 from derbysim.data import region as R
 from derbysim.infra import InfrastructureNetwork
 
-# 输出保留列
 _KEEP_COLS = [
     "time", "type", "id", "state", "from_berth", "to_berth",
     "trainid_filled", "Panel_Request", "signal", "platform",
@@ -26,7 +25,7 @@ _USECOLS = [
 
 def _region_mask(df: pd.DataFrame, region_tc: frozenset[str]) -> pd.Series:
     sig_str = {str(s) for s in config.IN_SCOPE_SIGNALS}
-    berths = config.REGION_BERTHS
+    berths = set(config.REGION_BERTHS) | {f"PLT{p}" for p in config.DERBY_PLATFORMS}
     plats = {str(p) for p in config.DERBY_PLATFORMS}
 
     id_s = df["id"].astype(str)
@@ -48,7 +47,6 @@ def _region_mask(df: pd.DataFrame, region_tc: frozenset[str]) -> pd.Series:
 
 
 def build_td_subset(chunksize: int = 400_000) -> dict:
-    """扫 TD, 过滤到区域, 写 parquet, 建 berth 邻接. 返回统计报告."""
     net = InfrastructureNetwork.load()
     region_tc = R.region_tc_set_from_network(net)
 
@@ -66,12 +64,10 @@ def build_td_subset(chunksize: int = 400_000) -> dict:
         total_rows += len(chunk)
         for tp, c in chunk["type"].value_counts().items():
             type_counts_total[tp] = type_counts_total.get(tp, 0) + int(c)
-        # berth 邻接(全量 CA, 用于仿真器)
         ca = chunk[chunk["type"] == "CA"]
         for a, b in zip(ca["from_berth"].str.strip(), ca["to_berth"].str.strip()):
             if a and b:
                 adjacency.add((a, b))
-        # 区域过滤
         mask = _region_mask(chunk, region_tc)
         sub = chunk.loc[mask, _KEEP_COLS].copy()
         kept_rows += len(sub)
@@ -86,7 +82,6 @@ def build_td_subset(chunksize: int = 400_000) -> dict:
     adj_path = config.ARTIFACTS_SUBSET / "berth_adjacency.parquet"
     adj_df.to_parquet(adj_path, index=False)
 
-    # 报告
     in_region_trains = sorted(
         t for t in out["trainid_filled"].unique() if t and t not in ("0", "****")
     )
