@@ -49,7 +49,7 @@ def main() -> int:
             continue
         seq = list(r.tc_sequence)
         lst = [(ts, tc) for ts, tc in tr_by.get(x.trainid_filled, [])
-               if x.ts - pd.Timedelta(seconds=30) <= ts <= x.ts + pd.Timedelta(seconds=400)]
+               if x.ts - pd.Timedelta(seconds=30) <= ts <= x.ts + pd.Timedelta(seconds=800)]
         first_occ = {}
         for ts, tc in lst:
             if tc not in first_occ:
