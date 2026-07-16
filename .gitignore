@@ -13,6 +13,9 @@
 # 放行本忽略文件自身(使规则纳入版本控制)
 !.gitignore
 
+# 放行英文 CHANGELOG(需 push 到 GitLab 展示); 中文 chinese_change_log.md 仍被忽略(仅本地看)
+!CHANGELOG.md
+
 # 始终排除虚拟环境、IDE 与缓存(含其中的 .py / .gitignore)
 .venv/
 venv/
