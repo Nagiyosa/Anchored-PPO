@@ -122,8 +122,9 @@ class Reachability:
         need_plat = goal.must_serve_platform and not platform_served
         if not goal.exit_group:               # 区内终止(无出区口目标): 只需(若需)可达站台
             return (not need_plat) or bool((seen | {from_signal}) & self.plat_sigs)
+        at_exit = from_signal in goal.exit_group   # 进路已止于出区口本身 = 已达
         if not need_plat:
-            return bool(exits & goal.exit_group)
+            return at_exit or bool(exits & goal.exit_group)
         # 需先服务站台再出区: 存在可达站台 p, 且从 p 可达该出口组
         cand_plats = (seen | {from_signal}) & self.plat_sigs
         for p in cand_plats:
