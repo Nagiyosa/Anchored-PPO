@@ -42,6 +42,8 @@ class DynTrain:
     entry_time: float
     stop_pids: set = field(default_factory=set)
     booked_platform: int | None = None
+    planned_ref: float | None = None       # CIF 计划参考时刻(供 signed 延误)
+    service_class: str = ""                 # headcode 首位 = TOPS 优先级
     path: list[str] = field(default_factory=list)      # 仅已锁进路的 TC
     route_ptr: int = 0
     pending_route: str | None = None
@@ -280,6 +282,91 @@ class DynamicEngine:
             self.res.release_route(t.route_chain[k])
         self._wake()
 
+    def _delay_min(self, t):
+        pr = getattr(t, "planned_ref", None)
+        if pr is None:
+            return None
+        return round((t.entry_time - pr) / 60.0, 1)
+
+    def _build_obs(self):
+        """面板 obs(Path A 在线控制): 全区在读列车 + **当前预留锁态**(agent 自控, 非泄露, D22/M9) + 时段.
+
+        与 M8 决策车快照相反 —— M9 是在线开面板, 当前哪些进路已锁是本该看见的现场态.
+        """
+        trains = []
+        for t in self.trains.values():
+            if t.done:
+                continue
+            trains.append({
+                "train_id": t.train_id,
+                "cur_tc": t.path[t.pos] if t.pos < len(t.path) else None,
+                "pos_idx": t.pos,
+                "awaiting": t.awaiting_decision,
+                "has_pending": t.pending_route is not None,
+                "served_platform": t.served_platform,
+                "booked_platform": t.booked_platform,
+                "delay_min": self._delay_min(t),
+                "service_class": t.service_class,
+                "exit_group": sorted(t.goal.exit_group) if (t.goal and t.goal.exit_group) else [],
+            })
+        return {
+            "now": self.now,
+            "tod_hour": int((self.now // 3600) % 24),
+            "trains": trains,
+            "reservations": dict(self.res.reserved),   # 当前锁态: tc -> route_id
+            "n_reserved_tc": len(self.res.reserved),
+            "queue_len": len(self.res.queue),
+        }
+
     def _at_goal_exit(self, t):
         last = self.net.routes.get(t.route_chain[t.route_ptr - 1]) if t.route_ptr >= 1 else None
         return bool(last and t.goal and last.end_signal in t.goal.exit_group)
+
+
+class DynamicDerbyEnv:
+    """M9d gym 式包装: reset(trains) → 跑到首个面板决策; step(PanelAction) → 到下一个决策/终局.
+
+    obs = 引擎面板 obs(含当前锁态); reward=0.0(留 M10). decision() 给 PanelDecision(可选动作集).
+    done = 生成器耗尽(全车终局) 或 死锁判负.
+    """
+
+    def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None) -> None:
+        self.net = net
+        self.params = params or {}
+        self.plat_tc_to_pid = plat_tc_to_pid or {}
+        self.dwell_by_platform = dwell_by_platform or {}
+        self.engine: DynamicEngine | None = None
+        self._gen = None
+        self._pending: PanelDecision | None = None
+
+    def reset(self, trains):
+        self.engine = DynamicEngine(self.net, self.params, self.plat_tc_to_pid,
+                                    self.dwell_by_platform)
+        self._gen = self.engine.run(trains)
+        self._pending = next(self._gen, None)
+        return self._obs(), self._info()
+
+    def step(self, action: PanelAction):
+        if self._gen is None or self._pending is None:
+            raise RuntimeError("step() called on finished/uninitialized env")
+        try:
+            self._pending = self._gen.send(action)
+            done = self.engine.deadlocked
+        except StopIteration:
+            self._pending = None
+            done = True
+        return self._obs(), 0.0, done, self._info()
+
+    @property
+    def done(self) -> bool:
+        return self._pending is None or (self.engine is not None and self.engine.deadlocked)
+
+    def decision(self) -> PanelDecision | None:
+        return self._pending
+
+    def _obs(self):
+        return self.engine._build_obs() if (self.engine and self._pending is not None) else None
+
+    def _info(self) -> dict:
+        return {"decision": self._pending,
+                "deadlocked": self.engine.deadlocked if self.engine else False}

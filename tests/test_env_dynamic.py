@@ -105,3 +105,28 @@ def test_deadlock_flags_terminal():
     eng.trains = {"A": DynTrain("A", [], 0.0), "B": DynTrain("B", [], 0.0)}
     eng._apply(PanelAction("set", "B", P.route_id))   # B 请求 P → 排队 → B→A → 成环
     assert eng.deadlocked and "A" in eng.deadlock_cycle and "B" in eng.deadlock_cycle
+
+
+def test_gym_wrapper_replay_and_obs_lockstate():
+    from derbysim.sim.env_dynamic import DynamicDerbyEnv
+    net, params, dwell, ptc, dyn = _load()
+    env = DynamicDerbyEnv(net, params, ptc, dwell)
+    obs, info = env.reset(dyn)
+    assert "trains" in obs and "reservations" in obs      # 面板 obs 结构
+    seen_locked = False
+    steps = 0
+    while not env.done and steps < 100000:
+        dec = env.decision()
+        act = None
+        for tid, rid in dec.logged.items():
+            act = PanelAction("set", tid, rid)
+            break
+        if act is None:
+            act = PanelAction("wait")
+        obs, reward, done, info = env.step(act)
+        steps += 1
+        if obs and obs["n_reserved_tc"] > 0:
+            seen_locked = True                            # obs 含当前锁态(Path A 可观测)
+    assert env.done and all(t.done for t in dyn)
+    assert seen_locked, "obs 应在过程中含非空当前锁态(预留)"
+    assert not env.engine.deadlocked and len(env.engine.collisions) == 0
