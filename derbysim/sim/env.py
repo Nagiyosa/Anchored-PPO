@@ -10,7 +10,8 @@ M8 落地 D22:
       N[S] 从 TD 标定(decision_advance.json); 回看越过入区 → 以入区截断.
     - 无泄露状态(靠构造, 非拍早): 快照拍在真实决策时刻, 剔除本决策后果(锁/信号绿/committed 位移/
       日志所选路), 只放可观测量(占用/逼近车位置/延误/CIF 目标/时段). 观测=决策车 + 所有冲突车.
-    - 动作掩码 = 当下 TC 空闲的合法出口(interlocking 语义, 源自引擎物理占用).
+    - 动作掩码 = 该信号**几何合法出口**(全部; D22 用户定案 request 层, 不按当下占用过滤——占用留状态,
+      "会不会通"由策略学; 防撞靠引擎停等, 死锁留 M9).
     - 解耦(回放/建数据集): "问+拍快照"在物理触发点; "materialize/推进"仍照日志 req_time(ready_at 门禁),
       故列车推进时序不变 → M7 逐位等价续绿. 全物理锁留 M9.
 """
@@ -44,7 +45,7 @@ def load_advance_cfg(path=_ADVANCE_CFG_PATH) -> dict:
 class DecisionContext:
     """一次决策点情境(单智能体, 事件时序).
 
-    obs = 因果先于动作、无泄露的状态快照(M8); legal_route_ids = 联锁掩码;
+    obs = 因果先于动作、无泄露的状态快照(M8); legal_route_ids = 几何合法出口掩码;
     logged_route_id = 回放标签/BC 目标(只作 y, 不进 obs).
     """
     train_id: str
@@ -170,15 +171,19 @@ class SteppableReactiveEngine:
         t.next_trigger_idx = max(0, trig)
         t.next_trigger_kind = kind
 
-    # ---- 决策信号处的联锁掩码(源自引擎物理占用) ----
+    # ---- 决策信号处的动作掩码 = 几何合法出口 (D22, 用户定案 request 层) ----
     def _legal_routes(self, S: int | None, train_id: str):
+        """动作掩码 = 该信号**几何合法出口**(全部出口进路), 不按"当下 TC 空闲"过滤.
+
+        定案理由(request-vs-lock): 我们学的是 Panel_Request(请求层); 实测 2.2% 真实请求发生在
+        route TC 被别车占时(提前排在将清空的路上, 排队待清空才锁)。用"当下空闲"当硬掩码会砍掉这些
+        真实决策、并把答案偷偷补回。占用信息已在状态 candidate_tc_occupancy 里, "会不会通、要不要
+        提前排"是策略要学的判断(D21)。LOCK 层(不能锁占用)由引擎物理门禁(下一段被占则停等)体现;
+        防撞结构性保证, 死锁避免留 M9(等待图找环+前瞻屏蔽)。几何掩码亦保证日志真进路恒在候选集内。
+        """
         if S is None:
             return []
-        out = []
-        for r in self.net.routes_from(S):
-            if all(self.occupied.get(tc) in (None, train_id) for tc in r.tc_sequence):
-                out.append(r)
-        return out
+        return list(self.net.routes_from(S))
 
     # ---- 无泄露状态构造(D18/D22): 因果先于动作, 剔除本决策后果 ----
     def _delay_min(self, tr: EnvTrain):
