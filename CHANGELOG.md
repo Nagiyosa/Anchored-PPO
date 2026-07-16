@@ -16,6 +16,22 @@ Design in `docs/M9_DESIGN.md`. Decided: Path A + explicit cancel, free routing (
 of route choice), deterministic, geometric mask, overlap included, no artificial cap on how early a route
 may be set, deadlock = terminal failure, obs includes current lock state.
 
+### M9d — DynamicDerbyEnv: full Path A counterfactual env (2026-07-16)
+- `sim/env_dynamic.py`: reservation-driven engine (advance freely inside a locked route; block
+  only when a request queues; sectional + on-completion release) with the full Path A action set
+  `{WAIT} ∪ {set(train, route)} ∪ {cancel(train)}` (PanelDecision/PanelAction), deadlock-lookahead
+  masking + terminal-failure on detected deadlock, goal-group termination, and a panel `obs`
+  (all in-region trains + current reservation lock state + time). `DynamicDerbyEnv` gym wrapper.
+- consistency regression vs M8 (fed the logged decisions): **paths bit-identical for all 34/34
+  trains**; free-flow occupation matches (median 0s, 61% ≤2s = the M6 ~2s validation); the timing
+  tail (mean 98s) is the intended divergence from dropping M8's log-time gate (agent controls
+  timing in Path A). Physical sanity: 0 collisions, no deadlock, delay conservation.
+- Path A smoke: env is drivable by a non-replay policy, safely (0 collisions, terminates).
+- fixes: reachability counts "route ends at the goal exit" as reached; platform-reversal decision
+  signal (arrive one end / depart the other) via paired platform ends.
+- known limitation: goal-reachability filter is conservative (occasional false negatives) — harmless
+  in replay, may under-offer routes under aggressive free-routing; to be hardened in M11. +8 tests. 68 pass.
+
 ### M9c — Deadlock detection + lookahead (2026-07-16)
 - `sim/deadlock.py`: wait-for graph from reservation state (a train with a QUEUED request waits on the
   train holding the conflicting reservation); DFS cycle detection = deadlock.

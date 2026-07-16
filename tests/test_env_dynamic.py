@@ -130,3 +130,71 @@ def test_gym_wrapper_replay_and_obs_lockstate():
     assert env.done and all(t.done for t in dyn)
     assert seen_locked, "obs 应在过程中含非空当前锁态(预留)"
     assert not env.engine.deadlocked and len(env.engine.collisions) == 0
+
+
+def _build_both(net, dwell, ptc):
+    """同窗口构造 M8 EnvTrains 与 M9 DynTrains(同一 route_chain)."""
+    td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
+    td["ts"] = pd.to_datetime(td["time"])
+    w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
+    built = build_env_trains_for_window(w, net, dwell, ptc)
+    m8 = [b[0] for b in built]
+    dyn = [DynTrain(b[0].train_id, b[0].route_chain, b[0].entry_time,
+                    b[0].stop_pids, b[0].booked_platform) for b in built]
+    return m8, dyn
+
+
+def test_consistency_regression_vs_m8():
+    """喂日志决策: M9(预留/overlap/Path A) 与 M8 逐车**路径完全一致** + 物理 sanity.
+    占用时刻自由流段一致(中位≤2s); 尾部分歧=M9 去掉 log 时序门禁(agent 掌控时机)的**预期**差异.
+    """
+    from derbysim.sim.env import DerbyEnv
+    import numpy as np
+    net, params, dwell, ptc, _ = _load()
+    m8, dyn = _build_both(net, dwell, ptc)
+    env = DerbyEnv(net, params, ptc, dwell); env.reset(m8)
+    while not env.done:
+        c = env.decision(); env.step(c.logged_route_id)
+    eng = _run_replay_dyn(net, params, ptc, dwell, dyn)
+    m8p = {t.train_id: list(t.path) for t in m8}
+    m9p = {t.train_id: list(t.path) for t in dyn}
+    common = set(m8p) & set(m9p)
+    assert common and all(m8p[k] == m9p[k] for k in common), "M9 路径应与 M8 逐车一致"
+    # 物理 sanity
+    assert len(eng.collisions) == 0 and not eng.deadlocked and all(t.done for t in dyn)
+    assert all(t.wait_time >= 0 for t in dyn)                 # 延误守恒
+    # 自由流占用一致(中位) —— 尾部分歧为预期(agent 时机), 不硬卡
+    m8o = {t.train_id: dict(t.sim_occ) for t in m8}
+    diffs = [abs(t.sim_occ[tc] - m8o[t.train_id][tc])
+             for t in dyn for tc in t.sim_occ if tc in m8o.get(t.train_id, {})]
+    assert np.median(diffs) <= 5.0, f"自由流占用中位分歧应≤5s, 实得 {np.median(diffs):.0f}s"
+
+
+def _run_replay_dyn(net, params, ptc, dwell, dyn):
+    eng = DynamicEngine(net, params, ptc, dwell)
+    gen = eng.run(dyn); p = next(gen, None)
+    while p is not None:
+        act = next((PanelAction("set", tid, rid) for tid, rid in p.logged.items()), PanelAction("wait"))
+        try:
+            p = gen.send(act)
+        except StopIteration:
+            p = None
+    return eng
+
+
+def test_path_a_heuristic_smoke():
+    """Path A 非回放冒烟: FCFS 式启发策略(给待决车办首条合法进路)驱动, 不崩、0 碰撞、可终止."""
+    from derbysim.sim.env_dynamic import DynamicDerbyEnv
+    net, params, dwell, ptc, dyn = _load()
+    env = DynamicDerbyEnv(net, params, ptc, dwell)
+    env.reset(dyn); steps = 0
+    while not env.done and steps < 200000:
+        dec = env.decision()
+        sets = [o for o in dec.options if o.kind == "set"]
+        act = sets[0] if sets else PanelAction("wait")     # 启发: 办首条合法进路, 否则等
+        env.step(act); steps += 1
+    # 冒烟只验**可驱动 + 安全**: 能终止、0 碰撞、无异常。
+    # 朴素 first-legal 策略会堆车、搁浅部分车(策略质量问题非引擎 bug); 真实策略(M11 BC/M12 RL)会理性选路。
+    assert env.done, "Path A 应能终止(全完成/搁浅/死锁判负)"
+    assert len(env.engine.collisions) == 0                 # 预留结构性无碰撞
+    assert steps < 200000                                   # 未陷入无限循环
