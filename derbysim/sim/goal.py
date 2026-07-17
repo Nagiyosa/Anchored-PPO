@@ -108,6 +108,12 @@ class Reachability:
         self.insc = set(config.IN_SCOPE_SIGNALS)
         self.plat_sigs = platform_end_signals(net)
         self._cache: dict[int, tuple[set[int], set[int]]] = {}
+        self.pair: dict[int, int] = {}                # 站台两端互为配对(反向出站)
+        for _p in net.platforms.values():
+            _e = list(_p.end_signals.values())
+            if len(_e) == 2:
+                self.pair[_e[0]] = _e[1]
+                self.pair[_e[1]] = _e[0]
 
     def _r(self, start: int):
         if start not in self._cache:
@@ -133,6 +139,23 @@ class Reachability:
                 return True
         return False
 
+    def can_reach_exit(self, from_signal: int | None, exit_group) -> bool:
+        """仅"出区口方向可达"(含站台反向: 站台端可从配对端出). 空 exit_group(区内终止)恒 True."""
+        if from_signal is None or not exit_group:
+            return True
+        sigs = {from_signal}
+        if from_signal in self.pair:
+            sigs.add(self.pair[from_signal])          # 站台可反向出站
+        for s in sigs:
+            if s in exit_group:
+                return True
+            _, exits = self._r(s)
+            if exits & exit_group:
+                return True
+        return False
+
     def route_keeps_goal(self, route, goal: Goal, platform_served: bool) -> bool:
-        """选进路 route 后是否仍可达目标(可达性硬约束用于动作掩码)."""
-        return self.can_reach_goal(route.end_signal, goal, platform_served)
+        """动作掩码硬约束 = **仅出区口方向可达**(防真死胡同). 站台服务=**软目标**(转 M10 奖励,
+        客运没停站出区=扣分, 不禁止选路) —— 见 M9_DESIGN §10 修正(原站台硬筛致 22.4% false-negative,
+        违站台决策 §1). platform_served 保留供调用方/奖励用, 此处不作硬筛."""
+        return self.can_reach_exit(route.end_signal, goal.exit_group)

@@ -49,11 +49,12 @@ def test_route_keeps_goal_filters_deadend(net):
     R = Reachability(net)
     north = Goal(g[5093], must_serve_platform=False)
     south = Goal(g[5323], must_serve_platform=False)
-    # 找一条 end 只能到南向的进路: 对北向目标应剔除, 对南向保留
+    # 硬约束=方向可达(M9_DESIGN §10 修正: 站台转软). 找一条 end 只能到南向的进路:
+    # 对北向目标应剔除, 对南向保留.
     r_south = next(r for r in net.routes.values()
                    if r.end_signal is not None
-                   and not R.can_reach_goal(r.end_signal, north, False)
-                   and R.can_reach_goal(r.end_signal, south, False))
+                   and not R.can_reach_exit(r.end_signal, north.exit_group)
+                   and R.can_reach_exit(r.end_signal, south.exit_group))
     assert not R.route_keeps_goal(r_south, north, platform_served=False)
     assert R.route_keeps_goal(r_south, south, platform_served=False)
 
@@ -64,3 +65,14 @@ def test_train_goal_derivation(net):
     assert 5093 in goal.exit_group and goal.must_serve_platform
     goal2 = train_goal([exr.route_id], net, stops=set())
     assert not goal2.must_serve_platform                  # 无停站 → 不须服务站台
+
+
+def test_platform_service_is_soft_not_hard_filter(net):
+    """M9_DESIGN §10 修: 站台服务=软目标, 不作硬性动作过滤(否则致 22.4% false-negative).
+    一条通向出区口但暂离站台的进路, 对**停站车**仍应保留(方向可达即可; 站台服务交 M10 奖励)."""
+    g = exit_direction_groups(net)
+    R = Reachability(net)
+    stop_goal = Goal(g[5323], must_serve_platform=True)          # 需停站的南向车
+    r = next(rt for rt in net.routes.values() if rt.end_signal == 5319)  # 5319 通南向、够不着站台
+    assert not R.can_reach_exit(5319, g[5093])                   # 前提: 5319 到不了北向(方向硬约束有效)
+    assert R.route_keeps_goal(r, stop_goal, platform_served=False)  # 停站未停仍保留(站台软)
