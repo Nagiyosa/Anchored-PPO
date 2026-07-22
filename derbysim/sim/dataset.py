@@ -17,6 +17,39 @@ import pandas as pd
 from derbysim.sim.env import DerbyEnv, build_env_trains_for_window
 
 
+def _chain_continuity(net):
+    from collections import defaultdict
+    succ = defaultdict(set)
+    for r in net.routes.values():
+        for i in range(1, len(r.tc_sequence)):
+            succ[r.tc_sequence[i - 1]].add(r.tc_sequence[i])
+    pair = {}
+    for pl in net.platforms.values():
+        e = list(pl.end_signals.values())
+        if len(e) == 2:
+            pair[e[0]] = e[1]; pair[e[1]] = e[0]
+    return succ, pair
+
+
+def chain_is_continuous(route_chain, net, succ=None, pair=None):
+    """物理连续 = 每段进路首TC 是上段末TC 的后继(tc_succ), 或站台配对端折返. 断链=H6乱序/缺段(数据脏)."""
+    if succ is None:
+        succ, pair = _chain_continuity(net)
+    last_tc = None; last_end = None
+    for rid in route_chain:
+        r = net.routes.get(rid)
+        if not r or not r.tc_sequence:
+            continue
+        if last_tc is not None:
+            cont = (r.signal == last_end                            # 常规边界: 下段起始信号=上段end
+                    or r.tc_sequence[0] in succ.get(last_tc, ())    # 物理续接(信号名不同但TC连续)
+                    or (last_end is not None and pair.get(last_end) == r.signal))  # 站台配对折返
+            if not cont:
+                return False
+        last_tc = r.tc_sequence[-1]; last_end = r.end_signal
+    return True
+
+
 def build_cif_map(occ_df: pd.DataFrame, date: str) -> dict:
     """{headcode: {booked_platform, planned_ref(epoch s), service_class}} for a given date."""
     sub = occ_df[occ_df["date"].astype(str) == date]
@@ -62,7 +95,11 @@ def generate_decisions(net, params, plat_tc_to_pid, dwell_by_platform, td_win,
     """
     built = build_env_trains_for_window(td_win, net, dwell_by_platform, plat_tc_to_pid,
                                         cif_map=cif_map)
-    trains = [b[0] for b in built]
+    succ, pair = _chain_continuity(net)
+    dropped = [b[0].train_id for b in built
+               if not chain_is_continuous(b[0].route_chain, net, succ, pair)]
+    trains = [b[0] for b in built
+              if chain_is_continuous(b[0].route_chain, net, succ, pair)]   # 丢断链(H6乱序)车
     byid = {t.train_id: t for t in trains}
     env = DerbyEnv(net, params, plat_tc_to_pid, dwell_by_platform)
     env.reset(trains)
@@ -99,5 +136,6 @@ def generate_decisions(net, params, plat_tc_to_pid, dwell_by_platform, td_win,
         "n_real_choices": n_real,
         "n_mask_misses": len(env.engine.mask_misses) if env.engine else 0,
         "n_trains": len(trains),
+        "n_dropped_broken_chain": len(dropped),
     }
     return records, stats

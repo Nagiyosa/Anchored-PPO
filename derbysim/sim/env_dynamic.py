@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 from derbysim.sim.events import EventQueue
@@ -62,12 +63,13 @@ class DynTrain:
 
 
 class DynamicEngine:
-    def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None) -> None:
+    def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
+                 overlap_depth: int = 1) -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
         self.dwell_by_platform = dwell_by_platform or {}
-        self.res = RouteReservation(net)
+        self.res = RouteReservation(net, overlap_depth=overlap_depth)
         self.reach = Reachability(net)
         self.q = EventQueue()
         self.trains: dict[str, DynTrain] = {}
@@ -83,23 +85,42 @@ class DynamicEngine:
             if len(_ends) == 2:
                 self._pair[_ends[0]] = _ends[1]
                 self._pair[_ends[1]] = _ends[0]
+        # 物理续接: TC 后继(进路内相邻) + 以某 TC 起始的进路 —— 供按物理位置推决策(D 修)
+        self._tc_succ: dict = defaultdict(set)
+        self._routes_by_first: dict = defaultdict(list)
+        for _r in net.routes.values():
+            if _r.tc_sequence:
+                self._routes_by_first[_r.tc_sequence[0]].append(_r)
+                for _i in range(1, len(_r.tc_sequence)):
+                    self._tc_succ[_r.tc_sequence[_i - 1]].add(_r.tc_sequence[_i])
 
     def _adv(self, tc):
         return self.params.get(tc, (DEFAULT_ADVANCE, DEFAULT_OCC))[0]
 
     def _legal(self, t, signal):
-        """几何出口 ∩ 目标可达. 站台端信号并入其配对端(反向出站, 如 5064<->5054)."""
-        if signal is None:
-            return []
-        sigs = {signal}
-        if signal in self._pair:
-            sigs.add(self._pair[signal])
-        out = []
-        for s in sigs:
-            for r in self.net.routes_from(s):
-                if self.reach.route_keeps_goal(r, t.goal, t.served_platform):
-                    out.append(r.route_id)
-        return list(dict.fromkeys(out))
+        """合法进路 = (信号/配对端出口 ∪ **物理续接**: 首TC∈succ(车当前末TC)) ∩ 目标可达.
+
+        物理续接项(D 修): 决策信号按信号名匹配会漏 21.8%(TC 连续但信号名不同, 如 5487->5484);
+        改按车物理位置(末TC 的后继)提供进路, 是站台配对 fix 的推广。
+        """
+        routes = []
+        if signal is not None:
+            sigs = {signal}
+            if signal in self._pair:
+                sigs.add(self._pair[signal])
+            for s in sigs:
+                routes.extend(self.net.routes_from(s))
+        if t.path:                                        # 物理续接: 首TC 是车末TC 的后继
+            for y in self._tc_succ.get(t.path[-1], ()):
+                routes.extend(self._routes_by_first.get(y, []))
+        out, seen = [], set()
+        for r in routes:
+            if r.route_id in seen:
+                continue
+            seen.add(r.route_id)
+            if self.reach.route_keeps_goal(r, t.goal, t.served_platform):
+                out.append(r.route_id)
+        return out
 
     def _decision_signal(self, t):
         prev = self.net.routes.get(t.route_chain[t.route_ptr - 1]) if t.route_ptr >= 1 else None

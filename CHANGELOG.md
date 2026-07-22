@@ -16,6 +16,25 @@ Design in `docs/M9_DESIGN.md`. Decided: Path A + explicit cancel, free routing (
 of route choice), deterministic, geometric mask, overlap included, no artificial cap on how early a route
 may be set, deadlock = terminal failure, obs includes current lock state.
 
+### M9 review round 2 (examiner) — fixes (2026-07-16)
+- **platform-service = soft goal, not a hard action filter**: it was pruning the signaller's real
+  route on 22.4% of decisions (routes toward an exit but away from platforms). Hard reachability now
+  = exit-direction only; platform service moves to the M10 reward. (goal.py)
+- **H6 per-trip split**: build_env_trains splits a headcode into runs on >90-min gaps (data.alignment
+  rule), so reused headcodes with far-apart trips aren't glued; BC dataset regenerated clean.
+- **decision signal by physical continuation**: offer routes whose first TC continues the train's
+  current TC (successor), unioned with signal/paired-end — not signal-name matching. Full-day
+  false-negative 21.8% -> 0 on continuous chains. Broken chains (H6 out-of-order, ~15%) filtered from
+  the BC dataset (dataset.chain_is_continuous). (env_dynamic.py, dataset.py)
+- **conflict-dynamics validation (honest)**: log-timing-honored M8/ReactiveEngine = M6-validated
+  ~observed (112s/3 conflicts); M9 free-timing overlap-1 = 431s (~4x, inflated by free timing +
+  overlap). overlap highly sensitive (depth 0/1/2 = 224/431/3698s) -> reward must be potential-based
+  (relative). Real delay conservation (monotone / attributable) replaces the trivial wait>=0 claim.
+- overlap confirmed data-grounded (topology), only its length is approximated; configurable depth.
+- cancel exercised in a full episode (deterministic); multi-window robustness confirmed (path
+  consistency / determinism / safety across peak/off-peak/calibration/holdout/full-day).
+- corrected over-claims in docs (§4/§10/§11); +tests, 73 pass.
+
 ### M9d — DynamicDerbyEnv: full Path A counterfactual env (2026-07-16)
 - `sim/env_dynamic.py`: reservation-driven engine (advance freely inside a locked route; block
   only when a request queues; sectional + on-completion release) with the full Path A action set

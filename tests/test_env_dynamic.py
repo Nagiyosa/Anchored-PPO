@@ -198,3 +198,96 @@ def test_path_a_heuristic_smoke():
     assert env.done, "Path A 应能终止(全完成/搁浅/死锁判负)"
     assert len(env.engine.collisions) == 0                 # 预留结构性无碰撞
     assert steps < 200000                                   # 未陷入无限循环
+
+
+def _total_wait(net, params, ptc, dwell, built, overlap_depth=1, exclude=None):
+    dyn = [DynTrain(b[0].train_id, b[0].route_chain, b[0].entry_time, b[0].stop_pids,
+                    b[0].booked_platform) for b in built if exclude is None or b[0].train_id != exclude]
+    eng = DynamicEngine(net, params, ptc, dwell, overlap_depth=overlap_depth)
+    gen = eng.run(dyn); p = next(gen, None)
+    while p is not None:
+        act = next((PanelAction("set", tid, rid) for tid, rid in p.logged.items()),
+                   PanelAction("wait"))
+        try:
+            p = gen.send(act)
+        except StopIteration:
+            p = None
+    return {t.train_id: t.wait_time for t in dyn}
+
+
+def test_delay_conservation_monotonic():
+    """C3 真·守恒: 次生延误全非负且可归属; 移除一辆车 → 其余车总等待不增(无免费午餐)."""
+    net, params, dwell, ptc, _ = _load()
+    td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
+    td["ts"] = pd.to_datetime(td["time"])
+    w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
+    built = build_env_trains_for_window(w, net, dwell, ptc)
+    base = _total_wait(net, params, ptc, dwell, built)
+    assert all(x >= 0 for x in base.values())                      # 可归属、非负
+    mover = max(base, key=base.get)
+    after = _total_wait(net, params, ptc, dwell, built, exclude=mover)
+    rem_before = sum(x for k, x in base.items() if k != mover)
+    assert sum(after.values()) <= rem_before + 1e-6, "移除车后其余延误不应增加(无免费午餐)"
+
+
+def test_overlap_depth_monotone_conflict():
+    """C4: overlap 越深冲突/次生延误越多(单调). 0<=1<=2. 记录敏感性(depth2 会激增)."""
+    net, params, dwell, ptc, _ = _load()
+    td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
+    td["ts"] = pd.to_datetime(td["time"])
+    w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
+    built = build_env_trains_for_window(w, net, dwell, ptc)
+    w0 = sum(_total_wait(net, params, ptc, dwell, built, overlap_depth=0).values())
+    w1 = sum(_total_wait(net, params, ptc, dwell, built, overlap_depth=1).values())
+    w2 = sum(_total_wait(net, params, ptc, dwell, built, overlap_depth=2).values())
+    assert w0 <= w1 <= w2, f"overlap 单调: {w0} {w1} {w2}"
+    assert w1 > w0                                                  # overlap 确有效应
+
+
+def _run_cancel_policy(net, params, ptc, dwell, built):
+    """策略: 遇到可撤销(排队中)进路, 每车撤销一次再改办日志进路; 否则照日志办/等待."""
+    from derbysim.sim.env_dynamic import DynamicDerbyEnv
+    dyn = [DynTrain(b[0].train_id, b[0].route_chain, b[0].entry_time, b[0].stop_pids,
+                    b[0].booked_platform) for b in built]
+    env = DynamicDerbyEnv(net, params, ptc, dwell)
+    env.reset(dyn)
+    cancelled, n_cancel, steps = set(), 0, 0
+    while not env.done and steps < 100000:
+        dec = env.decision()
+        canc = [o for o in dec.options if o.kind == "cancel" and o.train_id not in cancelled]
+        if canc:
+            cancelled.add(canc[0].train_id); n_cancel += 1
+            act = canc[0]
+        else:
+            act = next((PanelAction("set", tid, rid) for tid, rid in dec.logged.items()),
+                       PanelAction("wait"))
+        env.step(act); steps += 1
+    return env, dyn, n_cancel
+
+
+def test_cancel_in_running_episode():
+    """E: 运行中撤销排队进路再改办 —— 撤销确被行使、episode 正常完成、0 碰撞、状态一致."""
+    net, params, dwell, ptc, _ = _load()
+    td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
+    td["ts"] = pd.to_datetime(td["time"])
+    w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
+    built = build_env_trains_for_window(w, net, dwell, ptc)
+    env, dyn, n_cancel = _run_cancel_policy(net, params, ptc, dwell, built)
+    assert n_cancel > 0, "窗口应有排队进路可撤销(否则测试空转)"
+    assert env.done and len(env.engine.collisions) == 0
+    assert all(t.done for t in dyn), "撤销+改办后各车仍应完成"
+    assert not env.engine.res.reserved and not env.engine.res.queue     # 结束预留/队列清空(状态一致)
+
+
+def test_cancel_episode_deterministic():
+    """E: 含 cancel 的整局两遍逐位一致(快照回滚/撤销不引入非确定)."""
+    net, params, dwell, ptc, _ = _load()
+    td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
+    td["ts"] = pd.to_datetime(td["time"])
+    w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
+    built = build_env_trains_for_window(w, net, dwell, ptc)
+    _, d1, c1 = _run_cancel_policy(net, params, ptc, dwell, built)
+    _, d2, c2 = _run_cancel_policy(net, params, ptc, dwell, built)
+    assert c1 == c2
+    assert {t.train_id: t.path for t in d1} == {t.train_id: t.path for t in d2}
+    assert {t.train_id: t.sim_occ for t in d1} == {t.train_id: t.sim_occ for t in d2}

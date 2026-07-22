@@ -17,8 +17,9 @@ QUEUED = "QUEUED"
 
 
 class RouteReservation:
-    def __init__(self, net) -> None:
+    def __init__(self, net, overlap_depth: int = 1) -> None:
         self.net = net
+        self.overlap_depth = overlap_depth   # C4 敏感性: 0=无 overlap, 1=信号后一段(默认), 2=两段
         self.reserved: dict[str, str] = {}          # tc -> 持有它的 route_id
         self.route_train: dict[str, str] = {}        # route_id -> train
         self.route_fp: dict[str, frozenset] = {}     # route_id -> 预留足迹(route TC + overlap)
@@ -31,10 +32,16 @@ class RouteReservation:
         if rid in self._overlap_cache:
             return self._overlap_cache[rid]
         tcs: set[str] = set()
-        if route.end_signal is not None:
-            for r in self.net.routes_from(route.end_signal):
-                if r.tc_sequence:
-                    tcs.add(r.tc_sequence[0])         # 信号后紧邻一格
+        frontier = [route.end_signal] if route.end_signal is not None else []
+        for _ in range(self.overlap_depth):          # 逐段向信号后延伸 overlap_depth 段
+            nxt = []
+            for sig in frontier:
+                for r in self.net.routes_from(sig):
+                    if r.tc_sequence:
+                        tcs.add(r.tc_sequence[0])
+                        if r.end_signal is not None:
+                            nxt.append(r.end_signal)
+            frontier = nxt
         tcs -= set(route.tc_sequence)                # overlap 不含进路自身 TC
         fs = frozenset(tcs)
         self._overlap_cache[rid] = fs
