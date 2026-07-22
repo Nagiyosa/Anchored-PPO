@@ -28,6 +28,7 @@ from derbysim.sim.events import EventQueue
 from derbysim.sim.reactive import DEFAULT_ADVANCE, DEFAULT_OCC, MAX_WAIT_S
 
 _LPLAT_RE = re.compile(r"LPLAT(\d+)")
+_RUN_GAP_S = 90 * 60   # H6: 同 headcode 事件间隔 >90min 判为新的一趟(与 data.alignment 一致)
 
 _ADVANCE_CFG_PATH = config.ARTIFACTS_CALIB / "decision_advance.json"
 
@@ -426,40 +427,50 @@ def build_env_trains_for_window(td_win, net, dwell_by_platform, plat_tc_to_pid, 
     for hc, g in td_win.groupby("trainid_filled"):
         if hc in ("0", "****", ""):
             continue
-        prs = g[(g["type"] == "Panel_Request") & (g["state"] == "1")]
-        route_chain, req_times, path = [], [], []
-        for x in prs.itertuples():
-            r = net.routes.get(x.id.strip())
-            if not r:
+        g = g.sort_values("ts")
+        # H6 切趟: 同 headcode 日内可复用/多趟 → 按 90min 时间间隙切开, 免得把两趟(如 1M00
+        # 09:40 与 22:51, 隔 13h)拼成一条非连续链。真折返(停站几分钟)间隔小, 不会被切。
+        secs = [t.timestamp() for t in g["ts"]]
+        breaks = [i + 1 for i in range(len(secs) - 1) if secs[i + 1] - secs[i] > _RUN_GAP_S]
+        bounds = [0] + breaks + [len(g)]
+        n_runs = len(bounds) - 1
+        for ri in range(n_runs):
+            gr = g.iloc[bounds[ri]:bounds[ri + 1]]
+            tid = hc if n_runs == 1 else f"{hc}#{ri}"
+            prs = gr[(gr["type"] == "Panel_Request") & (gr["state"] == "1")]
+            route_chain, req_times, path = [], [], []
+            for x in prs.itertuples():
+                r = net.routes.get(x.id.strip())
+                if not r:
+                    continue
+                route_chain.append(r.route_id)
+                req_times.append(x.ts.timestamp())
+                for tc in r.tc_sequence:
+                    if not path or path[-1] != tc:
+                        path.append(tc)
+            if len(path) < 2:
                 continue
-            route_chain.append(r.route_id)
-            req_times.append(x.ts.timestamp())
-            for tc in r.tc_sequence:
-                if not path or path[-1] != tc:
-                    path.append(tc)
-        if len(path) < 2:
-            continue
-        occ = g[(g["type"] == "Track") & (g["state"] == "1")]
-        occ_first: dict[str, float] = {}
-        for x in occ.itertuples():
-            tc = x.id.strip()
-            if tc not in occ_first:
-                occ_first[tc] = x.ts.timestamp()
-        if path[0] not in occ_first:
-            continue
-        entry = occ_first[path[0]]
-        pids = set()
-        for sid in g[g["type"] == "TRTS"]["id"]:
-            m = _LPLAT_RE.search(str(sid))
-            if m:
-                pids.add(int(m.group(1)))
-        et = EnvTrain(hc, route_chain, req_times, entry, pids)
-        et.service_class = str(hc)[0] if hc else ""
-        if cif_map and hc in cif_map:
-            c = cif_map[hc]
-            et.booked_platform = c.get("booked_platform")
-            et.planned_ref = c.get("planned_ref")
-            if c.get("service_class"):
-                et.service_class = c["service_class"]
-        out.append((et, occ_first))
+            occ = gr[(gr["type"] == "Track") & (gr["state"] == "1")]
+            occ_first: dict[str, float] = {}
+            for x in occ.itertuples():
+                tc = x.id.strip()
+                if tc not in occ_first:
+                    occ_first[tc] = x.ts.timestamp()
+            if path[0] not in occ_first:
+                continue
+            entry = occ_first[path[0]]
+            pids = set()
+            for sid in gr[gr["type"] == "TRTS"]["id"]:
+                m = _LPLAT_RE.search(str(sid))
+                if m:
+                    pids.add(int(m.group(1)))
+            et = EnvTrain(tid, route_chain, req_times, entry, pids)
+            et.service_class = str(hc)[0] if hc else ""
+            if cif_map and hc in cif_map:
+                c = cif_map[hc]
+                et.booked_platform = c.get("booked_platform")
+                et.planned_ref = c.get("planned_ref")
+                if c.get("service_class"):
+                    et.service_class = c["service_class"]
+            out.append((et, occ_first))
     return out
