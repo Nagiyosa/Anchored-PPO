@@ -115,21 +115,23 @@ def test_deadlock_penalty_wired_once():
 
 
 # ============ M10b ============
-def test_platform_tier_three_levels():
-    cfg = RewardConfig(eps_replatform=2.0, p_nostop=10.0)
+def test_platform_tier_levels():
+    # enable_nostop=True 时三档全测; 默认(R4 暂缓)时 nostop→0(不误罚边界碎片车)
+    cfg = RewardConfig(eps_replatform=2.0, p_nostop=10.0, enable_nostop=True)
     ptc = {"P4": 4, "P3": 3}
-    # booked(停 stop_pids 台)=0
     t0 = DynTrain("T0", [], 0.0, stop_pids={4}); t0.path = ["a", "P4", "b"]
-    assert platform_tier_reward(t0, ptc, cfg) == 0.0
-    # 改台(停了但非 booked)=−ε
+    assert platform_tier_reward(t0, ptc, cfg) == 0.0            # booked=0
     t1 = DynTrain("T1", [], 0.0, stop_pids={4}); t1.path = ["a", "P3", "b"]
-    assert platform_tier_reward(t1, ptc, cfg) == -2.0
-    # 客运不停任何台=−P_nostop
+    assert platform_tier_reward(t1, ptc, cfg) == -2.0          # 改台=−ε
     t2 = DynTrain("T2", [], 0.0, stop_pids={4}); t2.path = ["a", "b"]
-    assert platform_tier_reward(t2, ptc, cfg) == -10.0
-    # 直通(不该停)=0
+    assert platform_tier_reward(t2, ptc, cfg) == -10.0         # 不停(enable)=−P_nostop
     t3 = DynTrain("T3", [], 0.0); t3.path = ["a", "P3", "b"]
-    assert platform_tier_reward(t3, ptc, cfg) == 0.0
+    assert platform_tier_reward(t3, ptc, cfg) == 0.0           # 直通=0
+    # R4: 默认 enable_nostop=False → 不停台**不罚**(暂缓到 M13 边界机制)
+    cfg_off = RewardConfig(eps_replatform=2.0, p_nostop=10.0)
+    assert cfg_off.enable_nostop is False
+    assert platform_tier_reward(t2, ptc, cfg_off) == 0.0
+    assert platform_tier_reward(t1, ptc, cfg_off) == -2.0      # 改台档不受影响
 
 
 def test_on_time_bonus_window():

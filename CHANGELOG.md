@@ -8,7 +8,62 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [In progress] Phase 3 (M9): dynamic routing + full physical locking + robust deadlock handling
+## [In progress] Phase 4 (M10): reward + perturbation
+
+Attach an environment reward to the counterfactual env (`DynamicDerbyEnv`) and inject data-grounded
+perturbations so online RL (M12) has a learning signal. Reward is a *small* term (imitation stays the
+headline via BC+KL, M11/M12); safety stays structural. Design in `docs/M10_DESIGN.md`. Non-invasive:
+reward lives in `derbysim/sim/reward.py` (`RewardedDynamicEnv` subclass), verified `env_dynamic.py` untouched.
+
+### M10a — dense secondary-delay reward (2026-07-23)
+- Secondary delay is a **small real objective delivered as per-step differences** (ΣλΔwait), TOPS-priority
+  weighted (D16). **Not** claimed as policy-invariant potential shaping — that is self-contradictory
+  (invariant = no incentive to cut delay); corrected in `PROJECT_BRIEF.md §7`. Robustness to the M9 ~4×
+  inflation comes from relative reporting (common-mode cancels) + the M13 overlap check, not invariance.
+- Realized delay counts in-progress blocking (`now − blocked_since`), else the signal is lumpy.
+- Deadlock terminal penalty. Reward = pure function of engine snapshot before→after a step.
+
+### M10b — platform 3-tier + on-time + stranded terminal (2026-07-23)
+- **Platform service, 3-tier soft penalty**: booked 0 / re-platform −ε / passenger-no-stop −P_nostop.
+  Grounded in UK practice (WTT/docker booked = default; re-platform is a deliberate manager decision; ARS
+  routes only to booked). Served platform derived post-hoc from the path; engine untouched.
+- **on-time** bonus (coarse: single arr/dep/pass reference; tolerance tunable).
+- **Non-completion / stranded** = terminal loss (−P_incomplete/train); under natural termination a
+  not-through train was starved by the policy (F4). Per-completion credit assignment.
+
+### M10c — data-grounded perturbation injection (2026-07-23)
+- Real Derby TRUST distribution: 50% LATE; late-only median 4 min, p90 19 min, heavy tail to ~1 h.
+  Non-parametric bootstrap from the empirical lateness pool (not a Gaussian / fixed value).
+- Inject **primary** delay only: observed delay = primary + secondary, so injecting the full observed
+  delay would double-count the secondary the simulator regenerates. Scale by **α = 0.36** (Palmqvist et
+  al. Swedish macro-sim ~36% primary / 64% secondary; literature 20–50%) — a *sourced* sensitivity
+  parameter, not a guess, not a headline. `p_late = 0.50` = real Derby LATE fraction. Clip 120 min
+  (drop headcode-reuse artifacts). Route unchanged → reachability preserved. Deterministic (seeded).
+- Add-trains = resample real services (clone route_chain) → topologically valid by construction.
+- Fixed evaluation = real historical high-disruption windows (no injection); reproducible.
+
+### M10 review + fixes (2026-07-23)
+Full review on real data surfaced 4 real issues (M10_DESIGN §12):
+- **R1 (fixed)** — `realized_weighted_delay` counted in-progress blocking for *done* trains that the M9
+  engine leaves with a stale `blocked_since` → phantom delay growing with the clock (inflated ~1.5k→460k
+  under perturbation). Fix: in-progress only for non-done trains.
+- **R2/R3 (perturbation redirected)** — entry-delay injection is inert in uncongested windows (Δ=0, no
+  overlaps to perturb); synthetic add-trains (`add_resampled_trains`) broke the no-collision invariant
+  (reservations keyed by `route_id`; clones reuse `route_id`s). Both removed/kept-honest. New direction:
+  **real high-disruption windows** (`rank_high_disruption_windows`) built with chain-continuity filtering
+  (`build_clean_window_dyn_trains`) + delay injection as congestion augmentation. Busy-window raw builds
+  carry H6-dirty trains that collide on replay; the same dataset filter → 0 collisions.
+- **R4 (deferred)** — platform −P_nostop mis-fired on window-boundary fragments (real stoppers like 1O06
+  whose stop falls outside the captured window). Gated off (`enable_nostop=False`); keep booked 0 /
+  re-platform −ε; the no-stop term waits for M13 boundary machinery.
+
+### Tests / status
+- test_reward.py 9 + test_perturb.py 6 → **88 passed**. Determinism enforced throughout.
+- Pending (M13): overlap_depth passthrough for the robustness sweep; boundary machinery for −P_nostop.
+
+---
+
+## Phase 3 (M9): dynamic routing + full physical locking + robust deadlock handling
 
 Counterfactual environment — the policy actually "drives the panel" (Path A: set route / cancel / wait).
 From here it deliberately diverges from the log; validation switches to physical consistency.
