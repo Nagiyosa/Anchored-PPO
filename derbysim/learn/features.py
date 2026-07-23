@@ -138,6 +138,7 @@ class Featurizer:
             "signal": rec.get("signal"),
             "service_class": str(rec.get("service_class", "")),
             "chosen_route": chosen,
+            "legal_route_ids": legal,            # 供预测下标→进路映射(评估)
         }
 
     # ---- 维度(供模型构建) ----
