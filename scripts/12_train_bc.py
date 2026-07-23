@@ -5,8 +5,11 @@
 """
 from __future__ import annotations
 import csv, json, sys
+from pathlib import Path
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # 使 derbysim 可导入(从任意 cwd 运行)
 
 from derbysim import config
 from derbysim.infra import InfrastructureNetwork
@@ -25,10 +28,13 @@ def _ptc():
 
 
 def main(argv):
-    encoders = [a for a in argv if not a.startswith("--")] or ["mlp"]
-    epochs = 15
-    if "--epochs" in argv:
-        epochs = int(argv[argv.index("--epochs") + 1])
+    import argparse
+    p = argparse.ArgumentParser()
+    p.add_argument("encoders", nargs="*", default=["mlp"])
+    p.add_argument("--epochs", type=int, default=15)
+    args = p.parse_args(argv)
+    encoders = args.encoders or ["mlp"]
+    epochs = args.epochs
     net = InfrastructureNetwork.load(); ptc = _ptc()
     fz = Featurizer(net, ptc)
     dims = (fz.dec_dim, fz.conf_dim, fz.cand_dim)

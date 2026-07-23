@@ -12,7 +12,11 @@
 """
 from __future__ import annotations
 import csv, json, sys, time
+from pathlib import Path
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # 使 derbysim 可导入(从任意 cwd 运行)
+
 from derbysim import config
 from derbysim.infra import InfrastructureNetwork
 from derbysim.sim.occupation import load_params

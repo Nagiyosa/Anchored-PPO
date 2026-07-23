@@ -45,7 +45,7 @@ def test_train_step_reduces_loss():
     def step():
         lg = m(t["x_dec"], t["x_conf"], t["conf_mask"], t["x_cand"], t["cand_mask"])
         loss = F.cross_entropy(lg, t["y"]); opt.zero_grad(); loss.backward(); opt.step()
-        return float(loss)
+        return loss.item()
     l0 = step()
     for _ in range(40):
         lN = step()
