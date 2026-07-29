@@ -32,16 +32,20 @@ def main(argv):
     p = argparse.ArgumentParser()
     p.add_argument("encoders", nargs="*", default=["mlp"])
     p.add_argument("--epochs", type=int, default=15)
+    p.add_argument("--no-prior", action="store_true",
+                   help="不用候选先验特征(热启动版: 保留偏离信号、长尾>随机, M11d 决定A)")
     args = p.parse_args(argv)
     encoders = args.encoders or ["mlp"]
     epochs = args.epochs
+    use_prior = not args.no_prior
     net = InfrastructureNetwork.load(); ptc = _ptc()
     df = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all.parquet")
     tr_df = df[df["split"] == "train"]; ho_df = df[df["split"] == "holdout"]
     prior = fit_route_prior([{"signal": r["signal"], "legal_route_ids": r["legal_route_ids"],
                               "chosen_route": r["chosen_route"], "n_legal": r["n_legal"]}
-                             for r in tr_df.to_dict("records")])       # 只训练集拟合候选先验(无泄露)
-    fz = Featurizer(net, ptc, route_prior=prior)                        # signal_index 默认(拓扑固定)
+                             for r in tr_df.to_dict("records")]) if use_prior else None  # 只训练集拟合(无泄露)
+    fz = Featurizer(net, ptc, route_prior=prior)                        # None → 不含先验(热启动版)
+    print(f"use_prior={use_prior}")
     dims = (fz.dec_dim, fz.conf_dim, fz.cand_dim)
     tr = featurize_frame(tr_df, fz)
     ho = featurize_frame(ho_df, fz)

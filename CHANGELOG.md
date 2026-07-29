@@ -8,7 +8,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [In progress] Phase 4 (M10): reward + perturbation
+## [In progress] Phase 4 (M11): BC warm-start + decision-match rate
+
+Behaviour cloning of the signaller's route choice (headline = decision-match rate, D21), as a warm-start
+prior for M12 RL. `derbysim/learn/` (features / collate / models / train_bc / evaluate), `scripts/11`
+(full 98-day dataset), `scripts/12` (training CLI). Design in `docs/M11_DESIGN.md`.
+
+### M11a-c
+- **Data**: full 98-day decision dataset (48021 decisions / 21876 multi-choice, 0 mask-misses), temporal
+  split 9-10 train / 11-12 holdout; delay clip ±120 (|dm|>120 only 1.1%).
+- **Model**: pluggable pointer over legal routes with reachability-based candidate features; 4 encoders
+  (MLP / DeepSets / Set-Transformer / GNN), device-agnostic, no torch-version pin. Non-torch parts
+  (features / collate / evaluate) unit-tested; torch smoke skips without torch (run on GPU).
+
+### M11d — results + honest analysis (decision A)
+- Encoders **tied** (macro 0.850-0.857, overall 0.941-0.945; spread <1%) → D9 ablation answer:
+  architecture doesn't matter for this small structured state.
+- Root-cause dig (lookup on identical features hits 0.93 overall / 0.72 macro): first BC underperformed a
+  lookup → **model overfit, not features/data**. Fixed via train-fit per-(signal,route) choice prior
+  (=baseline as a feature) + signal one-hot + dropout + weight-decay + val-macro early-stopping → BC
+  beats baseline (0.86 macro / 0.94 overall).
+- **But** the prior turns BC into a routine follower: long-tail (0.8% of decisions, the deviations we
+  care about) collapsed below random. Long-tail weakness is characterised, not a bug: data-limited
+  (3 months; §3 always said the tail is for synthetic/RL, not more real data), information-limited
+  (deviation reasons often off-state), and inherently RL's domain (D23).
+- **Decision A**: report both sides honestly; warm-start uses the no-prior (+reg) BC (`--no-prior`, keeps
+  deviation signal, long-tail > random) so KL-to-BC doesn't bias RL away from deviations; the prior
+  version is the routine ceiling. BC is a descriptive result + safe prior, **not the headline** (D23).
+
+---
+
+## Phase 4 (M10): reward + perturbation
 
 Attach an environment reward to the counterfactual env (`DynamicDerbyEnv`) and inject data-grounded
 perturbations so online RL (M12) has a learning signal. Reward is a *small* term (imitation stays the
