@@ -1,8 +1,8 @@
 # Changelog
 
 Microscopic blocking-time simulator + signaller route-decision learning for the Derby station throat.
-Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D22),
-`docs/IMPLEMENTATION_PLAN.md`, `docs/M9_DESIGN.md`.
+Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D25),
+`docs/IMPLEMENTATION_PLAN.md`, `docs/M9_DESIGN.md`–`docs/M12_DESIGN.md`.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
