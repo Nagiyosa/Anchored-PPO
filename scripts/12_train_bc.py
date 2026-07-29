@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # 使 derbysim �
 
 from derbysim import config
 from derbysim.infra import InfrastructureNetwork
-from derbysim.learn.features import Featurizer, featurize_frame
+from derbysim.learn.features import Featurizer, featurize_frame, fit_route_prior
 from derbysim.learn.train_bc import train_bc, predict_records, get_device, route_inverse_freq_weights
 from derbysim.learn.evaluate import match_metrics, fit_most_frequent, predict_most_frequent, expected_random_acc
 
@@ -36,11 +36,15 @@ def main(argv):
     encoders = args.encoders or ["mlp"]
     epochs = args.epochs
     net = InfrastructureNetwork.load(); ptc = _ptc()
-    fz = Featurizer(net, ptc)
-    dims = (fz.dec_dim, fz.conf_dim, fz.cand_dim)
     df = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all.parquet")
-    tr = featurize_frame(df[df["split"] == "train"], fz)
-    ho = featurize_frame(df[df["split"] == "holdout"], fz)
+    tr_df = df[df["split"] == "train"]; ho_df = df[df["split"] == "holdout"]
+    prior = fit_route_prior([{"signal": r["signal"], "legal_route_ids": r["legal_route_ids"],
+                              "chosen_route": r["chosen_route"], "n_legal": r["n_legal"]}
+                             for r in tr_df.to_dict("records")])       # 只训练集拟合候选先验(无泄露)
+    fz = Featurizer(net, ptc, route_prior=prior)                        # signal_index 默认(拓扑固定)
+    dims = (fz.dec_dim, fz.conf_dim, fz.cand_dim)
+    tr = featurize_frame(tr_df, fz)
+    ho = featurize_frame(ho_df, fz)
     device = get_device()
     print(f"device={device} dims={dims} train={len(tr)} holdout={len(ho)}")
 
