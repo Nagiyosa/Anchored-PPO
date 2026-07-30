@@ -33,6 +33,16 @@ def pick_device(prefer: str | None = None) -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def valid_routing_rows(cand_mask):
+    """[B,T] bool: 该行(=一辆待决车)是否真有候选进路.
+
+    **全 padding 行的选路分布是均匀的**(该行 logits 全为 NEG → log_softmax 出均匀), 无意义。
+    `opt_row` 永远不会指向这种行, 故不影响动作分布; 但 **KL-to-BC 以及任何按行的选路损失
+    必须用本掩码筛掉它们**(§10-B), 否则会把 1/Ma 的噪声当成"策略偏离 BC"算进目标。
+    """
+    return cand_mask.sum(-1) > 0
+
+
 class PanelOptionPolicy(nn.Module):
     """面板选项打分(actor) + 状态值(critic), 共享 M11 编码器族(4 种可插拔, D9 消融)."""
 

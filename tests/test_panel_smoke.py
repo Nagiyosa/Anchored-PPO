@@ -13,7 +13,8 @@ torch = pytest.importorskip("torch")               # 无 torch 时跳过(沙盒)
 
 from derbysim.learn.models import ENCODERS, PointerBC
 from derbysim.learn.panel import KIND_CODE, OptionSlot, collate_panels
-from derbysim.learn.panel_models import NEG, PanelOptionPolicy, pick_device, to_tensors
+from derbysim.learn.panel_models import (NEG, PanelOptionPolicy, pick_device, to_tensors,
+                                          valid_routing_rows)
 
 DIMS = dict(dec_dim=18, conf_dim=8, cand_dim=20, cancel_dim=14 + 20,
             train_dim=14, global_dim=7)
@@ -115,9 +116,15 @@ def test_routing_conditional_is_a_distribution_over_legal_routes():
     lp = m.routing_log_probs(b["x_dec"], b["x_conf"], b["conf_mask"],
                              b["x_cand"], b["cand_mask"])
     p = lp.exp()
-    rows = b["cand_mask"].sum(-1) > 0
-    assert torch.allclose(p.sum(-1)[rows], torch.ones_like(p.sum(-1)[rows]), atol=1e-5)
-    assert (p * (b["cand_mask"] < 0.5)).max() < 1e-6           # 非候选位概率 ~0
+    valid = valid_routing_rows(b["cand_mask"])                 # [B,T]: 真有候选的行
+    assert valid.any()
+    assert torch.allclose(p.sum(-1)[valid], torch.ones_like(p.sum(-1)[valid]), atol=1e-5)
+    pad_cols = b["cand_mask"] < 0.5
+    assert (p[valid][pad_cols[valid]] < 1e-6).all()            # 有效行内: 非候选位概率 ~0
+    # 全 padding 行**按构造就是均匀的**(logits 全 NEG) —— 钉死这个已知行为:
+    # opt_row 不会指向它们(不影响动作分布), 但 M12b 的 KL-to-BC 必须按 valid_routing_rows 掩掉。
+    if (~valid).any():
+        assert torch.allclose(p[~valid], torch.full_like(p[~valid], 1.0 / p.shape[-1]), atol=1e-5)
 
 
 def test_determinism_same_seed():
