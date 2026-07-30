@@ -39,6 +39,10 @@ class RewardConfig:
     # 安全/完成(大, 结构性)
     p_deadlock: float = 50.0                   # 死锁判负(D6 唯一进 reward 的安全项)
     p_incomplete: float = 20.0                 # 未完成/搁浅每车判负
+    # M12b 复审(2026-07-30, 用户定): 把"站着等派路"的时长也计入次生延误。
+    # 旧度量只算"请求了进路但被排队", 于是**不给车办路 = 零延误** → 实测随机策略(完成 18/30)
+    # 回报反而高于"有路就办"(完成 26/30)。留开关供对照, **默认开**。
+    count_awaiting_hold: bool = True
 
     def lam(self, service_class) -> float:
         return self.tops_weights.get(str(service_class), self.tops_fallback)
@@ -47,10 +51,16 @@ class RewardConfig:
 def realized_weighted_delay(engine, cfg: RewardConfig) -> float:
     """整局累计加权次生延误(含**未 done 车**的在途阻塞, R1), 单调不减 → 每步差分 ≤ 0 = 成本。"""
     total = 0.0
+    hold = bool(getattr(cfg, "count_awaiting_hold", True))
     for t in engine.trains.values():
         w = t.wait_time
-        if t.blocked_since is not None and not t.done:      # R1: done 车 in-progress 不计(防幻延误)
-            w += engine.now - t.blocked_since
+        if hold:
+            w += getattr(t, "held_time", 0.0)                # 已结清的"等派路"时长
+        if not t.done:                                       # R1: done 车 in-progress 不计(防幻延误)
+            if t.blocked_since is not None:
+                w += engine.now - t.blocked_since
+            if hold and getattr(t, "awaiting_since", None) is not None:
+                w += engine.now - t.awaiting_since
         total += cfg.lam(t.service_class) * w
     return total
 

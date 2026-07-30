@@ -60,6 +60,35 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   GPU. We do not claim the adapter reproduces M8's runtime output: under M9's free timing the decision
   instants differ by construction, so a moment-by-moment comparison is not the right test.
 
+### M12b — PPO: SMDP rollouts, GAE and KL-to-BC (2026-07-30)
+- **Decisions (design §10-F/G/H)**: KL-to-BC is a **fixed coefficient swept manually** (β is the paper's
+  independent variable, so "how far can we loosen the leash before it pays / before it breaks" reads
+  straight off a curve). **The SMDP discount defaults to γ=1** — discounting would make deferring pain
+  cheap (150s twenty minutes out is worth ~9.4s at a 5-min half-life), which is the very "leave the hard
+  train standing" failure M10's stranding penalty exists to block, and it would break the identity
+  "sum of per-step differences = total weighted secondary delay" that ties training to the M13 metric.
+  The time-based machinery `γ(Δt)=exp(−βΔt)` is kept (per-step discounting would be wrong under
+  time-extended WAIT) and swept as a sensitivity in M12e. Training scenarios are real congested windows
+  only, since injecting delay into quiet windows measurably does nothing (Δ=0).
+- **Code**: `smdp.py` (time discount + SMDP GAE), `scenarios.py` (congested windows, chain cleaning,
+  primary-delay injection, train/val/test split), `rollout.py` (policy injected as a callable, so the
+  bookkeeping is testable without torch; records Δt and closed-loop metrics), `ppo.py` (maskable PPO,
+  KL-to-BC restricted to the routing conditional and masked to valid routing rows), `scripts/13`.
+- **Three real problems found by running, not by inspection**:
+  1. **The delay measure had a blind spot** (see M10_DESIGN F7): only "route requested but queued" time
+     was counted, so *never dispatching a train cost nothing*. Measured on one window: a random policy
+     (18/30 completed, 0s delay, reward −233) scored **better** than dispatching promptly (26/30,
+     45758s, −527) — PPO would have learned to stall. Fixed by accounting for time a train spends held
+     awaiting dispatch; the prompt policy's numbers are unchanged, so the new term only bites stalling.
+  2. **Holdout contamination**: the train split excluded val but not test, leaking 11-27/11-18 windows
+     into training. Fixed and pinned by a test.
+  3. **Wrong ranking statistic**: ranking windows by total late minutes is dominated by a few extreme
+     outliers and picked a 10-train, 8-decision midnight window with zero CIF coverage; ranking by the
+     number of late trains gives 30–43 trains and 522–1558 decisions per window.
+- **Tests**: 118 passed, 3 skipped. `ppo.py` and `panel_models.py` remain unrun in the sandbox (no torch);
+  the discount/GAE maths is unit-tested in numpy, and `tests/test_ppo_smoke.py` awaits the local GPU —
+  its key assertion is that KL-to-BC is *exactly* zero when the policy carries the BC weights.
+
 ## [In progress] Phase 4 (M11): BC warm-start + decision-match rate
 
 Behaviour cloning of the signaller's route choice (headline = decision-match rate, D21), as a warm-start

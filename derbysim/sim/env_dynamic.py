@@ -57,6 +57,11 @@ class DynTrain:
     done: bool = False
     wait_time: float = 0.0
     blocked_since: float | None = None
+    # M12b: "站在信号机前等面板给路"的时长。引擎原先只在**已请求进路但被排队**(blocked_since)时
+    # 计延误 → 干脆不给车办路反而零延误(实测: 随机策略 12 辆车 route_ptr 0/N、wait_time 全 0)。
+    # 车停着就是在耗时间, 与"排队等锁"对旅客无区别 → 单列累计, 与 blocked_since **互斥**(见 _apply)。
+    held_time: float = 0.0
+    awaiting_since: float | None = None
     sim_occ: dict = field(default_factory=dict)
     reached_exit: bool = False
     goal: object = None
@@ -177,6 +182,9 @@ class DynamicEngine:
         t = self.trains.get(a.train_id) if a.train_id else None
         if a.kind == "set" and t is not None:
             t.awaiting_decision = False
+            if t.awaiting_since is not None:              # 结清"等派路"时长(与 blocked_since 互斥)
+                t.held_time += self.now - t.awaiting_since
+                t.awaiting_since = None
             if self._request(t, a.route_id):
                 self.q.push(self.now, "try_advance", {"tr": t.train_id, "idx": t.pos})
             if has_deadlock(self.res):
@@ -190,6 +198,7 @@ class DynamicEngine:
                 t.pending_route = None
                 t.blocked_since = None
                 t.awaiting_decision = True
+                t.awaiting_since = self.now               # 撤销后重回待决 → 重新开始计"等派路"
 
     def _flag_deadlock(self):
         from derbysim.sim.deadlock import deadlock_cycle
@@ -295,9 +304,14 @@ class DynamicEngine:
             return
         if t.route_ptr < len(t.route_chain):        # 段末 → 待决(面板相位处理)
             t.awaiting_decision = True
+            if t.awaiting_since is None:
+                t.awaiting_since = self.now          # 开始"站着等面板给路"
             self.n_decisions += 1
             return
         t.done = True                                # 无更多进路 → 终局 + 释放
+        if t.awaiting_since is not None:
+            t.held_time += self.now - t.awaiting_since
+            t.awaiting_since = None
         t.reached_exit = self._at_goal_exit(t)
         for k in range(t.route_ptr):
             self.res.release_route(t.route_chain[k])
