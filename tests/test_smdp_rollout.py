@@ -142,3 +142,55 @@ def test_holding_a_train_now_costs_delay():
     assert old_r > old_g                             # 旧度量: 少派路反而得分高(病)
     assert new_g > new_r                             # 新度量: 排序纠正 ✔
     assert new_g == pytest.approx(old_g)             # 且不误伤正常派路(数字不变)
+
+
+# ---------- 人类参照线 + 固定评估协议 ----------
+def test_signaller_replay_completes_every_completable_train():
+    """**真值对照**: 信号员按自己的日志决策跑, 应把所有"结构上可完成"的车都送到出区口。
+
+    这既是 D23 的核心对照锚, 也验证了"空出区口组 = 结构不可能完成"这个判据 ——
+    实测 8 个真实拥堵窗口 0 遗漏; 这里取 3 个窗口锁死。
+    """
+    from derbysim.learn.rollout import evaluate_policy, signaller_replay_factory
+    net, params, dwell, ptc = load_assets()
+    ad = PanelAdapter(net, Featurizer(net, ptc))
+    ef = lambda: RewardedDynamicEnv(net, params, ptc, dwell)
+    eps = [(str(w["start"]), (lambda w=w: build_episode_trains(w, inject=False)))
+           for w in congested_windows("train", top_k=3)]
+    r = evaluate_policy(ef, ad, signaller_replay_factory, eps)
+    assert r["eval_completion_rate"] == pytest.approx(1.0)
+    assert r["eval_deadlocks"] == 0 and r["eval_n_collisions"] == 0
+
+
+def test_structurally_impossible_trains_are_not_penalised():
+    """空出区口组的车既不进完成率分母, 也不吃 p_incomplete(连信号员都完成不了它们)。"""
+    from derbysim.sim.reward import can_complete
+    net, params, dwell, ptc = load_assets()
+    ad = PanelAdapter(net, Featurizer(net, ptc))
+    w = congested_windows("train", top_k=1)[0]
+    env = RewardedDynamicEnv(net, params, ptc, dwell)
+    res = run_episode(env, ad, make_greedy_set_policy(), build_episode_trains(w, seed=0))
+    m = res.metrics
+    imp = [t for t in env.engine.trains.values() if not can_complete(t)]
+    assert m["n_impossible"] == len(imp) > 0                 # 该窗口确实有这类车
+    assert m["n_completable"] + m["n_impossible"] == m["n_trains"]
+    assert all(t.train_id not in env._finalized for t in imp)
+
+
+def test_fixed_eval_does_not_let_policies_contaminate_each_other():
+    """DynTrain 有状态: 评估集必须传**造车函数**, 否则第二个策略拿到"已跑完"的车。
+
+    2026-07-30 实测撞到过: 三个策略评出完全相同的数字(完成率 1.0/延误 620/回报 0)。
+    """
+    from derbysim.learn.rollout import as_factory, evaluate_policy
+    net, params, dwell, ptc = load_assets()
+    ad = PanelAdapter(net, Featurizer(net, ptc))
+    ef = lambda: RewardedDynamicEnv(net, params, ptc, dwell)
+    eps = [(str(w["start"]), (lambda w=w: build_episode_trains(w, seed=0)))
+           for w in congested_windows("val", top_k=2)]
+    g1 = evaluate_policy(ef, ad, as_factory(make_greedy_set_policy()), eps)
+    rnd = evaluate_policy(ef, ad, as_factory(make_random_policy(np.random.default_rng(0))), eps)
+    g2 = evaluate_policy(ef, ad, as_factory(make_greedy_set_policy()), eps)
+    assert g1["eval_episode_reward"] == g2["eval_episode_reward"]      # 可重复
+    assert g1["eval_episode_reward"] != rnd["eval_episode_reward"]     # 未被污染
+    assert g1["eval_n_steps"] > 0 and rnd["eval_n_steps"] > 0

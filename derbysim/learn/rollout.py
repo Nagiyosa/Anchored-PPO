@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from derbysim.sim.reward import RewardConfig, realized_weighted_delay
+from derbysim.sim.reward import RewardConfig, can_complete, realized_weighted_delay
 
 
 @dataclass
@@ -41,6 +41,7 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict) -> dict:
     这里记绝对值仅供**同环境内**跨策略相减。
     """
     trains = list(engine.trains.values())
+    able = [t for t in trains if can_complete(t)]        # 结构上可能到达出区口的车(分母)
     reached = [t for t in trains if t.reached_exit]
     stops = [t for t in trains if (t.stop_pids or t.booked_platform is not None)]
     booked_ok = 0
@@ -50,8 +51,10 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict) -> dict:
         booked_ok += bool(served & want)
     return {
         "n_trains": len(trains),
+        "n_completable": len(able),                       # 分母: 排除空出区口组的结构不可能车
+        "n_impossible": len(trains) - len(able),
         "n_reached_exit": len(reached),
-        "completion_rate": (len(reached) / len(trains)) if trains else 0.0,
+        "completion_rate": (len(reached) / len(able)) if able else 1.0,
         "deadlocked": bool(engine.deadlocked),
         "n_collisions": len(engine.collisions),          # 结构性应恒为 0
         "weighted_secondary_delay_s": float(realized_weighted_delay(engine, cfg)),
@@ -105,6 +108,23 @@ def make_random_policy(rng):
     return act
 
 
+def make_signaller_replay_policy(env):
+    """人类参照(M12d 基线之一): 按日志真实决策办路; 无可对应的日志动作则 WAIT。
+
+    `PanelDecision.logged` 给出每辆待决车在日志里的下一条进路 —— 这是**信号员本人的选择**,
+    在同一环境/同一选项集上跑, 即 D23 的核心对照锚。
+    """
+    def act(enc):
+        dec = env.decision()
+        if dec is not None:
+            for i, (slot, opt) in enumerate(zip(enc["slots"], dec.options)):
+                if (slot.kind == "set"
+                        and dec.logged.get(slot.train_id) == slot.route_id):
+                    return i, 0.0, 0.0
+        return 0, 0.0, 0.0                                # options[0] 恒为 WAIT
+    return act
+
+
 def make_greedy_set_policy():
     """确定性启发式(冒烟用): 有 set 就办第一条, 否则 WAIT。**不是** M12d 的正式基线。"""
     def act(enc):
@@ -113,3 +133,59 @@ def make_greedy_set_policy():
                 return i, 0.0, 0.0
         return 0, 0.0, 0.0
     return act
+
+
+def as_factory(act_fn):
+    """无状态策略 → 统一的 `policy_factory(env) -> act_fn` 形态。"""
+    return lambda _env: act_fn
+
+
+def signaller_replay_factory(env):
+    """人类参照的工厂形态(需要 env 才能读 `PanelDecision.logged`)。"""
+    return make_signaller_replay_policy(env)
+
+
+def collect_rollout(env_factory, adapter, policy_factory, episode_iter, target_steps: int,
+                    max_decisions: int = 3000):
+    """按**步数预算**收集 rollout(而非固定局数)。
+
+    冒烟轮实测每 iter 的步数在 180–4586 之间晃(25×) —— batch 大小随机会让 PPO 本身不稳,
+    且"这一轮回报"被"抽到哪个窗口"主导而非策略质量。改成凑够 `target_steps` 再更新。
+    `episode_iter` 产出 **(标签, 造车函数)** —— 必须是**函数**不是车列表: `DynTrain` 有状态
+    (引擎推进 route_ptr/path), 复用同一批对象跑第二次会拿到"已跑完"的车 → 完成率/延误全是假的
+    (2026-07-30 实测撞到: 三个策略评出完全相同的数字)。`policy_factory(env) -> act_fn`(见 `as_factory`)。
+    """
+    transitions, metrics = [], []
+    for tag, make_trains in episode_iter:
+        env = env_factory()
+        res = run_episode(env, adapter, policy_factory(env), make_trains(),
+                          max_decisions=max_decisions)
+        transitions.extend(res.transitions)
+        m = dict(res.metrics); m["episode"] = tag
+        metrics.append(m)
+        if len(transitions) >= target_steps:
+            break
+    return transitions, metrics
+
+
+def evaluate_policy(env_factory, adapter, policy_factory, episodes,
+                    max_decisions: int = 3000) -> dict:
+    """在**固定** (窗口, 注入种子) 上评估 → 跨 iteration 可比的曲线。
+
+    训练时每 iter 随机抽窗口, 窗口间难度差很大(实测步数 180–4586) → 训练回报不可比。
+    评估必须固定场景, 这也是 M12d/M13 "同一环境/同一评估窗口/同一指标"的要求。
+    `episodes` 产出 **(标签, 造车函数)** —— 同上, 必须每局新造车, 否则跨策略互相污染。
+    """
+    rows = []
+    for tag, make_trains in episodes:
+        env = env_factory()
+        m = dict(run_episode(env, adapter, policy_factory(env), make_trains(),
+                             max_decisions=max_decisions).metrics)
+        m["episode"] = tag
+        rows.append(m)
+    keys = ("completion_rate", "weighted_secondary_delay_s", "episode_reward",
+            "n_reached_exit", "n_collisions", "n_steps")
+    out = {f"eval_{k}": float(sum(r[k] for r in rows) / len(rows)) for k in keys} if rows else {}
+    out["eval_deadlocks"] = int(sum(bool(r["deadlocked"]) for r in rows))
+    out["eval_episodes"] = rows
+    return out

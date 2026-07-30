@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import json
+from types import SimpleNamespace
 
 import pandas as pd
 
@@ -13,8 +14,9 @@ from derbysim.infra import InfrastructureNetwork
 from derbysim.sim.occupation import load_params
 from derbysim.sim.env import build_env_trains_for_window
 from derbysim.sim.env_dynamic import DynTrain, PanelAction
-from derbysim.sim.reward import (RewardConfig, RewardedDynamicEnv, realized_weighted_delay,
-                                 to_dyn_trains, platform_tier_reward, on_time_bonus)
+from derbysim.sim.reward import (RewardConfig, RewardedDynamicEnv, can_complete,
+                                 realized_weighted_delay, to_dyn_trains, platform_tier_reward,
+                                 on_time_bonus)
 
 WIN = ("2023-11-06 07:00:00", "2023-11-06 10:00:00")
 
@@ -146,19 +148,34 @@ def test_on_time_bonus_window():
     assert on_time_bonus(t, ptc, cfg) == 0.0           # 未完成不给
 
 
+def _goal(exit_group):
+    return SimpleNamespace(exit_group=set(exit_group) if exit_group else set())
+
+
 def test_stranded_incomplete_penalty():
-    # 白盒: 构造两辆 done 车(一到出区口/一搁浅)→ 终局判负只罚搁浅车
+    """终局判负只罚**结构上本可完成**却被搁浅的车。
+
+    2026-07-30 修正(M12b 复审): 原测试的 STUCK 没有 goal, 其实属于"不可能完成"那一类;
+    现在分成三辆——到达 / 可完成但被搁浅 / 结构不可能(空出区口组)——只有中间那辆该罚。
+    真值依据: 信号员日志决策回放 8 个真实拥堵窗口, 在"有出区口目标"的车里 0 遗漏。
+    """
     cfg = RewardConfig(p_incomplete=20.0)
     net, params, dwell, ptc, built = _load()
     env = RewardedDynamicEnv(net, params, ptc, dwell, reward_config=cfg)
     env.reset(to_dyn_trains(built))
     done_ok = DynTrain("OK", [], 0.0); done_ok.done = True; done_ok.reached_exit = True
+    done_ok.goal = _goal(["5093"])
     stuck = DynTrain("STUCK", [], 0.0); stuck.done = False; stuck.reached_exit = False
-    env.engine.trains = {"OK": done_ok, "STUCK": stuck}
+    stuck.goal = _goal(["5093"])                      # 有出区口目标 = 本可完成 → 该罚
+    impossible = DynTrain("NOEXIT", [], 0.0); impossible.done = True
+    impossible.reached_exit = False; impossible.goal = _goal([])   # 空出区口组 → 不该罚
+    assert can_complete(stuck) and not can_complete(impossible)
+    env.engine.trains = {"OK": done_ok, "STUCK": stuck, "NOEXIT": impossible}
     env._last_realized = realized_weighted_delay(env.engine, cfg)
     r = env._compute_reward(done=True)
-    assert abs(r - (-cfg.p_incomplete)) < 1e-6          # 仅 STUCK 罚一次
+    assert abs(r - (-cfg.p_incomplete)) < 1e-6        # 只罚 STUCK 一次, NOEXIT 豁免
     assert "STUCK" in env._finalized and "OK" in env._finalized
+    assert "NOEXIT" not in env._finalized             # 结构不可能的车不进结算
 
 
 def test_replay_platform_penalty_small_and_deterministic():
@@ -170,7 +187,10 @@ def test_replay_platform_penalty_small_and_deterministic():
     assert not env.engine.deadlocked
     reached = sum(t.reached_exit for t in env.engine.trains.values())
     assert reached >= 30                                # replay 应几乎全完成
-    assert len(env._finalized) == len(env.engine.trains)
+    # 结算集 = 到达的车 + 本可完成却搁浅的车; **结构不可能完成的车不结算**(2026-07-30 修正)
+    able = [t for t in env.engine.trains.values() if can_complete(t)]
+    assert len(env._finalized) == len(able)
+    assert len(able) <= len(env.engine.trains)
     env2 = RewardedDynamicEnv(net, params, ptc, dwell, reward_config=cfg)
     r2 = _replay_rewards(env2, to_dyn_trains(built))
     assert r1 == r2

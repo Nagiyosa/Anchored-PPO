@@ -65,6 +65,19 @@ def realized_weighted_delay(engine, cfg: RewardConfig) -> float:
     return total
 
 
+def can_complete(t) -> bool:
+    """该车**结构上**是否可能到达出区口(目标出区口组非空)。
+
+    M12b 复审(2026-07-30): 部分车的 `goal.exit_group` 为**空** —— 其区内链只是一段(终到站台/
+    窗口边界碎片), `_at_goal_exit` 对它们恒为 False。**真值对照**: 用信号员日志决策回放 8 个真实
+    拥堵窗口, 在"有出区口目标"的车里**一辆未漏**(0/8 窗口有遗漏), 漏掉的恰好全是这批空目标车
+    (每窗 1–7 辆, 至多占 21%)。故它们连信号员本人都"完成"不了 → 罚 `p_incomplete` 是**必然误罚**
+    (同 M10 §12 R4 的边界碎片问题)。完成率的分母也应只算这批可完成的车。
+    """
+    g = getattr(t, "goal", None)
+    return bool(g and getattr(g, "exit_group", None))
+
+
 def _expects_stop(t) -> bool:
     return bool(t.stop_pids) or (t.booked_platform is not None)
 
@@ -167,7 +180,7 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
             for t in self.engine.trains.values():
                 if t.train_id in self._finalized:
                     continue
-                if not t.reached_exit:
+                if not t.reached_exit and can_complete(t):     # 结构上不可能完成的车不误罚
                     r -= self.cfg.p_incomplete
                     self._finalized.add(t.train_id)
         return r

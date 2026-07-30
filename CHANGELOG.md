@@ -89,6 +89,41 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   the discount/GAE maths is unit-tested in numpy, and `tests/test_ppo_smoke.py` awaits the local GPU —
   its key assertion is that KL-to-BC is *exactly* zero when the policy carries the BC weights.
 
+### M12b — smoke-run post-mortem and reward calibration (2026-07-30)
+The 40-episode smoke run showed the pipeline works (warm start effective, zero deadlocks, no crashes)
+but was not learning — and could not have shown learning under the metrics as they stood. Three real
+problems, each found by running rather than by inspection:
+1. **`p_incomplete` was charged to trains that cannot possibly finish** (empty `goal.exit_group`: their
+   in-region chain is a single fragment, so `_at_goal_exit` is always False). 1–7 such trains per
+   window, up to 21%. **Truth reference**: replaying the signaller's own logged decisions over 8 real
+   congested windows reaches *every* train that has an exit goal (0 misses, 8/8), and the misses are
+   exactly this set — so the human cannot "complete" them either. Gated by `reward.can_complete`, and
+   the completion-rate denominator now counts completable trains only (M10_DESIGN F8).
+2. **The training curve was dominated by which window got sampled**, not by policy quality: episode
+   length swung 180–4586 steps. Rollouts are now collected against a **step budget**, and progress is
+   measured on a **fixed evaluation set** (same windows, same injection seeds) alongside baseline
+   reference lines.
+3. **`DynTrain` is stateful**, so reusing train objects across policies made three different baselines
+   report identical numbers (completion 1.0, delay 620, reward 0) — all fake. Evaluation sets now pass
+   train *factories*; pinned by a test.
+
+**Reward calibration closed (M10 §9 open item 4): `c_delay` is left unchanged**, contrary to the
+hypothesis we started from. With the false penalty removed, the four reference lines are strictly
+monotone and the human scores *positive*:
+
+| policy | completion | weighted secondary delay | reward |
+|---|---|---|---|
+| signaller replay | 1.000 | 930 | +4.2 |
+| dispatch-when-possible | 0.860 | 54,463 | −612.6 |
+| random legal | 0.577 | 177,654 | −2009.3 |
+| always WAIT | 0.009 | 551,943 | −6079.2 |
+
+The earlier "delay is 88% of the reward" reading was an artefact of the false penalty plus a bad
+policy: 92–99% of the delay came from trains that never finished. Near human level the delay term is
+~9 reward units, comparable to the on-time bonuses, while a poor policy gets a strong "stop stranding
+trains" gradient — a sensible progression, so rescaling would not be justified. Tests: 121 passed,
+3 skipped.
+
 ## [In progress] Phase 4 (M11): BC warm-start + decision-match rate
 
 Behaviour cloning of the signaller's route choice (headline = decision-match rate, D21), as a warm-start
