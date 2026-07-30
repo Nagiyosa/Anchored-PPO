@@ -8,6 +8,58 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [In progress] Phase 4 (M12): online RL — closed-loop dispatching
+
+Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm start) on the M9
+counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
+anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
+
+### Decisions and doc alignment (2026-07-30)
+- **D25 — the MILP/alt-graph optimality-bound baseline is cancelled** (supersedes that item in D10).
+  A microscopic MILP would be model-mismatched against the validated simulator, so both beating it and
+  losing to it are uninterpretable, and the marking weight of a CS/RL thesis sits on method, ablations
+  and learning-based baselines rather than an OR bound. Strong baselines therefore rest on offline RL
+  (IQL/CQL/AWAC) + human replay + strong heuristics (ARS proxy / FSFS / FCFS); an optional light in-sim
+  beam search may serve as an optimality reference, otherwise the optimality gap is stated as future
+  work. Claims of the form "approaches the bound" are banned. MILP removed as a promised baseline from
+  the brief (D10 row, architecture diagram, roadmap table), HANDOFF, the implementation plan and
+  `M12_DESIGN`; only the third-party literature citation remains. Brief bumped to v3.0.
+- **M12a design points recorded before coding**: the state adapter rebuilds the M8-style context per
+  awaiting train (not per option, matching M11); occupancy features stay physical occupancy derived
+  from `trains[].cur_tc` and never from `reservations` (lock state) — swapping the semantics of that
+  slot would silently degrade the BC warm start; the warm start is pinned to `route_prior={}`.
+- `overlap_depth` unified to "passed through in M12a, robustness ablation in M13".
+
+### M12a — framework: state adapter + panel-option pointer + critic (2026-07-30)
+- **State adapter** (`derbysim/learn/panel.py`, numpy, sandbox-testable): rebuilds the M8-style
+  `deciding` / `conflict_trains` / `candidate_tc_occupancy` / `decision_signal` per **awaiting train**
+  from the M9 panel obs, so the whole M11 stack (featuriser, encoder, scoring head) transfers, not
+  just the candidate features. Occupancy is derived from each train's `cur_tc` only — never from
+  `reservations`; on the M8 side a train holds exactly one TC at a time (`env.py` sets it on enter and
+  deletes it on leave), so this is an equivalence, not an approximation. A live `route_prior` is
+  rejected at construction.
+- **Panel option featurisation**: `set(t,r)` options are grouped into rows by train, which is exactly
+  the M11 batch layout; `cancel(t)` = train features ++ its pending route's candidate features; `WAIT`
+  is scored from the panel summary. Emitted `OptionSlot`s align position-by-position with
+  `PanelDecision.options`, so an argmax index maps straight back to an environment-offered action.
+  `collate_panels()` pads several decisions into a batch for M12b PPO.
+- **Policy** (`derbysim/learn/panel_models.py`, device-agnostic torch): the set branch *is* the M11
+  `PointerBC`, so no-prior BC weights load wholesale; `wait_head` / `cancel_head` / `critic` are new
+  and learn from scratch (no fabricated timing prior). `routing_log_probs()` exposes the routing
+  conditional, which is the only place KL-to-BC applies.
+- **Environment**: `overlap_depth` now passes through `DynamicDerbyEnv` and `RewardedDynamicEnv`
+  (default 1, behaviour unchanged); the panel obs gained `rem_path`, `dec_signal` and `pending_route`,
+  all of which are consequences of the agent's own past actions or plain physical position, and so are
+  observable under Path A online control (M9 §3), unlike the M8 replay snapshot.
+- **Tests**: 108 passed, 2 skipped. Sandbox checks cover hand-constructed context truth, the
+  occupancy-vs-lock-state discipline, the no-prior guard, option alignment and masks on a real window,
+  bit-identical determinism, the flattened gather index arithmetic, and the `overlap_depth`
+  passthrough. **Honest limitation**: torch is not installable in the sandbox, so `panel_models.py`
+  has not been run — `tests/test_panel_smoke.py` (four encoders, whole-routing-branch warm-start
+  transfer, conditional normalisation, determinism, learning, device agnosticism) awaits the local
+  GPU. We do not claim the adapter reproduces M8's runtime output: under M9's free timing the decision
+  instants differ by construction, so a moment-by-moment comparison is not the right test.
+
 ## [In progress] Phase 4 (M11): BC warm-start + decision-match rate
 
 Behaviour cloning of the signaller's route choice (headline = decision-match rate, D21), as a warm-start

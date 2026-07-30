@@ -119,8 +119,9 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
     """
 
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
-                 reward_config: RewardConfig | None = None) -> None:
-        super().__init__(net, params, plat_tc_to_pid, dwell_by_platform)
+                 reward_config: RewardConfig | None = None, overlap_depth: int = 1) -> None:
+        super().__init__(net, params, plat_tc_to_pid, dwell_by_platform,
+                         overlap_depth=overlap_depth)
         self.cfg = reward_config or RewardConfig()
         self._last_realized = 0.0
         self._was_deadlocked = False

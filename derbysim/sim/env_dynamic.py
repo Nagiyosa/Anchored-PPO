@@ -324,11 +324,17 @@ class DynamicEngine:
                 "pos_idx": t.pos,
                 "awaiting": t.awaiting_decision,
                 "has_pending": t.pending_route is not None,
+                "pending_route": t.pending_route,      # M12a: cancel(t) 选项特征需要它(自身动作, 非泄露)
                 "served_platform": t.served_platform,
                 "booked_platform": t.booked_platform,
                 "delay_min": self._delay_min(t),
                 "service_class": t.service_class,
                 "exit_group": sorted(t.goal.exit_group) if (t.goal and t.goal.exit_group) else [],
+                # M12a: 面板 obs 补两项(供状态适配层重建 M8 式 context, docs/M12_DESIGN §10-A)
+                #   rem_path = 该车**已锁**的剩余前方路径(自身既往动作的后果, 在线可观测, 非泄露)
+                #   dec_signal = 该车当前所处的决策信号(物理位置, 非日志)
+                "rem_path": list(t.path[t.pos:]) if t.pos < len(t.path) else [],
+                "dec_signal": self._decision_signal(t),
             })
         return {
             "now": self.now,
@@ -351,18 +357,20 @@ class DynamicDerbyEnv:
     done = 生成器耗尽(全车终局) 或 死锁判负.
     """
 
-    def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None) -> None:
+    def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
+                 overlap_depth: int = 1) -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
         self.dwell_by_platform = dwell_by_platform or {}
+        self.overlap_depth = int(overlap_depth)    # M10 F6: M13 overlap 鲁棒性扫描用; 默认 1 不改原行为
         self.engine: DynamicEngine | None = None
         self._gen = None
         self._pending: PanelDecision | None = None
 
     def reset(self, trains):
         self.engine = DynamicEngine(self.net, self.params, self.plat_tc_to_pid,
-                                    self.dwell_by_platform)
+                                    self.dwell_by_platform, overlap_depth=self.overlap_depth)
         self._gen = self.engine.run(trains)
         self._pending = next(self._gen, None)
         return self._obs(), self._info()
