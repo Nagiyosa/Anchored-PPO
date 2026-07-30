@@ -52,6 +52,8 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--bc-ckpt", default=None, help="M11 **no-prior** BC 权重(PointerBC state_dict)")
     ap.add_argument("--no-warm-start", action="store_true", help="消融: 不做 BC 热启动")
+    ap.add_argument("--allow-prior-ckpt", action="store_true",
+                    help="放行含先验的 BC(仅对照实验; 默认拒绝, 见 M11 §12 决定 A)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -71,8 +73,27 @@ def main() -> None:
                                hidden=args.hidden).to(dev)
     bc_state = None
     if args.bc_ckpt:
-        bc_state = torch.load(args.bc_ckpt, map_location=dev)
-        bc_state = bc_state.get("model", bc_state) if isinstance(bc_state, dict) else bc_state
+        ck = torch.load(args.bc_ckpt, map_location=dev, weights_only=False)
+        if isinstance(ck, dict) and "model" in ck:
+            # **硬校验**: 静默的不匹配会毁掉热启动而不报错(§10-A 三条纪律)。
+            if ck.get("use_prior", False) and not args.allow_prior_ckpt:
+                raise SystemExit(
+                    "该 checkpoint 是**含先验**的 BC。M11 §12 决定 A + M12_DESIGN §10-A③: "
+                    "热启动必须用 no-prior 版(scripts/12 --no-prior) —— 含先验版长尾低于随机, "
+                    "KL 会把 RL 拽向'永不选罕见路', 正好压制我们要研究的偏离。"
+                    "确要对照实验请加 --allow-prior-ckpt。")
+            if ck.get("encoder") and ck["encoder"] != args.encoder:
+                raise SystemExit(f"checkpoint 编码器={ck['encoder']} 与 --encoder={args.encoder} 不符")
+            if ck.get("hidden") and int(ck["hidden"]) != args.hidden:
+                raise SystemExit(f"checkpoint hidden={ck['hidden']} 与 --hidden={args.hidden} 不符")
+            want = [adapter.dec_dim, adapter.conf_dim, adapter.cand_dim]
+            if ck.get("dims") and list(ck["dims"]) != want:
+                raise SystemExit(f"checkpoint dims={ck['dims']} 与当前特征器 {want} 不符")
+            print(f"[bc] {args.bc_ckpt}: encoder={ck.get('encoder')} hidden={ck.get('hidden')} "
+                  f"use_prior={ck.get('use_prior')} holdout_macro={ck.get('holdout_macro')}")
+            bc_state = ck["model"]
+        else:
+            bc_state = ck
         if not args.no_warm_start:
             policy.load_bc_state_dict(bc_state)                 # 选路分支整体热启动(§10-A)
     else:

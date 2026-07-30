@@ -34,6 +34,9 @@ def main(argv):
     p.add_argument("--epochs", type=int, default=15)
     p.add_argument("--no-prior", action="store_true",
                    help="不用候选先验特征(热启动版: 保留偏离信号、长尾>随机, M11d 决定A)")
+    p.add_argument("--hidden", type=int, default=64)
+    p.add_argument("--no-save-ckpt", action="store_true",
+                   help="不保存权重(默认保存 .pt 供 M12 热启动/KL 参照)")
     args = p.parse_args(argv)
     encoders = args.encoders or ["mlp"]
     epochs = args.epochs
@@ -69,7 +72,7 @@ def main(argv):
     weights = route_inverse_freq_weights(tr)
     for enc in encoders:
         model, hist = train_bc(enc, tr, dims, val_samples=ho, epochs=epochs,
-                               route_weight=weights, seed=0, device=device)
+                               route_weight=weights, seed=0, device=device, hidden=args.hidden)
         recs = predict_records(model, ho, dims, device)
         m = match_metrics(recs, dict(rc))
         rep = {"encoder": enc, "epochs": epochs, "dims": dims,
@@ -78,8 +81,20 @@ def main(argv):
                "holdout_longtail_acc": m.get("longtail_acc"),
                "per_priority_acc": m["per_priority_acc"],
                "n_multi_holdout": m["n_multi"], "baselines": baseline, "history": hist}
-        outp = config.ARTIFACTS / "reports" / f"bc_{enc}.json"
+        suffix = "" if use_prior else "_noprior"
+        outp = config.ARTIFACTS / "reports" / f"bc_{enc}{suffix}.json"
         outp.write_text(json.dumps(rep, indent=2, ensure_ascii=False))
+        if not args.no_save_ckpt:
+            # **权重 + 元信息**: M12 要用它做热启动和 KL 参照, 元信息用于在 scripts/13 里
+            # 硬校验(编码器/维度/hidden 必须一致; use_prior 必须 False —— M12_DESIGN §10-A③)。
+            import torch
+            ck = config.ARTIFACTS / "reports" / f"bc_{enc}{suffix}.pt"
+            torch.save({"model": {k: v.cpu() for k, v in model.state_dict().items()},
+                        "encoder": enc, "dims": list(dims), "hidden": args.hidden,
+                        "use_prior": bool(use_prior), "epochs": epochs,
+                        "holdout_macro": m["macro_signal_acc"],
+                        "holdout_longtail": m.get("longtail_acc")}, ck)
+            print(f"[{enc}] saved checkpoint -> {ck}")
         print(f"[{enc}] holdout macro-signal acc={m['macro_signal_acc']:.3f} "
               f"(overall={m['overall_acc']:.3f}, longtail={m.get('longtail_acc')}); wrote {outp}")
 
