@@ -144,9 +144,15 @@ def main() -> None:
         baselines[tag] = b
         print(f"[baseline] {tag:<17} completion {b['eval_completion_rate']:.3f} "
               f"| delay {b['eval_weighted_secondary_delay_s']:>9.0f} "
-              f"| reward {b['eval_episode_reward']:>9.1f}")
+              f"| reward {b['eval_episode_reward']:>9.1f} "
+              f"| WAIT {b['eval_frac_wait']:.0%}/set {b['eval_frac_set']:.0%}")
 
+    # **每一版都留下来**(用户 2026-07-31 要求): 文件名带时间戳, 不再覆盖上一轮。
+    run_id = (f"ppo_{args.encoder}_beta{args.kl_beta}_seed{args.seed}"
+              f"_{time.strftime('%Y%m%d-%H%M%S')}")
+    print(f"[run] {run_id}")
     history, evals = [], []
+    best = {"reward": float("-inf"), "iter": -1}
     t0 = time.time()
     total_steps = 0
     for it in range(args.iters):
@@ -183,21 +189,39 @@ def main() -> None:
             ev.pop("eval_episodes", None)
             ev["iter"] = it
             evals.append(ev)
+            if ev["eval_episode_reward"] > best["reward"]:
+                best = {"reward": ev["eval_episode_reward"], "iter": it,
+                        "completion": ev["eval_completion_rate"],
+                        "delay": ev["eval_weighted_secondary_delay_s"]}
+                ck = config.ARTIFACTS_REPORTS / f"{run_id}_best.pt"
+                torch.save({"model": {k: v.detach().to("cpu") for k, v in policy.state_dict().items()},
+                            "iter": it, "eval": {k: v for k, v in ev.items() if k != "eval_episodes"},
+                            "args": vars(args), "run_id": run_id}, ck)
+                print(f"        ↑ 新最佳, 已存 {ck.name}")
             print(f"    >>> EVAL it {it}: completion {ev['eval_completion_rate']:.3f} "
                   f"| delay {ev['eval_weighted_secondary_delay_s']:>9.0f} "
-                  f"| reward {ev['eval_episode_reward']:>9.1f} | 死锁 {ev['eval_deadlocks']} "
+                  f"| reward {ev['eval_episode_reward']:>9.1f} "
+                  f"| WAIT {ev['eval_frac_wait']:.0%}/set {ev['eval_frac_set']:.0%}"
+                  f"/cancel {ev['eval_frac_cancel']:.0%} | 死锁 {ev['eval_deadlocks']} "
                   f"| (人类 {baselines['signaller_replay']['eval_episode_reward']:.1f} / "
                   f"有路就办 {baselines['greedy_set']['eval_episode_reward']:.1f} / "
                   f"随机 {baselines['random_legal']['eval_episode_reward']:.1f})")
         history.append(row)
     print(f"\n总计 {total_steps} 步 / {time.time()-t0:.0f}s")
+    if best["iter"] >= 0:
+        print(f"最佳: it {best['iter']} | completion {best['completion']:.3f} "
+              f"| delay {best['delay']:.0f} | reward {best['reward']:.1f}  "
+              f"(权重已存 {run_id}_best.pt)")
+        b = baselines
+        print(f"对照: 人类 {b['signaller_replay']['eval_episode_reward']:.1f} / "
+              f"有路就办 {b['greedy_set']['eval_episode_reward']:.1f} / "
+              f"随机 {b['random_legal']['eval_episode_reward']:.1f}")
 
-    out = Path(args.out) if args.out else (
-        config.ARTIFACTS_REPORTS /
-        f"ppo_{args.encoder}_beta{args.kl_beta}_seed{args.seed}.json")
+    out = Path(args.out) if args.out else (config.ARTIFACTS_REPORTS / f"{run_id}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"args": vars(args), "device": str(dev),
                                "elapsed_s": time.time() - t0, "total_steps": total_steps,
+                               "run_id": run_id, "best": best,
                                "baselines": baselines, "evals": evals, "history": history},
                               indent=2, default=str), encoding="utf-8")
     print(f"\nwrote {out}")

@@ -107,6 +107,13 @@ def run_episode(env, adapter, act_fn, trains, max_decisions: int = 5000,
     res.metrics["truncated"] = res.truncated
     res.metrics["n_steps"] = len(res.transitions)
     res.metrics["episode_reward"] = float(sum(t.reward for t in res.transitions))
+    # 动作构成: 这个任务的难点在**何时办**(实测信号员主动 WAIT 36–44% 且 100% 完成,
+    # 而"一有机会就派路"只完成 71%)。BC 热启动只迁移选路头, WAIT/cancel 从零学 →
+    # 必须能看到策略在时机上偏到哪去了。
+    n = max(len(res.transitions), 1)
+    for kind in ("wait", "set", "cancel"):
+        res.metrics[f"frac_{kind}"] = sum(
+            1 for t in res.transitions if t.enc["slots"][t.option_idx].kind == kind) / n
     return res
 
 
@@ -201,7 +208,8 @@ def evaluate_policy(env_factory, adapter, policy_factory, episodes,
         m["episode"] = tag
         rows.append(m)
     keys = ("completion_rate", "weighted_secondary_delay_s", "episode_reward",
-            "n_reached_exit", "n_collisions", "n_steps")
+            "n_reached_exit", "n_collisions", "n_steps",
+            "frac_wait", "frac_set", "frac_cancel")
     out = {f"eval_{k}": float(sum(r[k] for r in rows) / len(rows)) for k in keys} if rows else {}
     out["eval_deadlocks"] = int(sum(bool(r["deadlocked"]) for r in rows))
     out["eval_episodes"] = rows
