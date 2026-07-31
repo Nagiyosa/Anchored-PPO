@@ -247,3 +247,40 @@ def test_truncated_episode_still_pays_the_incomplete_penalty():
     able = [t for t in env.engine.trains.values() if can_complete(t)]
     assert len(env._finalized) == len(able)                 # 终局账已结
     assert res.transitions[-1].reward < 0                   # 且确实是罚分
+
+
+def test_lambda_one_delivers_full_credit_to_early_decisions():
+    """为什么 λ 默认 1.0: 实测 λ=0.95 时第 0 步只"看到"总回报的 ~0.2%。
+
+    episode 长(143–642 步)且奖励集中在末尾(最后一步占 15–16%), 而 λ=0.95 的有效回溯长度
+    只有 1/(1−λ)=20 步 → 早期决策几乎拿不到信号(表现为训练曲线全平、KL 不动)。
+    """
+    rng = np.random.default_rng(0)
+    n = 400
+    rewards = list(rng.normal(-0.5, 0.5, n - 1)) + [-300.0]      # 末尾一大笔
+    dts = [0.0] * n
+    dones = [0] * (n - 1) + [1]
+    zero_v = [0.0] * n
+    total = sum(rewards)
+    frac = {}
+    for lam in (0.95, 0.99, 1.0):
+        _a, ret = compute_gae(rewards, zero_v, dts, dones, 0.0, None, lam)
+        frac[lam] = ret[0] / total
+    assert frac[1.0] == pytest.approx(1.0)          # λ=1: 完整回溯
+    assert frac[0.95] < 0.10                        # λ=0.95: 早期几乎看不到
+    assert frac[0.95] < frac[0.99] < frac[1.0]
+
+
+def test_reward_scale_does_not_change_the_advantage_ordering():
+    """奖励缩放是**纯数值**手段: 优势归一化后排序不变, 不改变最优策略。"""
+    from types import SimpleNamespace
+    from derbysim.learn.rollout import Transition
+    from derbysim.learn.smdp import prepare_batch
+    cfgs = lambda sc: SimpleNamespace(reward_scale=sc, half_life_s=None, lam=1.0)
+    rng = np.random.default_rng(1)
+    trs = [Transition({"n_options": 2}, 0, 0.0, 0.0, float(r), 0.0, i == 39)
+           for i, r in enumerate(rng.normal(-5, 3, 40))]
+    a = prepare_batch(trs, cfgs(1.0))["adv"]
+    b = prepare_batch(trs, cfgs(0.01))["adv"]
+    assert np.array_equal(np.argsort(a), np.argsort(b))
+    assert np.allclose(a * 0.01, b, atol=1e-6)

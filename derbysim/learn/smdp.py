@@ -68,3 +68,22 @@ def discounted_return(rewards, dts, half_life_s: float | None = None) -> float:
         out += disc * r[t]
         disc *= g[t]
     return float(out)
+
+
+def prepare_batch(transitions, cfg, last_value: float = 0.0) -> dict:
+    """转移列表 → numpy 批 + 优势/回报(SMDP GAE)。**纯 numpy** —— 放在这里以便沙盒单测。
+
+    `cfg.reward_scale` 是纯数值缩放(整局回报量级 ~10³, critic 拟合吃力); 优势随后要归一化,
+    故不改变最优策略。`cfg.lam` 默认 1.0, 理由见该字段注释(λ=0.95 时第0步只看到 0.2% 回报)。
+    """
+    sc = getattr(cfg, "reward_scale", 1.0)
+    adv, ret = compute_gae([t.reward * sc for t in transitions], [t.value for t in transitions],
+                           [t.dt for t in transitions], [t.done for t in transitions],
+                           last_value=last_value, half_life_s=cfg.half_life_s, lam=cfg.lam)
+    return {
+        "encs": [t.enc for t in transitions],
+        "actions": np.asarray([t.option_idx for t in transitions], np.int64),
+        "old_logp": np.asarray([t.logp for t in transitions], np.float32),
+        "adv": adv.astype(np.float32),
+        "ret": ret.astype(np.float32),
+    }

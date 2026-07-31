@@ -23,7 +23,7 @@ import torch.nn as nn
 
 from derbysim.learn.panel import collate_panels
 from derbysim.learn.panel_models import to_tensors, valid_routing_rows
-from derbysim.learn.smdp import compute_gae
+from derbysim.learn.smdp import prepare_batch  # noqa: F401  (纯 numpy, 从 smdp 再导出)
 
 
 @dataclass
@@ -35,10 +35,18 @@ class PPOConfig:
     vf_coef: float = 0.5
     ent_coef: float = 0.01
     max_grad_norm: float = 0.5
-    lam: float = 0.95                      # GAE λ —— 方差旋钮(γ=1 下由它顶)
+    # GAE λ。**默认 1.0**(= 蒙特卡洛优势, 无偏), 由实测决定而非惯例:
+    #   episode 长 143–642 步、奖励集中在末尾(最后一步就占 15–16%); λ=0.95 的有效回溯长度
+    #   只有 1/(1−λ)=20 步 → 第 0 步"看到"的总回报仅 **0.2%**(λ=0.99 也只有 4%)。
+    #   即**早期决策几乎拿不到学习信号** —— 实测中表现为曲线全平、KL 恒 ~0.004、
+    #   连续两次评估逐位相同。λ=1 让信用完整回溯; 方差由优势归一化 + critic 承担。
+    lam: float = 1.0
     half_life_s: float | None = None       # None = γ≡1(不打折, §10-G); M12e 扫 300/900/3600
     kl_beta: float = 0.1                   # KL-to-BC 固定档位(手动扫描: 0/0.01/0.1/1/10)
     normalise_adv: bool = True
+    # 纯数值缩放: 整局回报量级 ~10³, 让 critic 去拟合 −2000 这种目标数值上很吃力。
+    # 缩放**不改变**最优策略(优势还要归一化), 只让值损失/学习率处在正常量级。
+    reward_scale: float = 0.01
 
 
 def masked_categorical(logits, opt_mask):
@@ -88,20 +96,6 @@ def routing_kl(policy, bc_ref, batch) -> torch.Tensor:
     kl_row = term.sum(-1)                                                  # [B,T]
     row_mask = valid_routing_rows(batch["cand_mask"]).float()
     return (kl_row * row_mask).sum() / row_mask.sum().clamp(min=1.0)
-
-
-def prepare_batch(transitions, cfg: PPOConfig, last_value: float = 0.0):
-    """转移列表 → numpy 批 + 优势/回报(SMDP GAE)。"""
-    adv, ret = compute_gae([t.reward for t in transitions], [t.value for t in transitions],
-                           [t.dt for t in transitions], [t.done for t in transitions],
-                           last_value=last_value, half_life_s=cfg.half_life_s, lam=cfg.lam)
-    return {
-        "encs": [t.enc for t in transitions],
-        "actions": np.asarray([t.option_idx for t in transitions], np.int64),
-        "old_logp": np.asarray([t.logp for t in transitions], np.float32),
-        "adv": adv.astype(np.float32),
-        "ret": ret.astype(np.float32),
-    }
 
 
 def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device) -> dict:

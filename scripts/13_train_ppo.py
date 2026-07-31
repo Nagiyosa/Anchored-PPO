@@ -56,7 +56,9 @@ def main() -> None:
     ap.add_argument("--kl-beta", type=float, default=0.1)
     ap.add_argument("--half-life", type=float, default=None,
                     help="SMDP 折扣半衰期(秒); 缺省 = γ=1 不打折(§10-G)")
-    ap.add_argument("--lam", type=float, default=0.95)
+    ap.add_argument("--lam", type=float, default=1.0,
+                    help="GAE λ; 默认 1.0 = 蒙特卡洛(实测 λ=0.95 让第0步只看到 0.2%% 的回报)")
+    ap.add_argument("--reward-scale", type=float, default=0.01)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--hidden", type=int, default=64)
     ap.add_argument("--minibatch", type=int, default=64)
@@ -115,7 +117,8 @@ def main() -> None:
                        args.hidden, bc_state, dev)
 
     cfg = PPOConfig(lr=args.lr, lam=args.lam, half_life_s=args.half_life, kl_beta=args.kl_beta,
-                    minibatch=args.minibatch, update_epochs=args.update_epochs)
+                    minibatch=args.minibatch, update_epochs=args.update_epochs,
+                    reward_scale=args.reward_scale)
     opt = torch.optim.Adam(policy.parameters(), lr=cfg.lr)
     driver = TorchPanelDriver(policy, dev, generator=gen)
     rcfg = RewardConfig()
