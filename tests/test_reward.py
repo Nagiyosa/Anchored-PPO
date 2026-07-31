@@ -74,8 +74,26 @@ def test_to_dyn_trains_carries_priority_fields():
         assert t.booked_platform == src[t.train_id].booked_platform
 
 
-def test_realized_weighted_delay_priority_and_inprogress():
+def test_realized_weighted_delay_priority_and_inprogress_new_measure():
+    """默认口径(2026-07-30 起) = **单一 hold 计时器**: 车"走不动"的总时长, 到真正驶入下一 TC 才结清。
+
+    它已覆盖"排队等锁"那段, 故不再叠加 `wait_time`(否则重复计); 且 set/cancel 都不能重置它 ——
+    实测旧口径下反复 办路→撤销 能把延误刷成 0(空转策略拿 +3.0 而正常派路 −1660)。
+    """
     cfg = RewardConfig(tops_weights={"1": 4.0, "6": 1.0}, tops_fallback=2.0)
+    a = DynTrain("A", [], 0.0, service_class="1"); a.held_time = 100.0
+    b = DynTrain("B", [], 0.0, service_class="6"); b.held_time = 100.0
+    assert realized_weighted_delay(_stub(0.0, [a, b]), cfg) == 4.0 * 100 + 1.0 * 100
+    b.hold_start = 0.0                                   # 仍在"走不动"中 → 计在途
+    assert realized_weighted_delay(_stub(50.0, [a, b]), cfg) == 4.0 * 100 + 1.0 * (100 + 50)
+    b.done = True                                        # R1: done 车不计在途(防幻延误)
+    assert realized_weighted_delay(_stub(50.0, [a, b]), cfg) == 4.0 * 100 + 1.0 * 100
+
+
+def test_realized_weighted_delay_old_measure_still_available():
+    """旧口径(只算排队等锁)由 `count_awaiting_hold=False` 保留, 供 A/B 对照。"""
+    cfg = RewardConfig(tops_weights={"1": 4.0, "6": 1.0}, tops_fallback=2.0,
+                       count_awaiting_hold=False)
     a = DynTrain("A", [], 0.0, service_class="1"); a.wait_time = 100.0
     b = DynTrain("B", [], 0.0, service_class="6"); b.wait_time = 100.0
     assert realized_weighted_delay(_stub(0.0, [a, b]), cfg) == 4.0 * 100 + 1.0 * 100

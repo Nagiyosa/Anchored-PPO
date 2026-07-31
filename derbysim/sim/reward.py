@@ -43,24 +43,34 @@ class RewardConfig:
     # 旧度量只算"请求了进路但被排队", 于是**不给车办路 = 零延误** → 实测随机策略(完成 18/30)
     # 回报反而高于"有路就办"(完成 26/30)。留开关供对照, **默认开**。
     count_awaiting_hold: bool = True
+    # 固定时间地平线的排空期(M10 §3 的 drain, 2026-07-30 落地)。依据: 信号员回放下车在区内停留
+    # 中位 5.2min / p99 11.5min / max 12.8min(6 窗口 191 辆实测) → 15min 足够任何称职策略清空。
+    drain_s: float = 900.0
 
     def lam(self, service_class) -> float:
         return self.tops_weights.get(str(service_class), self.tops_fallback)
 
 
-def realized_weighted_delay(engine, cfg: RewardConfig) -> float:
+def realized_weighted_delay(engine, cfg: RewardConfig, horizon: float | None = None) -> float:
     """整局累计加权次生延误(含**未 done 车**的在途阻塞, R1), 单调不减 → 每步差分 ≤ 0 = 成本。"""
     total = 0.0
     hold = bool(getattr(cfg, "count_awaiting_hold", True))
     for t in engine.trains.values():
-        w = t.wait_time
         if hold:
-            w += getattr(t, "held_time", 0.0)                # 已结清的"等派路"时长
-        if not t.done:                                       # R1: done 车 in-progress 不计(防幻延误)
-            if t.blocked_since is not None:
+            # **单一计时器**: 车"走不动"的总时长(从停下到真正驶入下一个 TC)。它已经覆盖了
+            # "排队等锁"那段, 故**不再叠加** wait_time —— 否则重复计; 也不受 set/cancel 影响。
+            w = getattr(t, "held_time", 0.0)
+            if not t.done and getattr(t, "hold_start", None) is not None:
+                # **固定地平线**: 被晾着的车按"一直站到共同地平线"计, 而不是按引擎停摆时刻计。
+                # 否则**少干活的策略会把自己欠的账截短** —— 车不派 → 无事件 → 队列早排空 → 时钟停 →
+                # "站着等"的计时跟着停。实测: 随机策略完成率 0.512 却比"有路就办"(0.735) 得分高。
+                # 这同时也让跨策略比较公平(否则各策略的时间跨度都不一样, 对比本身无意义)。
+                end = engine.now if horizon is None else max(engine.now, horizon)
+                w += end - t.hold_start                  # R1: done 车不计在途(防幻延误)
+        else:
+            w = t.wait_time                              # 旧口径(仅排队等锁), 留作对照
+            if t.blocked_since is not None and not t.done:
                 w += engine.now - t.blocked_since
-            if hold and getattr(t, "awaiting_since", None) is not None:
-                w += engine.now - t.awaiting_since
         total += cfg.lam(t.service_class) * w
     return total
 
@@ -146,11 +156,13 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
         super().__init__(net, params, plat_tc_to_pid, dwell_by_platform,
                          overlap_depth=overlap_depth)
         self.cfg = reward_config or RewardConfig()
+        self.horizon: float | None = None          # 由 reset(trains, horizon=...) 设定
         self._last_realized = 0.0
         self._was_deadlocked = False
         self._finalized: set = set()
 
-    def reset(self, trains):
+    def reset(self, trains, horizon: float | None = None):
+        self.horizon = horizon
         obs, info = super().reset(trains)
         self._last_realized = realized_weighted_delay(self.engine, self.cfg)
         self._was_deadlocked = self.engine.deadlocked
@@ -162,13 +174,22 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
         r = self._compute_reward(done)
         return obs, r, done, info
 
+    def finalize_truncated(self) -> float:
+        """episode 被**截断**(如 max_decisions 用尽)时补做终局结算。
+
+        否则 `_compute_reward` 里 `if done:` 那段不执行 → **拖到截断就能白嫖掉所有未完成罚分**。
+        实测(2026-07-30): 一个只会反复 办路→撤销 的空转策略靠此拿 **+3.0**, 而正常派路 −1660。
+        """
+        return self._compute_reward(done=True)
+
     def _compute_reward(self, done: bool) -> float:
         cur = realized_weighted_delay(self.engine, self.cfg)
         r = -self.cfg.c_delay * (cur - self._last_realized)
         self._last_realized = cur
-        if self.engine.deadlocked and not self._was_deadlocked:
+        newly_deadlocked = self.engine.deadlocked and not self._was_deadlocked
+        if newly_deadlocked:
             self._was_deadlocked = True
-            return r - self.cfg.p_deadlock
+            r -= self.cfg.p_deadlock          # **叠加**, 不再 return —— 见下面的终局结算规则
         for t in self.engine.trains.values():
             if t.train_id in self._finalized:
                 continue
@@ -176,7 +197,16 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
                 r += platform_tier_reward(t, self.plat_tc_to_pid, self.cfg)
                 r += on_time_bonus(t, self.plat_tc_to_pid, self.cfg)
                 self._finalized.add(t.train_id)
-        if done and not self.engine.deadlocked:
+        # **结构性规则(2026-07-30)**: 终局结算与**终止原因无关** —— 自然跑完 / 死锁判负 / 截断,
+        # 同一套账都要结。原先 `and not deadlocked` 让**故意死锁**成为逃费手段: 实测 25 辆车全搁浅时
+        # 正常收尾 −3500、死锁收尾只 −3050(划算 +450), 而"有路就办"跑完真实拥堵窗口是 −760 ⇒
+        # 自杀死锁是当时奖励下的更优解。`p_deadlock` 现在是**额外**罚, 不是**替代**罚。
+        # 同理截断也要补结(`finalize_truncated`)。这一条同时关掉整类"提前结束逃费"。
+        if done or newly_deadlocked:
+            if self.horizon is not None:                 # 终局: 把欠账补到共同地平线
+                cur_h = realized_weighted_delay(self.engine, self.cfg, horizon=self.horizon)
+                r -= self.cfg.c_delay * (cur_h - self._last_realized)
+                self._last_realized = cur_h
             for t in self.engine.trains.values():
                 if t.train_id in self._finalized:
                     continue

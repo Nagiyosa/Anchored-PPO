@@ -128,3 +128,12 @@ def build_episode_trains(window: dict, seed: int | None = None, inject: bool = T
     if inject and seed is not None:
         trains = inject_primary_delays(trains, _sampler(), seed=seed, p_late=p_late)
     return trains
+
+
+def episode_horizon(window: dict, drain_s: float = 900.0) -> float:
+    """episode 的**共同时间地平线** = 窗口末 + 排空期(epoch 秒)。
+
+    所有策略都被结算到同一时刻 → ①被晾着的车按"一直站到地平线"计延误, 少干活不能把欠账截短;
+    ②跨策略比较的时间跨度一致(否则对比本身无意义)。drain 依据见 `RewardConfig.drain_s`。
+    """
+    return float(pd.Timestamp(window["end"]).timestamp() + drain_s)

@@ -141,7 +141,10 @@ def test_holding_a_train_now_costs_delay():
     assert ng > nr                                   # 有路就办完成得多
     assert old_r > old_g                             # 旧度量: 少派路反而得分高(病)
     assert new_g > new_r                             # 新度量: 排序纠正 ✔
-    assert new_g == pytest.approx(old_g)             # 且不误伤正常派路(数字不变)
+    # 不误伤正常派路: 新旧口径下"有路就办"的分数应基本一致(几个百分点内)。
+    # (2026-07-30 二次修订后不再逐位相等 —— 新口径是**单一 hold 计时器**"从停下到真正驶入下一 TC",
+    #  已覆盖排队段、不再叠加 wait_time; 对派路及时的策略两者只差 ~1.5%。)
+    assert abs(new_g - old_g) / abs(old_g) < 0.05
 
 
 # ---------- 人类参照线 + 固定评估协议 ----------
@@ -194,3 +197,53 @@ def test_fixed_eval_does_not_let_policies_contaminate_each_other():
     assert g1["eval_episode_reward"] == g2["eval_episode_reward"]      # 可重复
     assert g1["eval_episode_reward"] != rnd["eval_episode_reward"]     # 未被污染
     assert g1["eval_n_steps"] > 0 and rnd["eval_n_steps"] > 0
+
+
+def test_set_cancel_oscillation_cannot_beat_dispatching():
+    """回归: 反复 办路→撤销 的空转策略**不得**优于正常派路(2026-07-30 实测的 reward hack)。
+
+    当时两个洞叠加: ①`cancel` 可在**同一瞬间**撤掉刚排的进路 → 时钟不走、"站着等"计时器不走 →
+    延误恒为 0; ②`max_decisions` 截断时 `done=False`, 终局未完成罚**整段不执行**。
+    结果: 空转策略 3000 步全卡在一个时刻、延误 0、得分 **+3.0**, 而正常派路 −1660。
+    修: cancel 要求请求已排队 >0 仿真时间; 截断也补做终局结算(`finalize_truncated`)。
+    """
+    net, params, dwell, ptc = load_assets()
+    ad = PanelAdapter(net, Featurizer(net, ptc))
+    w = congested_windows("val", top_k=1)[0]
+
+    def oscillate(enc):
+        for i, s in enumerate(enc["slots"]):
+            if s.kind == "cancel":
+                return i, 0.0, 0.0
+        for i, s in enumerate(enc["slots"]):
+            if s.kind == "set":
+                return i, 0.0, 0.0
+        return 0, 0.0, 0.0
+
+    def run(pol):
+        env = RewardedDynamicEnv(net, params, ptc, dwell)
+        res = run_episode(env, ad, pol, build_episode_trains(w, seed=0), max_decisions=3000)
+        span = env.engine.now - min(t.entry_time for t in env.engine.trains.values())
+        return res, span
+
+    osc, osc_span = run(oscillate)
+    gre, gre_span = run(make_greedy_set_policy())
+    assert not osc.truncated, "空转仍能耗尽决策预算 = 时钟被冻住"
+    assert osc_span > 0.5 * gre_span, "空转让仿真时间几乎不前进"
+    assert osc.metrics["episode_reward"] <= gre.metrics["episode_reward"] + 1e-6
+    assert osc.metrics["weighted_secondary_delay_s"] > 0, "空转不该把延误刷成 0"
+
+
+def test_truncated_episode_still_pays_the_incomplete_penalty():
+    """截断不能让策略白嫖完成率罚分: 终局结算必须补做, 且结算集 = 所有可完成的车。"""
+    from derbysim.sim.reward import can_complete
+    net, params, dwell, ptc = load_assets()
+    ad = PanelAdapter(net, Featurizer(net, ptc))
+    w = congested_windows("val", top_k=1)[0]
+    env = RewardedDynamicEnv(net, params, ptc, dwell)
+    res = run_episode(env, ad, make_greedy_set_policy(),
+                      build_episode_trains(w, seed=0), max_decisions=40)
+    assert res.truncated and res.transitions[-1].done and res.transitions[-1].dt == 0.0
+    able = [t for t in env.engine.trains.values() if can_complete(t)]
+    assert len(env._finalized) == len(able)                 # 终局账已结
+    assert res.transitions[-1].reward < 0                   # 且确实是罚分

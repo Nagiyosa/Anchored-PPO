@@ -34,7 +34,8 @@ class EpisodeResult:
     truncated: bool = False
 
 
-def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict) -> dict:
+def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
+                    horizon: float | None = None) -> dict:
     """闭环质量指标(D23 的价值锚点) —— 从引擎终态直接读, 不用自制判据。
 
     次生延误**只报相对量时才有意义**(M9 自由时序 + overlap 使绝对量膨胀 ~4×, M10 §5),
@@ -57,7 +58,7 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict) -> dict:
         "completion_rate": (len(reached) / len(able)) if able else 1.0,
         "deadlocked": bool(engine.deadlocked),
         "n_collisions": len(engine.collisions),          # 结构性应恒为 0
-        "weighted_secondary_delay_s": float(realized_weighted_delay(engine, cfg)),
+        "weighted_secondary_delay_s": float(realized_weighted_delay(engine, cfg, horizon)),
         "raw_wait_s": float(sum(t.wait_time for t in trains)),
         "n_stop_trains": len(stops),
         "n_served_booked": booked_ok,
@@ -67,13 +68,17 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict) -> dict:
     }
 
 
-def run_episode(env, adapter, act_fn, trains, max_decisions: int = 5000) -> EpisodeResult:
+def run_episode(env, adapter, act_fn, trains, max_decisions: int = 5000,
+                horizon: float | None = None) -> EpisodeResult:
     """跑完一局: reset → 逐决策(编码→策略选下标→env.step) → 收集转移 + 闭环指标。
 
     `done=True` 只在**自然终局**(全车终局 / 死锁判负)时置位 → GAE 的 bootstrap 值为 0 是正确的。
     因 `max_decisions` 提前收尾时置 `truncated=True`(**如实标注**, 不当成终局)。
     """
-    obs, _info = env.reset(trains)
+    try:
+        obs, _info = env.reset(trains, horizon=horizon)
+    except TypeError:
+        obs, _info = env.reset(trains)                 # 裸 DynamicDerbyEnv 无 horizon
     res = EpisodeResult()
     while not env.done and len(res.transitions) < max_decisions:
         dec = env.decision()
@@ -90,7 +95,15 @@ def run_episode(env, adapter, act_fn, trains, max_decisions: int = 5000) -> Epis
         if done:
             break
     res.truncated = (not env.done) and len(res.transitions) >= max_decisions
-    res.metrics = episode_metrics(env.engine, env.cfg, env.plat_tc_to_pid)
+    if res.truncated and res.transitions and hasattr(env, "finalize_truncated"):
+        # 截断也要结终局账(未完成判负), 否则"拖到截断"= 白嫖掉完成率罚分。
+        # 记成一条 dt=0 的终止转移 → GAE 以 0 bootstrap, 与自然终局一致。
+        tail = env.finalize_truncated()
+        last = res.transitions[-1]
+        res.transitions.append(Transition(last.enc, last.option_idx, last.logp, last.value,
+                                          float(tail), 0.0, True))
+    res.metrics = episode_metrics(env.engine, env.cfg, env.plat_tc_to_pid,
+                                  getattr(env, "horizon", None))
     res.metrics["truncated"] = res.truncated
     res.metrics["n_steps"] = len(res.transitions)
     res.metrics["episode_reward"] = float(sum(t.reward for t in res.transitions))
@@ -156,10 +169,12 @@ def collect_rollout(env_factory, adapter, policy_factory, episode_iter, target_s
     (2026-07-30 实测撞到: 三个策略评出完全相同的数字)。`policy_factory(env) -> act_fn`(见 `as_factory`)。
     """
     transitions, metrics = [], []
-    for tag, make_trains in episode_iter:
+    for item in episode_iter:
+        tag, make_trains = item[0], item[1]
+        horizon = item[2] if len(item) > 2 else None     # (标签, 造车函数[, 地平线])
         env = env_factory()
         res = run_episode(env, adapter, policy_factory(env), make_trains(),
-                          max_decisions=max_decisions)
+                          max_decisions=max_decisions, horizon=horizon)
         transitions.extend(res.transitions)
         m = dict(res.metrics); m["episode"] = tag
         metrics.append(m)
@@ -177,10 +192,12 @@ def evaluate_policy(env_factory, adapter, policy_factory, episodes,
     `episodes` 产出 **(标签, 造车函数)** —— 同上, 必须每局新造车, 否则跨策略互相污染。
     """
     rows = []
-    for tag, make_trains in episodes:
+    for item in episodes:
+        tag, make_trains = item[0], item[1]
+        horizon = item[2] if len(item) > 2 else None
         env = env_factory()
         m = dict(run_episode(env, adapter, policy_factory(env), make_trains(),
-                             max_decisions=max_decisions).metrics)
+                             max_decisions=max_decisions, horizon=horizon).metrics)
         m["episode"] = tag
         rows.append(m)
     keys = ("completion_rate", "weighted_secondary_delay_s", "episode_reward",

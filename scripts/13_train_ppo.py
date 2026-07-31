@@ -37,7 +37,8 @@ from derbysim.learn.ppo import PPOConfig, TorchPanelDriver, frozen_bc, ppo_updat
 from derbysim.learn.rollout import (as_factory, collect_rollout, evaluate_policy,
                                     make_greedy_set_policy, make_random_policy,
                                     signaller_replay_factory)
-from derbysim.learn.scenarios import build_episode_trains, congested_windows, load_assets
+from derbysim.learn.scenarios import (build_episode_trains, congested_windows,
+                                      episode_horizon, load_assets)
 from derbysim.sim.reward import RewardConfig, RewardedDynamicEnv
 
 
@@ -122,7 +123,7 @@ def main() -> None:
     # ---- 固定评估集(同窗口/同注入种子, 跨 iteration 与跨策略完全可比) + 基线参照线 ----
     ev_wins = congested_windows("val", top_k=args.eval_windows)
     mk = lambda w, sd: (lambda: build_episode_trains(w, seed=sd))
-    eval_eps = [(f"{str(w['start'])[:16]}|s{sd}", mk(w, sd))
+    eval_eps = [(f"{str(w['start'])[:16]}|s{sd}", mk(w, sd), episode_horizon(w))
                 for w in ev_wins for sd in range(args.eval_seeds)]
     env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg)
     print(f"[eval] 固定集 = {len(ev_wins)} 窗口 × {args.eval_seeds} 种子 = {len(eval_eps)} 局")
@@ -145,7 +146,9 @@ def main() -> None:
             while True:
                 w = windows[int(rng.integers(len(windows)))]
                 sd = int(rng.integers(1 << 30))
-                yield f"{str(w['start'])[:16]}|s{sd}", (lambda w=w, sd=sd: build_episode_trains(w, seed=sd))
+                yield (f"{str(w['start'])[:16]}|s{sd}",
+                       (lambda w=w, sd=sd: build_episode_trains(w, seed=sd)),
+                       episode_horizon(w))
         t_roll = time.time()
         transitions, ep_metrics = collect_rollout(
             env_factory, adapter, as_factory(driver), episode_stream(),

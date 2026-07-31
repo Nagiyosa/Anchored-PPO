@@ -61,7 +61,7 @@ class DynTrain:
     # 计延误 → 干脆不给车办路反而零延误(实测: 随机策略 12 辆车 route_ptr 0/N、wait_time 全 0)。
     # 车停着就是在耗时间, 与"排队等锁"对旅客无区别 → 单列累计, 与 blocked_since **互斥**(见 _apply)。
     held_time: float = 0.0
-    awaiting_since: float | None = None
+    hold_start: float | None = None
     sim_occ: dict = field(default_factory=dict)
     reached_exit: bool = False
     goal: object = None
@@ -153,6 +153,11 @@ class DynamicEngine:
             return True
         t.pending_route = route_id
         t.blocked_since = self.now
+        if t.hold_start is None:
+            # 请求被排队 = 车走不动 → 起计。**入区进路**也走这条路径: 卡在入区口的车原先
+            # `hold_start` 一直是 None、一秒不计(实测随机策略 18 辆车堵在入区、延误 0,
+            # 于是完成率 0.39 却比"有路就办"0.71 得分高)。
+            t.hold_start = self.now
         return False
 
     # ---- Path A 面板动作 ----
@@ -160,7 +165,15 @@ class DynamicEngine:
         return [t for t in self.trains.values() if t.awaiting_decision and not t.done]
 
     def _cancellable(self):
-        return [t for t in self.trains.values() if t.pending_route is not None and not t.done]
+        """可撤销 = 有待办(排队中)进路, **且该请求已排了至少一点仿真时间**。
+
+        `blocked_since == now` 的请求不给撤 —— 现实里信号员不可能在**同一瞬间**把一条进路排上再撤掉;
+        允许的话策略能在单个时间点上无限 办路→撤销 空转: 时钟不走 ⇒ "站着等"计时器不走 ⇒ 延误恒为 0。
+        实测(2026-07-30): 这样一个空转策略 3000 步全卡在同一时刻、延误 0, 得分反而优于正常派路。
+        """
+        return [t for t in self.trains.values()
+                if t.pending_route is not None and not t.done
+                and t.blocked_since is not None and t.blocked_since < self.now]
 
     def _build_options(self, awaiting, cancellable):
         opts = [PanelAction("wait")]
@@ -181,10 +194,7 @@ class DynamicEngine:
         self.n_actions += 1
         t = self.trains.get(a.train_id) if a.train_id else None
         if a.kind == "set" and t is not None:
-            t.awaiting_decision = False
-            if t.awaiting_since is not None:              # 结清"等派路"时长(与 blocked_since 互斥)
-                t.held_time += self.now - t.awaiting_since
-                t.awaiting_since = None
+            t.awaiting_decision = False                  # hold_start **不清**: 车还没动
             if self._request(t, a.route_id):
                 self.q.push(self.now, "try_advance", {"tr": t.train_id, "idx": t.pos})
             if has_deadlock(self.res):
@@ -196,9 +206,10 @@ class DynamicEngine:
                                   if not (q == rid and tr == t.train_id)]
                 t.route_ptr -= 1                 # 撤销该决策 → 重回待决同一槽
                 t.pending_route = None
-                t.blocked_since = None
-                t.awaiting_decision = True
-                t.awaiting_since = self.now               # 撤销后重回待决 → 重新开始计"等派路"
+                if t.blocked_since is not None:          # 排队等锁的那段**必须结清**, 不能丢
+                    t.wait_time += self.now - t.blocked_since
+                    t.blocked_since = None
+                t.awaiting_decision = True               # hold_start **不清**: 车自始至终没动
 
     def _flag_deadlock(self):
         from derbysim.sim.deadlock import deadlock_cycle
@@ -261,6 +272,9 @@ class DynamicEngine:
         if hr is not None and self.res.route_train.get(hr) not in (None, t.train_id):
             self.collisions.append({"t": self.now, "tc": tc, "train": t.train_id})
         t.pos = idx
+        if t.hold_start is not None:                 # **只有真的动了**才结清"走不动"计时
+            t.held_time += self.now - t.hold_start
+            t.hold_start = None
         t.sim_occ[tc] = self.now
         if self.plat_tc_to_pid.get(tc) is not None:
             t.served_platform = True
@@ -304,14 +318,14 @@ class DynamicEngine:
             return
         if t.route_ptr < len(t.route_chain):        # 段末 → 待决(面板相位处理)
             t.awaiting_decision = True
-            if t.awaiting_since is None:
-                t.awaiting_since = self.now          # 开始"站着等面板给路"
+            if t.hold_start is None:
+                t.hold_start = self.now              # 开始"走不动": 站着等面板给路
             self.n_decisions += 1
             return
         t.done = True                                # 无更多进路 → 终局 + 释放
-        if t.awaiting_since is not None:
-            t.held_time += self.now - t.awaiting_since
-            t.awaiting_since = None
+        if t.hold_start is not None:
+            t.held_time += self.now - t.hold_start
+            t.hold_start = None
         t.reached_exit = self._at_goal_exit(t)
         for k in range(t.route_ptr):
             self.res.release_route(t.route_chain[k])
