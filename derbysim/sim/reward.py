@@ -43,9 +43,10 @@ class RewardConfig:
     # 旧度量只算"请求了进路但被排队", 于是**不给车办路 = 零延误** → 实测随机策略(完成 18/30)
     # 回报反而高于"有路就办"(完成 26/30)。留开关供对照, **默认开**。
     count_awaiting_hold: bool = True
-    # 固定时间地平线的排空期(M10 §3 的 drain, 2026-07-30 落地)。依据: 信号员回放下车在区内停留
-    # 中位 5.2min / p99 11.5min / max 12.8min(6 窗口 191 辆实测) → 15min 足够任何称职策略清空。
-    drain_s: float = 900.0
+    # 固定时间地平线的排空期(M10 §3 的 drain)。**依据换成全量实测(80 个拥堵窗口, 2026-07-31)**:
+    # 信号员回放下车在区内停留 p99 中位 7.4min、**最大 14.9min**; 原定 15min 只剩 0.1min 余量 →
+    # 提到 20min。(之前的 6 窗口/191 辆样本给出 max 12.8min, 取样过小。)
+    drain_s: float = 1200.0
 
     def lam(self, service_class) -> float:
         return self.tops_weights.get(str(service_class), self.tops_fallback)

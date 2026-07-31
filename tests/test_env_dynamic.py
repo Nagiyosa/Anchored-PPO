@@ -77,7 +77,7 @@ def test_dynamic_replay_completes_no_collision():
 def test_reservation_released_at_end():
     net, params, dwell, ptc, dyn = _load()
     eng = _run_replay(net, params, ptc, dwell, dyn)
-    assert not eng.res.reserved and not eng.res.route_train and not eng.res.queue
+    assert not eng.res.reserved and not eng.res.holder_fp and not eng.res.queue
 
 
 def test_cancel_returns_train_to_awaiting():

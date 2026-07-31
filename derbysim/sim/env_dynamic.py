@@ -62,6 +62,7 @@ class DynTrain:
     # 车停着就是在耗时间, 与"排队等锁"对旅客无区别 → 单列累计, 与 blocked_since **互斥**(见 _apply)。
     held_time: float = 0.0
     hold_start: float | None = None
+    cancel_sig: tuple | None = None      # 上次为该车提供 cancel 时, 挡住其待办进路的持有者签名
     sim_occ: dict = field(default_factory=dict)
     reached_exit: bool = False
     goal: object = None
@@ -164,16 +165,36 @@ class DynamicEngine:
     def _actionable(self):
         return [t for t in self.trains.values() if t.awaiting_decision and not t.done]
 
-    def _cancellable(self):
-        """可撤销 = 有待办(排队中)进路, **且该请求已排了至少一点仿真时间**。
+    def _blocker_sig(self, t):
+        """挡住车 t 待办进路的持有者集合 (route_id, 车) —— 引擎原生量, 非自造指标。"""
+        r = self.net.routes.get(t.pending_route) if t.pending_route else None
+        if r is None:
+            return ()
+        hs = {self.res.reserved.get(tc) for tc in self.res.footprint(r)}
+        return tuple(sorted(h for h in hs if h is not None and h[1] != t.train_id))
 
-        `blocked_since == now` 的请求不给撤 —— 现实里信号员不可能在**同一瞬间**把一条进路排上再撤掉;
-        允许的话策略能在单个时间点上无限 办路→撤销 空转: 时钟不走 ⇒ "站着等"计时器不走 ⇒ 延误恒为 0。
-        实测(2026-07-30): 这样一个空转策略 3000 步全卡在同一时刻、延误 0, 得分反而优于正常派路。
+    def _cancellable(self):
+        """可撤销 = 有待办(排队中)进路 · 已排了 >0 仿真时间 · **且阻塞来源自上次提供后发生了变化**。
+
+        ①`blocked_since == now` 不给撤: 现实里信号员不可能同一瞬间把进路排上再撤掉; 允许的话策略能在
+          单个时间点无限 办路→撤销 空转(时钟不走 ⇒ 延误恒为 0, 实测该空转策略得分反超正常派路)。
+        ②**阻塞来源没变就不重复提供**(2026-07-31): 原实现每个引擎事件都把同一条待办进路重新端上来问
+          "要不要撤"。全量实测 —— 一辆车在一个 3h 窗口里被问了 **614 次**同一个问题; "有路就办"的
+          决策点中位 **660**、其中 **89.3%** 没有任何 set 可选, 选项池 **62.8%** 是 cancel;
+          而**信号员**同期决策中位 **102**、选项池 cancel 仅 **3.4%**, 真实撤销率(全 98 天)
+          **10.44%**(92534 请求 / 9664 撤销) ≈ 每 3 小时 14 次。
+          即: 这不是"agent 权力大", 是**我们把每次'没动手'都记成一次决策**, 稀释了 9 倍学习信号,
+          还让 episode 比信号员长 6 倍(打垮了 GAE 的信用回溯)。撤销能力在**情况真的变了**时完整保留。
         """
-        return [t for t in self.trains.values()
-                if t.pending_route is not None and not t.done
-                and t.blocked_since is not None and t.blocked_since < self.now]
+        out = []
+        for t in self.trains.values():
+            if t.pending_route is None or t.done:
+                continue
+            if t.blocked_since is None or t.blocked_since >= self.now:
+                continue
+            if self._blocker_sig(t) != t.cancel_sig:
+                out.append(t)
+        return out
 
     def _build_options(self, awaiting, cancellable):
         opts = [PanelAction("wait")]
@@ -210,6 +231,7 @@ class DynamicEngine:
                     t.wait_time += self.now - t.blocked_since
                     t.blocked_since = None
                 t.awaiting_decision = True               # hold_start **不清**: 车自始至终没动
+                t.cancel_sig = None
 
     def _flag_deadlock(self):
         from derbysim.sim.deadlock import deadlock_cycle
@@ -227,6 +249,8 @@ class DynamicEngine:
             if not awaiting and not cancellable:
                 return
             opts, logged = self._build_options(awaiting, cancellable)
+            for t in cancellable:                    # 已经问过了; 阻塞来源再变才会重新问
+                t.cancel_sig = self._blocker_sig(t)
             if all(o.kind == "wait" for o in opts):   # 无可办可撤 → 只能等
                 return
             action = yield PanelDecision(self.now, opts, logged)
@@ -268,9 +292,15 @@ class DynamicEngine:
         t = self.trains[d["tr"]]
         idx = d["idx"]
         tc = t.path[idx]
-        hr = self.res.reserved.get(tc)
-        if hr is not None and self.res.route_train.get(hr) not in (None, t.train_id):
-            self.collisions.append({"t": self.now, "tc": tc, "train": t.train_id})
+        hr = self.res.reserved.get(tc)               # (route_id, 车) —— 身份含车(2026-07-31 修)
+        if hr is not None and hr[1] != t.train_id:
+            # 记下**当时**的持有者: 事后查 reserved 已被释放, 查不出所以然(2026-07-31 教训)
+            self.collisions.append({"t": self.now, "tc": tc, "train": t.train_id,
+                                    "holder_route": hr[0],
+                                    "holder_train": hr[1],
+                                    "intruder_route": t.route_chain[t.route_ptr - 1]
+                                    if t.route_ptr >= 1 else None,
+                                    "intruder_pos": idx})
         t.pos = idx
         if t.hold_start is not None:                 # **只有真的动了**才结清"走不动"计时
             t.held_time += self.now - t.hold_start
@@ -286,17 +316,16 @@ class DynamicEngine:
     def _release_behind(self, t, idx):
         if 0 <= idx < len(t.path):
             tc = t.path[idx]
-            rid = self.res.reserved.get(tc)
-            if rid is not None and self.res.route_train.get(rid) == t.train_id:
-                self.res.release_tc(tc, rid)
+            key = self.res.reserved.get(tc)
+            if key is not None and key[1] == t.train_id:   # 只释放**自己**的预留
+                self.res.release_tc(tc, key)
                 self._wake()
 
     def _wake(self):
         for t in self.trains.values():
             if t.done or t.pending_route is None:
                 continue
-            if (self.res.is_locked(t.pending_route)
-                    and self.res.route_train.get(t.pending_route) == t.train_id):
+            if self.res.is_locked(t.pending_route, t.train_id):
                 self._append_locked(t, t.pending_route)
                 t.pending_route = None
                 if t.blocked_since is not None:
@@ -328,7 +357,7 @@ class DynamicEngine:
             t.hold_start = None
         t.reached_exit = self._at_goal_exit(t)
         for k in range(t.route_ptr):
-            self.res.release_route(t.route_chain[k])
+            self.res.release_route(t.route_chain[k], t.train_id)   # 带车: 不能释放别人的锁
         self._wake()
 
     def _delay_min(self, t):
@@ -368,7 +397,8 @@ class DynamicEngine:
             "now": self.now,
             "tod_hour": int((self.now // 3600) % 24),
             "trains": trains,
-            "reservations": dict(self.res.reserved),   # 当前锁态: tc -> route_id
+            # 当前锁态: tc -> (route_id, 车)。特征侧只用**物理占用**(§10-A②), 这里供诊断/面板特征
+            "reservations": {tc: k[0] for tc, k in self.res.reserved.items()},
             "n_reserved_tc": len(self.res.reserved),
             "queue_len": len(self.res.queue),
         }

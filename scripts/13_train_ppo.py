@@ -52,9 +52,12 @@ def main() -> None:
                     help="开局只训 critic、策略不动的轮数。critic 没学会前优势只编码'步在 episode "
                          "中的位置'(实测相关 0.77-0.96), 照它更新会把策略推坏")
     ap.add_argument("--eval-every", type=int, default=5)
-    ap.add_argument("--eval-windows", type=int, default=3)
+    ap.add_argument("--eval-windows", type=int, default=99,
+                    help="固定评估集用几个 val 窗口; 默认取满(9 个)")
     ap.add_argument("--eval-seeds", type=int, default=2)
-    ap.add_argument("--windows", type=int, default=6)
+    ap.add_argument("--windows", type=int, default=99,
+                    help="训练用几个拥堵窗口; 默认取满(train 段共 28 个)。"
+                         "此前默认 6 = 18 小时 = 全量的 0.77%%, 而 BC 用的是全 98 天")
     ap.add_argument("--split", default="train", choices=["train", "val"])
     ap.add_argument("--kl-beta", type=float, default=0.1)
     ap.add_argument("--half-life", type=float, default=None,

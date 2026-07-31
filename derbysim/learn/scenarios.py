@@ -130,7 +130,7 @@ def build_episode_trains(window: dict, seed: int | None = None, inject: bool = T
     return trains
 
 
-def episode_horizon(window: dict, drain_s: float = 900.0) -> float:
+def episode_horizon(window: dict, drain_s: float = 1200.0) -> float:
     """episode 的**共同时间地平线** = 窗口末 + 排空期(epoch 秒)。
 
     所有策略都被结算到同一时刻 → ①被晾着的车按"一直站到地平线"计延误, 少干活不能把欠账截短;

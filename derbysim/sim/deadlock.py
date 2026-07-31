@@ -23,10 +23,10 @@ def wait_for_graph(res) -> dict[str, set[str]]:
         if r is None:
             continue
         for tc in res.footprint(r):
-            holder_route = res.reserved.get(tc)
-            if holder_route is None:
+            holder = res.reserved.get(tc)        # (route_id, 车) —— 身份含车(2026-07-31)
+            if holder is None:
                 continue
-            u = res.route_train.get(holder_route)
+            u = holder[1]
             if u is not None and u != t:
                 edges[t].add(u)
     return edges
@@ -72,11 +72,9 @@ def deadlock_cycle(res) -> list[str] | None:
 
 def would_create_deadlock(res, route, train: str) -> bool:
     """一步前瞻: 若此刻给 train 办 route, 会否当即形成死锁环? (在快照上试办后回滚, 不改真实态.)"""
-    snap = (dict(res.reserved), dict(res.route_train),
-            dict(res.route_fp), list(res.queue))
+    snap = (dict(res.reserved), dict(res.holder_fp), list(res.queue))
     try:
         res.request(route, train)
         return has_deadlock(res)
     finally:
-        res.reserved, res.route_train, res.route_fp, res.queue = (
-            snap[0], snap[1], snap[2], snap[3])
+        res.reserved, res.holder_fp, res.queue = snap[0], snap[1], snap[2]
