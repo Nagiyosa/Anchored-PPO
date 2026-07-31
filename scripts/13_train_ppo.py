@@ -48,6 +48,9 @@ def main() -> None:
     ap.add_argument("--iters", type=int, default=20)
     ap.add_argument("--steps-per-iter", type=int, default=2048,
                     help="每轮更新的**步数预算**(凑够才更新); 固定局数会让 batch 在 180-4586 间晃")
+    ap.add_argument("--critic-warmup-iters", type=int, default=8,
+                    help="开局只训 critic、策略不动的轮数。critic 没学会前优势只编码'步在 episode "
+                         "中的位置'(实测相关 0.77-0.96), 照它更新会把策略推坏")
     ap.add_argument("--eval-every", type=int, default=5)
     ap.add_argument("--eval-windows", type=int, default=3)
     ap.add_argument("--eval-seeds", type=int, default=2)
@@ -130,6 +133,8 @@ def main() -> None:
                 for w in ev_wins for sd in range(args.eval_seeds)]
     env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg)
     print(f"[eval] 固定集 = {len(ev_wins)} 窗口 × {args.eval_seeds} 种子 = {len(eval_eps)} 局")
+    print(f"[warmup] 前 {args.critic_warmup_iters} 轮只训 critic(行首标 *), 策略冻结; "
+          f"**EV 是关键诊断** —— EV≈0 表示优势只是'位置噪声', 此时放开策略必被推坏")
     baselines = {}
     for tag, fac in (("signaller_replay", signaller_replay_factory),
                      ("greedy_set", as_factory(make_greedy_set_policy())),
@@ -159,16 +164,19 @@ def main() -> None:
         roll_s = time.time() - t_roll
         total_steps += len(transitions)
         t_upd = time.time()
-        stats = ppo_update(policy, bc_ref, opt, prepare_batch(transitions, cfg), cfg, dev)
+        warming = it < args.critic_warmup_iters
+        stats = ppo_update(policy, bc_ref, opt, prepare_batch(transitions, cfg), cfg, dev,
+                           value_only=warming)
         upd_s = time.time() - t_upd
         row = {"iter": it, "steps": len(transitions), "episodes": len(ep_metrics), **stats,
                "train_reward_mean": float(np.mean([m["episode_reward"] for m in ep_metrics])),
                "train_completion_mean": float(np.mean([m["completion_rate"] for m in ep_metrics])),
                "rollout_s": roll_s, "update_s": upd_s,
                "steps_per_s": len(transitions) / max(roll_s, 1e-9)}
-        print(f"it {it:>3} | steps {row['steps']:>5} ({row['episodes']} eps) "
-              f"| KL {row['kl_to_bc']:.4f} | ent {row['entropy']:.3f} "
-              f"| rollout {roll_s:>5.1f}s ({row['steps_per_s']:>5.0f}步/s) upd {upd_s:>5.1f}s")
+        print(f"it {it:>3}{'*' if warming else ' '}| steps {row['steps']:>5} ({row['episodes']} eps) "
+              f"| **EV {row['explained_variance']:>6.3f}** | KL {row['kl_to_bc']:.4f} "
+              f"| ent {row['entropy']:.3f} | vloss {row['value_loss']:>8.2f} "
+              f"| rollout {roll_s:>5.1f}s ({row['steps_per_s']:>4.0f}步/s) upd {upd_s:>4.1f}s")
         if args.eval_every and ((it + 1) % args.eval_every == 0 or it == args.iters - 1):
             ev = evaluate_policy(env_factory, adapter,
                                  as_factory(TorchPanelDriver(policy, dev, greedy=True)), eval_eps)

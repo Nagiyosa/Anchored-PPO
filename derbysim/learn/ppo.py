@@ -98,14 +98,34 @@ def routing_kl(policy, bc_ref, batch) -> torch.Tensor:
     return (kl_row * row_mask).sum() / row_mask.sum().clamp(min=1.0)
 
 
-def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device) -> dict:
-    """一轮 PPO 更新(多 epoch × minibatch)。返回诊断量(损失/KL/熵/裁剪比例)。"""
+def explained_variance(pred, target) -> float:
+    """EV = 1 − Var(target−pred)/Var(target)。**critic 是否有用的直接诊断**。
+
+    EV≈0 → critic 等于常数预测 ⇒ 优势 ≈ 回报本身。γ=1 下回报全负、G_t 随 t 单调趋近 0,
+    于是优势几乎只编码"这一步在 episode 里的位置"(实测与步序相关 0.77–0.96), 早期动作一律被压、
+    晚期一律被抬 —— 与动作好坏无关。**必须监控**: 这个数不起来, 训练就是在跟噪声较劲。
+    """
+    t = np.asarray(target, dtype=np.float64)
+    p = np.asarray(pred, dtype=np.float64)
+    var = t.var()
+    return float(1.0 - ((t - p).var() / var)) if var > 1e-12 else 0.0
+
+
+def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
+               value_only: bool = False) -> dict:
+    """一轮 PPO 更新(多 epoch × minibatch)。返回诊断量(损失/KL/熵/裁剪比例/**EV**)。
+
+    `value_only=True` = **critic 预热**: 只训值头, 策略完全不动。用于训练开局 ——
+    critic 没学会之前, 优势是"位置噪声", 让策略照它更新只会把策略推坏(实测: λ 放开后
+    KL 起来了, 完成率却从 0.567 掉到 0.388、比随机还差)。
+    """
     n = len(data["encs"])
     adv = data["adv"].copy()
     if cfg.normalise_adv and n > 1:
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
     stats = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0,
-             "kl_to_bc": 0.0, "clip_frac": 0.0, "n_minibatch": 0}
+             "kl_to_bc": 0.0, "clip_frac": 0.0, "n_minibatch": 0, "explained_variance": 0.0}
+    preds = np.zeros(n, dtype=np.float64)
     policy.train()
     rng = np.random.default_rng(0)
     for _ in range(cfg.update_epochs):
@@ -128,7 +148,11 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device) ->
             val_loss = ((value - mb_ret) ** 2).mean()
             ent = dist.entropy().mean()
             kl = routing_kl(policy, bc_ref, batch) if cfg.kl_beta > 0 else torch.zeros((), device=device)
-            loss = pol_loss + cfg.vf_coef * val_loss - cfg.ent_coef * ent + cfg.kl_beta * kl
+            if value_only:
+                loss = val_loss                       # critic 预热: 策略不动
+            else:
+                loss = pol_loss + cfg.vf_coef * val_loss - cfg.ent_coef * ent + cfg.kl_beta * kl
+            preds[sel] = value.detach().to("cpu").numpy().astype("float64")
 
             optimizer.zero_grad()
             loss.backward()
@@ -145,6 +169,8 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device) ->
     k = max(stats["n_minibatch"], 1)
     for key in ("policy_loss", "value_loss", "entropy", "kl_to_bc", "clip_frac"):
         stats[key] /= k
+    stats["explained_variance"] = explained_variance(preds, data["ret"])
+    stats["value_only"] = bool(value_only)
     return stats
 
 

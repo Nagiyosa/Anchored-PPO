@@ -284,3 +284,27 @@ def test_reward_scale_does_not_change_the_advantage_ordering():
     b = prepare_batch(trs, cfgs(0.01))["adv"]
     assert np.array_equal(np.argsort(a), np.argsort(b))
     assert np.allclose(a * 0.01, b, atol=1e-6)
+
+
+def test_advantage_encodes_position_when_critic_is_useless():
+    """钉住"为什么必须先预热 critic": critic≈0 时优势几乎只编码步序, 不编码动作质量。
+
+    实测(真实窗口, 4 个场景): 归一化优势与步序的相关系数 **0.77–0.96**;
+    前 1/4 步均值 ≈ −0.9、后 1/4 ≈ +1.5 —— 早期动作一律被压、晚期一律被抬。
+    γ=1 下回报全负、G_t 随 t 单调趋近 0 使然。EV(explained variance) 是它的直接探测器。
+    """
+    net, params, dwell, ptc = load_assets()
+    ad = PanelAdapter(net, Featurizer(net, ptc))
+    w = congested_windows("val", top_k=1)[0]
+    env = RewardedDynamicEnv(net, params, ptc, dwell)
+    from derbysim.learn.scenarios import episode_horizon
+    res = run_episode(env, ad, make_greedy_set_policy(),
+                      build_episode_trains(w, seed=0), horizon=episode_horizon(w))
+    rw = np.array([t.reward for t in res.transitions]) * 0.01
+    n = len(rw)
+    adv, _ = compute_gae(rw, np.zeros(n), [t.dt for t in res.transitions],
+                         [t.done for t in res.transitions], 0.0, None, 1.0)
+    a = (adv - adv.mean()) / (adv.std() + 1e-8)
+    rho = np.corrcoef(np.arange(n), a)[0, 1]
+    assert rho > 0.6, f"零 critic 下优势应强烈随步序单调(实测 0.77-0.96), 实得 {rho:.3f}"
+    assert a[:n // 4].mean() < 0 < a[-n // 4:].mean()

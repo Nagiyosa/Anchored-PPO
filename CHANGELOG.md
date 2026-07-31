@@ -124,6 +124,36 @@ policy: 92–99% of the delay came from trains that never finished. Near human l
 trains" gradient — a sensible progression, so rescaling would not be justified. Tests: 121 passed,
 3 skipped.
 
+### M12b — three training runs, three real causes found (2026-07-30)
+None of the three runs learned, but each one was diagnosed to a real cause rather than written off as
+"needs more steps". Recorded here because the diagnostic method is the transferable part.
+1. **Run 1 (93k steps) — reward hacking.** Evaluation reward approached the human's while completion
+   was 0.217; the arithmetic did not add up. Cause: `cancel` could undo a route in the *same instant*,
+   freezing the simulation clock so standing time cost nothing, and truncated episodes skipped the
+   terminal settlement. A do-nothing oscillator scored +3.0 where competent dispatching scored −1660.
+2. **Red-team audit** (user: "RL finding holes is normal — the point is to rule them out
+   systematically, not to muddle through"). Three more holes surfaced: deliberately deadlocking
+   escaped the incomplete penalties entirely (−3050 vs −3500 for the same stranding); the episode end
+   time depended on the policy, so doing less truncated your own bill; and trains queued at the entry
+   route accrued nothing at all. Fixed by two structural rules — terminal settlement is independent of
+   how the episode ends, and no unbounded actions in zero simulated time — plus a fixed horizon and
+   entry-queue timing. A standing battery of eight deliberately exploitative policies now pins the
+   invariants (`derbysim/learn/redteam.py`, `tests/test_redteam.py`).
+3. **Run 2 (87k steps) — no learning at all.** KL pinned at 0.004, two evaluations bit-identical.
+   Measured cause: GAE λ=0.95 has an effective horizon of 20 steps against episodes of 143–642 steps
+   with reward concentrated at the end, so the first decision saw **0.2%** of the episode return.
+   λ default moved to 1.0, rewards scaled for the critic.
+4. **Run 3 (87k steps) — policy moved, in the wrong direction.** Completion fell 0.567 → 0.388, worse
+   than random. Measured cause: with an untrained critic the advantage correlates **0.77–0.96** with
+   step index — it encodes *position in the episode*, not action quality, so early actions are pushed
+   down and late ones up regardless of merit. Added a critic warm-up phase (value head only, policy
+   frozen) and made **explained variance** a per-iteration diagnostic; EV≈0 is the direct detector for
+   this failure and should have been printed from the start.
+
+**Reading order for the next run, fixed**: explained variance first, then KL/entropy, then whether
+completion and delay improve *together*. If EV stays near zero, the problem is the critic — not the
+learning rate and not the step budget.
+
 ## [In progress] Phase 4 (M11): BC warm-start + decision-match rate
 
 Behaviour cloning of the signaller's route choice (headline = decision-match rate, D21), as a warm-start
