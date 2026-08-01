@@ -124,6 +124,35 @@ policy: 92–99% of the delay came from trains that never finished. Near human l
 trains" gradient — a sensible progression, so rescaling would not be justified. Tests: 121 passed,
 3 skipped.
 
+### M12c — BC dataset rebuilt under D31, and the oscillator question settled (2026-08-01)
+- **BC dataset regenerated** into `bc_dataset_all_d31.parquet` (the previous version is kept whole in
+  `artifacts/dataset_pre_D31_backup/`; `scripts/11` now takes `BC_FULL_DIR` so a change of definition
+  produces a new directory rather than overwriting). Two definitions changed at once: broken chains
+  are split rather than dropped (D31), and the CIF lookup switched to per-run nearest matching, which
+  the RL path had already adopted. Decisions go from 48,021 to 52,294 (+8.9%) and genuine multi-choice
+  decisions from 21,876 to 24,430 (+11.7%). The interesting column is traffic type: empty stock
+  multi-choice samples go from 1,745 to 3,208 (**+84%**), light engines +36%, class 3 +66%, freight
+  +19%, against +4% for passenger — exactly the trains the old filter was selectively discarding.
+  Independent corroboration of the CIF fix: the share of `|delay_min| > 120 min` drops from 1.1% to
+  **0.0%** and the delay quantiles narrow from p1 = −62.6 / p99 = 57.3 to −19.7 / 26.0, so those
+  "extreme outliers" were mostly runs holding another run's planned time rather than real lateness.
+  The ±120 clip decided in M11 §8 is now inert. Still to do on GPU: re-run `scripts/12` and
+  re-adjudicate every M11 matching-rate number and decision A.
+- **The oscillator is not an exploit.** On three validation days it appeared to beat
+  dispatch-when-possible (0.575 vs 0.561), which touches red-team invariant 2. Re-checked on all
+  eleven validation operating days: dispatch-when-possible wins, 0.297 against 0.294, with 1.77% less
+  delay, and the oscillator is ahead on only 2 of 11 days. Per-day reward differences run from
+  −14,662 to +12,186 — the day-to-day variance is far larger than the gap between the two policies,
+  so three days cannot separate them. Small-sample inference again. Two things follow: the pytest
+  red-team audit over two 3-hour windows is a smoke gate, not evidence, and any claim that a policy
+  beats a reference must be re-checked on all validation operating days before it enters a conclusion
+  or triggers a change to the environment; and invariant 2 is reworded to judge by design intent,
+  since the oscillator stopped being degenerate once the cancel time gate closed — what it now does
+  is retry a stuck request, which is crude but legitimate.
+- **Reference lines, all eleven validation operating days, real history**: signaller 1.0000
+  (2,533/2,533) / 94,849 s / +181; dispatch-when-possible 0.297; oscillate 0.294. Zero collisions,
+  zero deadlocks, and the signaller is at 1.000 on every single day.
+
 ### M12c — three scope decisions frozen: D30 / D31 / D32 (2026-08-01)
 - **D30 — the encoder ablation crosses only the primary method.** PPO gets all four encoders × 3
   seeds; DQN, IQL, CQL, AWAC and AWAC-online each use DeepSets × 3 seeds. D9 asks whether the

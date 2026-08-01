@@ -8,7 +8,12 @@
     artifacts/dataset/full/decisions_<date>.parquet          # 逐日(链清洗后)
     artifacts/dataset/bc_dataset_all.parquet                 # 合并 + split 列(train=9-10 / holdout=11-12)
     artifacts/dataset/bc_dataset_report.json                 # 分布/长尾/优先级/delay 报告
-数据来源全 98 天(2023-09-01→12-07); 决策=M8 回放物理触发点, 链连续性过滤(dataset.py, 同 BC 干净车).
+数据来源全 98 天(2023-09-01→12-07); 决策=M8 回放物理触发点。
+**2026-08-01 口径变更(D31 + CIF 按趟匹配) —— 本文件产出的数字与 M11 首轮不可直接比较**:
+  · 断链车由"整车丢弃"改为**切分成多段独立的车**(`dataset.split_broken_chains`) ——
+    旧丢法对 5x ECS 有 45.8% 的选择性偏差(Etches Park 库内未建模), 冲突强度被系统性低估;
+  · CIF 由 `build_cif_map`(headcode 单键, 同日多趟互相覆盖 6.0% 趟次)改为
+    `build_cif_index`(按趟就近匹配) —— 影响特征 `delay_min` 与 on-time。
 """
 from __future__ import annotations
 import csv, json, sys, time
@@ -20,9 +25,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # 使 derbysim �
 from derbysim import config
 from derbysim.infra import InfrastructureNetwork
 from derbysim.sim.occupation import load_params
-from derbysim.sim.dataset import build_cif_map, generate_decisions
+from derbysim.sim.dataset import build_cif_index, generate_decisions
 
-FULL = config.ARTIFACTS / "dataset" / "full"
+# 逐日产出目录。**每一版都留下来**(用户 2026-07-31 要求): 口径变更时用新目录, 不覆盖旧版。
+# 例: BC_FULL_DIR=full_d31 python scripts/11_build_full_dataset.py gen
+import os
+_TAG = os.environ.get("BC_FULL_DIR", "full")
+FULL = config.ARTIFACTS / "dataset" / _TAG
+SUF = "" if _TAG == "full" else "_" + _TAG.replace("full_", "")
 
 
 def _load_common():
@@ -58,6 +68,7 @@ def gen(i0, i1):
     td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
     td["ts"] = pd.to_datetime(td["time"])
     occ = pd.read_parquet(config.ARTIFACTS_SUBSET / "train_occurrences.parquet")
+    cif_idx = build_cif_index(occ)                 # 全量建一次, 按趟就近匹配
     days = _all_days(td)
     sel = days[i0:i1] if i1 else days[i0:]
     t0 = time.time()
@@ -68,7 +79,10 @@ def gen(i0, i1):
         win = td[(td["ts"] >= f"{d} 00:00:00") & (td["ts"] < f"{d} 23:59:59")].copy()
         if win.empty:
             print(f"empty {d}"); continue
-        recs, stats = generate_decisions(net, params, ptc, dwell, win, cif_map=build_cif_map(occ, d))
+        # **按趟就近匹配的 CIF 索引**(2026-08-01): 旧的 `build_cif_map(occ, d)` 按 headcode 单键,
+        # 同日多趟互相覆盖 —— 全量 6.0% 的趟次拿到别趟的 planned_ref(最大偏 13.2h), 而 `delay_min`
+        # 是 BC 的特征之一。RL 路径已在 D27 换掉, 这里补上, 两条路径口径统一。
+        recs, stats = generate_decisions(net, params, ptc, dwell, win, cif_map=cif_idx)
         pd.DataFrame(_augment(recs, d)).to_parquet(out, index=False)
         print(f"{d}: dec={stats['n_decisions']} multi={stats['n_real_choices']} "
               f"miss={stats['n_mask_misses']} drop={stats['n_dropped_broken_chain']}")
@@ -80,7 +94,7 @@ def combine():
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
     mon = pd.to_datetime(df["date"]).dt.month
     df["split"] = mon.map(lambda m: "train" if m in (9, 10) else "holdout")
-    allp = config.ARTIFACTS / "dataset" / "bc_dataset_all.parquet"
+    allp = config.ARTIFACTS / "dataset" / f"bc_dataset_all{SUF}.parquet"
     df.to_parquet(allp, index=False)
 
     multi = df[df["n_legal"] > 1]
@@ -108,7 +122,7 @@ def combine():
     tr = set(multi[multi["split"] == "train"]["chosen_route"])
     ho = set(multi[multi["split"] == "holdout"]["chosen_route"])
     rep["n_holdout_routes_unseen_in_train"] = int(len(ho - tr))
-    outp = config.ARTIFACTS / "dataset" / "bc_dataset_report.json"
+    outp = config.ARTIFACTS / "dataset" / f"bc_dataset_report{SUF}.json"
     outp.write_text(json.dumps(rep, indent=2, ensure_ascii=False))
     print(json.dumps(rep, indent=2, ensure_ascii=False))
     print("wrote", allp, "and", outp)

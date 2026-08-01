@@ -58,6 +58,18 @@ def test_signaller_beats_every_red_team_policy(audit):
     assert not beaten, f"红队策略赢过了信号员 → 奖励有洞: {beaten}"
 
 
+def _NOTE_full_val_recheck_required():
+    """**纪律(2026-08-01)**: 本文件的审计只跑 2 个 3h 窗口 —— 那是**冒烟门禁**, 不是判据。
+
+    实测教训: D28+D29 口径下, 3 个 val 运营日上"空转 set/cancel"(0.575)看起来赢过"有路就办"
+    (0.561), 触发了不变式②。放到**全部 11 个 val 运营日**上复核 —— 有路就办 **0.297** vs
+    空转 0.294, 延误低 1.77%, 空转只在 2/11 天赢; **逐日回报差从 −14662 到 +12186, 日间方差
+    远大于策略间差距**。⇒ 那是小样本噪声, 不是漏洞。
+    **铁律: 任何"某策略赢过参照线"的判定, 必须在全部 val 运营日上复核后才能写进结论或触发环境
+    改动**(见 M12_DESIGN §16)。
+    """
+
+
 def test_no_policy_scores_higher_while_completing_less(audit):
     """核心不变式: **完成率更差却得分更高 = 奖励错了**。
 

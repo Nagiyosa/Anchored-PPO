@@ -4,6 +4,8 @@
 产出: artifacts/reports/bc_<encoder>.json (holdout 匹配率: 宏平均/长尾/优先级 + 基线)。
 """
 from __future__ import annotations
+
+import os
 import csv, json, sys
 from pathlib import Path
 import numpy as np
@@ -42,7 +44,10 @@ def main(argv):
     epochs = args.epochs
     use_prior = not args.no_prior
     net = InfrastructureNetwork.load(); ptc = _ptc()
-    df = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all.parquet")
+    # 默认用 **D31 重建版**(断链切分 + CIF 按趟匹配); 要跑旧口径对照设 BC_DATASET=bc_dataset_all.parquet
+    _ds = os.environ.get("BC_DATASET", "bc_dataset_all_d31.parquet")
+    print(f"[data] {_ds}")
+    df = pd.read_parquet(config.ARTIFACTS / "dataset" / _ds)
     tr_df = df[df["split"] == "train"]; ho_df = df[df["split"] == "holdout"]
     prior = fit_route_prior([{"signal": r["signal"], "legal_route_ids": r["legal_route_ids"],
                               "chosen_route": r["chosen_route"], "n_legal": r["n_legal"]}
