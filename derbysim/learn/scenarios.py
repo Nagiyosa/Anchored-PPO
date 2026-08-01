@@ -65,6 +65,13 @@ def _ranked(win_hours: float, pool: int):
 
 
 @lru_cache(maxsize=1)
+def _cif_index():
+    """按趟的 CIF 索引(全量一次建好, 就近匹配) —— 跨午夜与同日多趟都正确。"""
+    from derbysim.sim.dataset import build_cif_index
+    return build_cif_index(_occurrences())
+
+
+@lru_cache(maxsize=1)
 def _sampler():
     return DelaySampler(load_derby_lateness())
 
@@ -90,8 +97,9 @@ def congested_windows(split: str = "train", win_hours: float = 3.0, top_k: int =
     val 从 train 段**末尾**切 `val_frac`(时间上更靠后 = 更贴近 test 的调参用途, 但仍 < 11-16,
     不碰留出集)。
     """
-    key = {"n_late": lambda w: (-w["n_late"], -w["total_lateness_min"]),
-           "total_lateness": lambda w: -w["total_lateness_min"]}.get(rank_by)
+    # 排序键必须是**全序**(末位用窗口起始时刻决胜), 否则并列项的先后随实现而变 → 划分不可复现。
+    key = {"n_late": lambda w: (-w["n_late"], -w["total_lateness_min"], w["start"]),
+           "total_lateness": lambda w: (-w["total_lateness_min"], w["start"])}.get(rank_by)
     if key is None:
         raise ValueError(f"unknown rank_by {rank_by!r}; use n_late/total_lateness")
     ranked = sorted(({"start": s, "end": e, "total_lateness_min": tl, "n_late": nl}
@@ -137,3 +145,66 @@ def episode_horizon(window: dict, drain_s: float = 1200.0) -> float:
     ②跨策略比较的时间跨度一致(否则对比本身无意义)。drain 依据见 `RewardConfig.drain_s`。
     """
     return float(pd.Timestamp(window["end"]).timestamp() + drain_s)
+
+
+# ============ 运营日 episode（2026-07-31 定案，取代"只取拥堵窗口"） ============
+#
+# **为什么不再切拥堵窗口**(更正 §10-H / D26 的那半句, 连同其错误依据):
+#   环境是时间上的**连续过程**。原先切 3h 窗口、且只取最堵的 60 个(= 全部 758 个窗口的 7.9%,
+#   门槛 n_late>=57 ≈ 全体 p92), 有三重问题:
+#     ① agent 只见"已经很糟"的状态, **看不到拥堵的形成与恢复** —— 而那正是调度本事的主要部分;
+#     ② 每个窗口都从"区内空无一车"开始, 对拥堵时段是不真实的初始状态; 被边界切碎的车正是那批
+#        `goal.exit_group` 为空、结构上不可能完成的车;
+#     ③ "只取拥堵"的原始依据是 M10 复审"常态窗口注入延误 Δ=0" —— 那是**在一个窗口上**测的。
+#        全量分层实测推翻了它的推论: **中位窗口(n_late=36)有 23–32 车、35–70 个真多选决策,
+#        "有路就办"只完成 0.633–0.950 且延误达 225k** ⇒ 中位窗口的学习信号不比 p90 少。
+#        (注入在清淡窗口确实无效, 这条仍成立 —— 但"注入无效" ≠ "窗口没冲突", 我当时混为一谈。)
+#
+# **切在 03:00**: 判据不是"哪小时请求最少", 而是**"在哪切会把车拦腰切断"**。绕开按自然日分组的
+# `train_occurrences`(该表建表时就把跨午夜趟次劈成两行, 结构上测不出 00:00 的切断), 从原始 TD
+# 按 90min 间隙重切趟后实测(98 天):
+#     03:00 **0.80 趟/天**(最少) · 02:00 0.90 · 12:00 1.41 · **00:00 自然日 2.49** · 06:00 4.11(最差)
+# ⇒ 03:00 比自然日好 3.1 倍。这是**新约定**(项目原先只有自然日 `.dt.date` 与 90min 切趟两条规则),
+#   故跨午夜必须用 `dataset.build_cif_map_days` 的 (headcode, 日期) 双键, 否则午夜后的车会拿到
+#   差 24 小时的 `planned_ref`(实测确认)。
+OPERATING_DAY_CUT_HOUR = 3
+
+
+def operating_days(split: str = "train", val_frac: float = 0.15) -> list[dict]:
+    """按时间顺序切运营日(03:00→次日 03:00); 划分沿用 §10-E 的日期界, 不做拥堵度筛选。"""
+    td = _td_events()
+    lo = (td["ts"].min() - pd.Timedelta(hours=OPERATING_DAY_CUT_HOUR)).normalize()
+    hi = (td["ts"].max() - pd.Timedelta(hours=OPERATING_DAY_CUT_HOUR)).normalize()
+    days = [{"start": d + pd.Timedelta(hours=OPERATING_DAY_CUT_HOUR),
+             "end": d + pd.Timedelta(hours=OPERATING_DAY_CUT_HOUR) + pd.Timedelta(days=1)}
+            for d in pd.date_range(lo, hi, freq="D")]
+    days = [d for d in days if d["end"] > td["ts"].min() and d["start"] < td["ts"].max()]
+    if split == "all":
+        return days
+    tr = [d for d in days if d["start"] < TRAIN_END]
+    te = [d for d in days if d["start"] >= TEST_START]
+    if split == "test":
+        return te
+    n_val = max(1, int(round(len(tr) * val_frac)))
+    if split == "val":
+        return tr[len(tr) - n_val:]          # 取 train 段**末尾**(时间上更靠近 test)
+    if split == "train":
+        return tr[:len(tr) - n_val]
+    raise ValueError(f"unknown split {split!r}; use train/val/test/all")
+
+
+def build_day_trains(day: dict, seed: int | None = None, inject: bool = True,
+                     p_late: float = 0.50):
+    """一个运营日 → DynTrain 列表(链清洗 + 可选 primary 延误注入)。跨午夜, 故用双键 CIF map。"""
+    net, _params, dwell, ptc = load_assets()
+    td = _td_events()
+    win = td[(td["ts"] >= day["start"]) & (day["end"] > td["ts"])].copy()
+    trains = build_clean_window_dyn_trains(win, net, dwell, ptc, cif_map=_cif_index())
+    if inject and seed is not None:
+        trains = inject_primary_delays(trains, _sampler(), seed=seed, p_late=p_late)
+    return trains
+
+
+def day_horizon(day: dict, drain_s: float = 1200.0) -> float:
+    """运营日的共同时间地平线 = 日末 + 排空期(epoch 秒)。理由同 `episode_horizon`。"""
+    return float(pd.Timestamp(day["end"]).timestamp() + drain_s)

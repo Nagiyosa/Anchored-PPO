@@ -420,7 +420,8 @@ def build_env_trains_for_window(td_win, net, dwell_by_platform, plat_tc_to_pid, 
 
     过滤规则与 replay.build_trains_for_window 严格一致(len(path)<2 跳过; path[0] 需有观测占用),
     保证两条构造路径产出同一列车集 → 等价回归才有意义.
-    cif_map(可选): {headcode: {'booked_platform','planned_ref','service_class'}} 供状态字段; 缺省不影响等价.
+    cif_map(可选): {headcode: {...}} 或 **{(headcode, 'YYYY-MM-DD'): {...}}**(跨日运营日用后者,
+    按该趟车首事件的日期查, 见 `dataset.build_cif_map_days`); 缺省不影响等价.
     """
     td_win = td_win.sort_values("ts")
     out = []
@@ -466,8 +467,23 @@ def build_env_trains_for_window(td_win, net, dwell_by_platform, plat_tc_to_pid, 
                     pids.add(int(m.group(1)))
             et = EnvTrain(tid, route_chain, req_times, entry, pids)
             et.service_class = str(hc)[0] if hc else ""
-            if cif_map and hc in cif_map:
-                c = cif_map[hc]
+            # cif_map 支持两种键: 旧的 {headcode: ...}(单个自然日) 与
+            # **{(headcode, 日期): ...}**(跨日运营日必须用后者, 见 dataset.build_cif_map_days)。
+            c = None
+            if cif_map:
+                v = cif_map.get(hc)
+                if isinstance(v, list):
+                    # **按趟索引**(dataset.build_cif_index): 用该趟车自己的首事件就近匹配。
+                    # 修掉"同日多趟互相覆盖"(6% 趟次受影响)与"跨午夜锚错日"两个缺陷。
+                    t0s = gr["ts"].iloc[0].timestamp()
+                    near = min(v, key=lambda kv: abs(kv[0] - t0s)) if v else None
+                    c = near[1] if near and abs(near[0] - t0s) <= _RUN_GAP_S else None
+                elif v is not None:
+                    c = v                                        # 旧: {headcode: ...} 单日
+                else:
+                    ds = gr["ts"].iloc[0].strftime("%Y-%m-%d")
+                    c = cif_map.get((hc, ds))                    # {(headcode, 日期): ...}
+            if c:
                 et.booked_platform = c.get("booked_platform")
                 et.planned_ref = c.get("planned_ref")
                 if c.get("service_class"):

@@ -124,6 +124,38 @@ policy: 92–99% of the delay came from trains that never finished. Near human l
 trains" gradient — a sensible progression, so rescaling would not be justified. Tests: 121 passed,
 3 skipped.
 
+### M12c — scenarios reworked into continuous operating days (2026-07-31)
+The user pushed back twice, and both times the design was wrong rather than the tuning.
+- **An episode is now a whole operating day, 03:00 to 03:00, over all 98 days** (train 65 / val 11 /
+  test 22, split purely by date, no disruption filter; `scenarios.operating_days`, `build_day_trains`,
+  `day_horizon`, with the split fingerprints pinned in tests). This replaces "the 6 most disrupted
+  3-hour windows", which was 0.77% of the data while BC trained on all 98 days — an asymmetry we had
+  never stated. The environment is a continuous process in time; slicing it and keeping only the top
+  7.9% of windows meant the agent only ever saw states that were already bad, never the build-up or
+  the recovery, and always started from an empty region. The original justification — "injecting
+  delay into a quiet window changes nothing" — was measured on one window; stratified over the full
+  range, median windows carry as much learning signal as the top decile (23–32 trains, 35–70 genuine
+  multi-choice decisions, dispatch-when-possible completing only 0.633–0.950). Injection is indeed
+  inert in quiet windows, but "injection is inert" is not "the window has no conflict".
+- **The 03:00 cut is chosen from data**, on the right criterion: not "which hour has fewest requests"
+  but "where does cutting slice fewest trains in half". Re-deriving trips from raw TD by the
+  90-minute gap rule over 98 days: 03:00 cuts 0.80 trips/day, 02:00 0.90, midnight 2.49, 06:00 4.11.
+  The obvious measurement was wrong — `train_occurrences` is built per calendar date, so
+  midnight-spanning trips are already split there and the table cannot detect midnight cuts at all.
+- `congested_windows` is kept for stratified reporting (normal vs disrupted, §14.0) and for a
+  "train on disruption only vs train on everything" ablation.
+- **A latent CIF defect surfaced and was fixed.** `build_cif_map` was keyed by headcode alone, so a
+  headcode running twice in a day had its earlier run overwritten by the later one: 3.0% of
+  (headcode, date) pairs, 6.0% of trips, 814 of them carrying another run's planned time (1M00's
+  09:31 run was given the 22:43 schedule, 13.2 hours out). The 3-hour-window path had this all along.
+  `build_cif_index` now matches per run by nearest first event and honours the existing
+  `cif_reliable` flag — where alignment is unreliable no planned time is given, because a schedule
+  22.8 hours out is worse than none. Real coverage is 79.4%; the 88% we used to see was partly wrong
+  values.
+- Tests: **137 passed, 3 skipped**. Smoke over three val operating days (143–194 trains each):
+  signaller 1.000 completion / +11.4 reward, dispatch-when-possible 0.550, oscillate-set-cancel
+  0.545, random 0.118, always-wait 0.006 — strictly ordered, zero collisions, zero deadlocks.
+
 ### M12b — three training runs, three real causes found (2026-07-30)
 None of the three runs learned, but each one was diagnosed to a real cause rather than written off as
 "needs more steps". Recorded here because the diagnostic method is the transferable part.

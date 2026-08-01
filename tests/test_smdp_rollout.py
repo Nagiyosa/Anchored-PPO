@@ -311,3 +311,58 @@ def test_advantage_encodes_position_when_critic_is_useless():
     rho = np.corrcoef(np.arange(n), a)[0, 1]
     assert rho > 0.6, f"零 critic 下优势应强烈随步序单调(实测 0.77-0.96), 实得 {rho:.3f}"
     assert a[:n // 4].mean() < 0 < a[-n // 4:].mean()
+
+
+def test_window_split_is_reproducible_and_pinned():
+    """**留出集必须跨机器可复现** —— 否则"test 从未被碰过"这句话没有意义。
+
+    2026-07-31 实测: 同代码同数据, 我的沙盒得 val=9 个窗口、用户的机器得 10 个。根因是
+    `rank_high_disruption_windows` 用 pandas **默认 quicksort(不稳定排序)**, 而候选池里有 4 组
+    并列的 `total_lateness_min` → 并列谁进前 top_k 随版本/数据顺序而变 ⇒ **train/val/test 成员不同**。
+    修: 排序改为**全序 + 稳定**(末位用窗口起始时刻决胜, `kind="mergesort"`)。
+    本测试把划分**指纹**钉死: 以后任何改动若移动了窗口归属, 这里立刻红。
+    """
+    import hashlib
+    expect = {"train": (28, "561c001d7980"), "val": (10, "f0db023a960b"),
+              "test": (22, "55b6e7091f8d")}
+    for split, (n_exp, fp_exp) in expect.items():
+        ws = congested_windows(split, top_k=99)
+        fp = hashlib.sha1("|".join(str(w["start"]) for w in ws).encode()).hexdigest()[:12]
+        assert len(ws) == n_exp, f"{split}: 窗口数 {len(ws)} != {n_exp}(划分变了)"
+        assert fp == fp_exp, f"{split}: 指纹 {fp} != {fp_exp}(窗口成员变了)"
+    # 划分本身仍须互斥且尊重日期界(与 test_splits_are_disjoint... 互补: 那条查规则, 这条钉具体成员)
+    S = lambda sp: {w["start"] for w in congested_windows(sp, top_k=99)}
+    assert not (S("train") & S("test")) and not (S("train") & S("val"))
+
+
+def test_operating_day_split_is_pinned():
+    """运营日划分(03:00→次日03:00, 全部 98 天按时间切)也要指纹钉死, 理由同上一条。
+
+    切在 03:00 是**数据定的**: 绕开按自然日分组的 `train_occurrences`(该表建表时把跨午夜趟次
+    劈成两行, 结构上测不出 00:00 的切断), 从原始 TD 按 90min 间隙重切趟后实测 98 天 ——
+    每天被拦腰切断的趟次 03:00 **0.80**(最少) / 02:00 0.90 / 00:00 **2.49** / 06:00 4.11(最差)。
+    """
+    import hashlib
+    from derbysim.learn.scenarios import OPERATING_DAY_CUT_HOUR, operating_days
+    assert OPERATING_DAY_CUT_HOUR == 3
+    expect = {"train": (65, "0b73a18f5505"), "val": (11, "81da1a644bed"),
+              "test": (22, "9ecbdf00101e")}
+    for split, (n_exp, fp_exp) in expect.items():
+        ds = operating_days(split)
+        fp = hashlib.sha1("|".join(str(d["start"]) for d in ds).encode()).hexdigest()[:12]
+        assert (len(ds), fp) == (n_exp, fp_exp), f"{split}: {(len(ds), fp)} != {(n_exp, fp_exp)}"
+    assert len(operating_days("all")) == 98          # **全部 98 天, 无拥堵度筛选**
+    S = lambda sp: {d["start"] for d in operating_days(sp)}
+    assert not (S("train") & S("test")) and not (S("train") & S("val")) and not (S("val") & S("test"))
+
+
+def test_cif_lookup_matches_the_right_run():
+    """按趟就近匹配: 同日多趟不得互相覆盖(既有缺陷, 影响 6.0% 趟次 / 814 趟拿错计划时刻)。"""
+    from derbysim.learn.scenarios import build_day_trains, operating_days
+    d = operating_days("val")[1]
+    trains = build_day_trains(d, inject=False)
+    bad = [t.train_id for t in trains
+           if t.planned_ref is not None and abs(t.entry_time - t.planned_ref) > 12 * 3600]
+    assert not bad, f"这些车的计划时刻偏离超过 12 小时(= 匹到了别的趟): {bad}"
+    runs = [t for t in trains if "#" in t.train_id]          # 被切成多趟的 headcode
+    assert runs, "该运营日应存在同 headcode 多趟的车(否则这条测试没在测东西)"

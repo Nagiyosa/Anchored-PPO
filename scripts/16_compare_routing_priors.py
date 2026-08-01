@@ -133,6 +133,11 @@ def main() -> None:
         for tag, ck in (("bc_noprior", args.bc_noprior), ("bc_prior", args.bc_prior)):
             if not ck:
                 continue
+            if not Path(ck).exists():
+                print(f"  [skip] {tag}: 找不到 {ck}"
+                      + ("  → 先跑 `python scripts/12_train_bc.py deepsets --epochs 30`"
+                         " 生成含先验版 bc_deepsets.pt" if tag == "bc_prior" else ""))
+                continue
             # 含先验版的候选特征需要 live prior → 用**训练段**拟合的 prior 建专用特征器/适配层
             if tag == "bc_prior":
                 bcdf = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all.parquet")

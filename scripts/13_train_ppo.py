@@ -10,6 +10,7 @@
     --half-life    SMDP 折扣半衰期(秒)。**默认不给 = γ=1 不打折**(§10-G); M12e 扫 300/900/3600
     --encoder      mlp/deepsets/settransformer/gnn (D9 消融; bring-up 用 deepsets)
     --split        train/val (test 是完全留出集, 本脚本**拒绝**跑 test, §10-E)
+    场景 = **运营日**(03:00→次日03:00, 全部 98 天按时间划分 train65/val11/test22), 不再筛拥堵窗口(D26)
     --steps-per-iter 每轮更新的步数预算(不是局数 —— 局长在 180-4586 间晃, batch 会不稳)
     --eval-every   每 N 轮在**固定评估集**上评一次(同窗口同注入种子, 跨 iteration/跨策略可比),
                    并与三条基线参照线(信号员回放 / 有路就办 / 随机)同图对照
@@ -37,8 +38,8 @@ from derbysim.learn.ppo import PPOConfig, TorchPanelDriver, frozen_bc, ppo_updat
 from derbysim.learn.rollout import (as_factory, collect_rollout, evaluate_policy,
                                     make_greedy_set_policy, make_random_policy,
                                     signaller_replay_factory)
-from derbysim.learn.scenarios import (build_episode_trains, congested_windows,
-                                      episode_horizon, load_assets)
+from derbysim.learn.scenarios import (build_day_trains, day_horizon, load_assets,
+                                      operating_days)
 from derbysim.sim.reward import RewardConfig, RewardedDynamicEnv
 
 
@@ -59,12 +60,12 @@ def main() -> None:
                     help="学习率线性退火到初始值的这个比例(1.0=不退火)")
     ap.add_argument("--target-kl", type=float, default=0.02,
                     help="单次更新的策略 KL 上限, 超过就提前结束该轮 epoch 循环")
-    ap.add_argument("--eval-windows", type=int, default=99,
-                    help="固定评估集用几个 val 窗口; 默认取满(9 个)")
+    ap.add_argument("--eval-days", type=int, default=999,
+                    help="固定评估集用几个 val 运营日; 默认取满(11 天)")
     ap.add_argument("--eval-seeds", type=int, default=2)
-    ap.add_argument("--windows", type=int, default=99,
-                    help="训练用几个拥堵窗口; 默认取满(train 段共 28 个)。"
-                         "此前默认 6 = 18 小时 = 全量的 0.77%%, 而 BC 用的是全 98 天")
+    ap.add_argument("--days", type=int, default=999,
+                    help="训练用几个**运营日**(03:00→次日03:00); 默认取满(train 段 65 天)。"
+                         "此前是'最堵的 6 个 3h 窗口'= 18 小时 = 全量的 0.77%%(见 D26 更正)")
     ap.add_argument("--split", default="train", choices=["train", "val"])
     ap.add_argument("--kl-beta", type=float, default=0.1)
     ap.add_argument("--half-life", type=float, default=None,
@@ -92,9 +93,9 @@ def main() -> None:
 
     net, params, dwell, ptc = load_assets()
     adapter = PanelAdapter(net, Featurizer(net, ptc))          # route_prior={} 由适配层强制(§10-A③)
-    windows = congested_windows(args.split, top_k=args.windows)
+    windows = operating_days(args.split)[:args.days]
     if not windows:
-        raise SystemExit(f"no windows for split={args.split}")
+        raise SystemExit(f"no operating days for split={args.split}")
 
     policy = PanelOptionPolicy(args.encoder, adapter.dec_dim, adapter.conf_dim, adapter.cand_dim,
                                adapter.cancel_dim, adapter.train_dim, adapter.global_dim,
@@ -138,12 +139,13 @@ def main() -> None:
     rcfg = RewardConfig()
 
     # ---- 固定评估集(同窗口/同注入种子, 跨 iteration 与跨策略完全可比) + 基线参照线 ----
-    ev_wins = congested_windows("val", top_k=args.eval_windows)
-    mk = lambda w, sd: (lambda: build_episode_trains(w, seed=sd))
-    eval_eps = [(f"{str(w['start'])[:16]}|s{sd}", mk(w, sd), episode_horizon(w))
+    ev_wins = operating_days("val")[:args.eval_days]
+    mk = lambda w, sd: (lambda: build_day_trains(w, seed=sd))
+    eval_eps = [(f"{str(w['start'])[:16]}|s{sd}", mk(w, sd), day_horizon(w))
                 for w in ev_wins for sd in range(args.eval_seeds)]
     env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg)
-    print(f"[eval] 固定集 = {len(ev_wins)} 窗口 × {args.eval_seeds} 种子 = {len(eval_eps)} 局")
+    print(f"[eval] 固定集 = {len(ev_wins)} 个 val 运营日 × {args.eval_seeds} 种子 = {len(eval_eps)} 局"
+          f" | 训练 {len(windows)} 个 {args.split} 运营日")
     print(f"[warmup] 前 {args.critic_warmup_iters} 轮只训 critic(行首标 *), 策略冻结; "
           f"**EV 是关键诊断** —— EV≈0 表示优势只是'位置噪声', 此时放开策略必被推坏")
     baselines = {}
@@ -173,8 +175,8 @@ def main() -> None:
                 w = windows[int(rng.integers(len(windows)))]
                 sd = int(rng.integers(1 << 30))
                 yield (f"{str(w['start'])[:16]}|s{sd}",
-                       (lambda w=w, sd=sd: build_episode_trains(w, seed=sd)),
-                       episode_horizon(w))
+                       (lambda w=w, sd=sd: build_day_trains(w, seed=sd)),
+                       day_horizon(w))
         t_roll = time.time()
         transitions, ep_metrics = collect_rollout(
             env_factory, adapter, as_factory(driver), episode_stream(),

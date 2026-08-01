@@ -83,7 +83,12 @@ def rank_high_disruption_windows(win_hours: float = 3.0, top_k: int = 8, path=No
     g = tm.groupby("bin").agg(total_lateness_min=("lateness", "sum"),
                               n_late=("lateness", lambda s: int((s > 0).sum())),
                               n_events=("lateness", "size")).reset_index()
-    g = g.sort_values("total_lateness_min", ascending=False).head(top_k)
+    # **全序 + 稳定排序**(2026-07-31 修): 原用 pandas 默认 quicksort(不稳定), 而池中存在并列的
+    # total_lateness_min → 并列谁进前 top_k 随版本/数据顺序而变 ⇒ **train/val/test 成员在不同机器上不同**
+    # (实测: 同代码同数据, 一台机器 val=9 个窗口、另一台 10 个)。留出集必须跨机器可复现, 故加时间戳作末位
+    # 决胜键并指定 mergesort(稳定)。
+    g = g.sort_values(["total_lateness_min", "bin"], ascending=[False, True],
+                      kind="mergesort").head(top_k)
     out = []
     for r in g.itertuples():
         out.append({"start": r.bin, "end": r.bin + pd.Timedelta(hours=win_hours),
