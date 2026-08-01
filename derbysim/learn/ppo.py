@@ -47,6 +47,9 @@ class PPOConfig:
     # 纯数值缩放: 整局回报量级 ~10³, 让 critic 去拟合 −2000 这种目标数值上很吃力。
     # 缩放**不改变**最优策略(优势还要归一化), 只让值损失/学习率处在正常量级。
     reward_scale: float = 0.01
+    # PPO 标准护栏: 一次更新内策略走太远就提前停 epoch 循环。实测三轮训练都在解冻后约 20 轮见顶
+    # 然后塌(KL-to-BC 0.028→0.044, 熵 0.888→0.769) —— 更新步长失控是主要嫌疑。
+    target_kl: float | None = 0.02
 
 
 def masked_categorical(logits, opt_mask):
@@ -124,7 +127,8 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
     if cfg.normalise_adv and n > 1:
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
     stats = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0,
-             "kl_to_bc": 0.0, "clip_frac": 0.0, "n_minibatch": 0, "explained_variance": 0.0}
+             "kl_to_bc": 0.0, "clip_frac": 0.0, "n_minibatch": 0, "explained_variance": 0.0,
+             "approx_kl": 0.0, "kl_early_stops": 0}
     preds = np.zeros(n, dtype=np.float64)
     policy.train()
     rng = np.random.default_rng(0)
@@ -154,6 +158,12 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
                 loss = pol_loss + cfg.vf_coef * val_loss - cfg.ent_coef * ent + cfg.kl_beta * kl
             preds[sel] = value.detach().to("cpu").numpy().astype("float64")
 
+            with torch.no_grad():                     # 本次更新把策略推了多远(PPO 标准诊断)
+                approx_kl = float((old_lp - logp).mean().item())
+            stats["approx_kl"] = max(stats.get("approx_kl", 0.0), abs(approx_kl))
+            if cfg.target_kl is not None and abs(approx_kl) > cfg.target_kl and not value_only:
+                stats["kl_early_stops"] = stats.get("kl_early_stops", 0) + 1
+                break
             optimizer.zero_grad()
             loss.backward()
             if cfg.max_grad_norm:

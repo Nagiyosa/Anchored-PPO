@@ -52,6 +52,13 @@ def main() -> None:
                     help="开局只训 critic、策略不动的轮数。critic 没学会前优势只编码'步在 episode "
                          "中的位置'(实测相关 0.77-0.96), 照它更新会把策略推坏")
     ap.add_argument("--eval-every", type=int, default=5)
+    ap.add_argument("--early-stop-patience", type=int, default=6,
+                    help="固定评估集上连续 N 次评估未创新高就停(0=不早停)。三轮实测均在解冻后约"
+                         "20 轮见顶后塌, 继续跑纯属浪费且最终策略远差于峰值")
+    ap.add_argument("--lr-final-frac", type=float, default=0.1,
+                    help="学习率线性退火到初始值的这个比例(1.0=不退火)")
+    ap.add_argument("--target-kl", type=float, default=0.02,
+                    help="单次更新的策略 KL 上限, 超过就提前结束该轮 epoch 循环")
     ap.add_argument("--eval-windows", type=int, default=99,
                     help="固定评估集用几个 val 窗口; 默认取满(9 个)")
     ap.add_argument("--eval-seeds", type=int, default=2)
@@ -124,7 +131,8 @@ def main() -> None:
 
     cfg = PPOConfig(lr=args.lr, lam=args.lam, half_life_s=args.half_life, kl_beta=args.kl_beta,
                     minibatch=args.minibatch, update_epochs=args.update_epochs,
-                    reward_scale=args.reward_scale)
+                    reward_scale=args.reward_scale,
+                    target_kl=(args.target_kl if args.target_kl > 0 else None))
     opt = torch.optim.Adam(policy.parameters(), lr=cfg.lr)
     driver = TorchPanelDriver(policy, dev, generator=gen)
     rcfg = RewardConfig()
@@ -156,6 +164,7 @@ def main() -> None:
     print(f"[run] {run_id}")
     history, evals = [], []
     best = {"reward": float("-inf"), "iter": -1}
+    since_best = 0
     t0 = time.time()
     total_steps = 0
     for it in range(args.iters):
@@ -174,6 +183,10 @@ def main() -> None:
         total_steps += len(transitions)
         t_upd = time.time()
         warming = it < args.critic_warmup_iters
+        if args.lr_final_frac < 1.0 and args.iters > 1:     # 线性退火, 减少后期外飘
+            frac = it / max(args.iters - 1, 1)
+            for gp in opt.param_groups:
+                gp["lr"] = args.lr * (1.0 - frac * (1.0 - args.lr_final_frac))
         stats = ppo_update(policy, bc_ref, opt, prepare_batch(transitions, cfg), cfg, dev,
                            value_only=warming)
         upd_s = time.time() - t_upd
@@ -184,7 +197,7 @@ def main() -> None:
                "steps_per_s": len(transitions) / max(roll_s, 1e-9)}
         print(f"it {it:>3}{'*' if warming else ' '}| steps {row['steps']:>5} ({row['episodes']} eps) "
               f"| **EV {row['explained_variance']:>6.3f}** | KL {row['kl_to_bc']:.4f} "
-              f"| ent {row['entropy']:.3f} | vloss {row['value_loss']:>8.2f} "
+              f"| ent {row['entropy']:.3f} | aKL {row.get('approx_kl', 0):.3f} "
               f"| rollout {roll_s:>5.1f}s ({row['steps_per_s']:>4.0f}步/s) upd {upd_s:>4.1f}s")
         if args.eval_every and ((it + 1) % args.eval_every == 0 or it == args.iters - 1):
             ev = evaluate_policy(env_factory, adapter,
@@ -201,6 +214,14 @@ def main() -> None:
                             "iter": it, "eval": {k: v for k, v in ev.items() if k != "eval_episodes"},
                             "args": vars(args), "run_id": run_id}, ck)
                 print(f"        ↑ 新最佳, 已存 {ck.name}")
+                since_best = 0
+            else:
+                since_best += 1
+                if args.early_stop_patience and since_best >= args.early_stop_patience:
+                    print(f"        早停: 连续 {since_best} 次评估未创新高 "
+                          f"(最佳 it{best['iter']} reward {best['reward']:.1f})")
+                    history.append(row)
+                    break
             print(f"    >>> EVAL it {it}: completion {ev['eval_completion_rate']:.3f} "
                   f"| delay {ev['eval_weighted_secondary_delay_s']:>9.0f} "
                   f"| reward {ev['eval_episode_reward']:>9.1f} "
