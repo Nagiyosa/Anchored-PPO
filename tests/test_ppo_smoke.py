@@ -13,8 +13,8 @@ torch = pytest.importorskip("torch")
 from derbysim.learn.features import Featurizer
 from derbysim.learn.panel import PanelAdapter, collate_panels
 from derbysim.learn.panel_models import PanelOptionPolicy, pick_device, to_tensors
-from derbysim.learn.ppo import (PPOConfig, TorchPanelDriver, frozen_bc, masked_categorical,
-                                ppo_update, prepare_batch, routing_kl)
+from derbysim.learn.ppo import (PPOConfig, RunningMoments, TorchPanelDriver, frozen_bc,
+                                masked_categorical, ppo_update, prepare_batch, routing_kl)
 from derbysim.learn.rollout import make_random_policy, run_episode
 from derbysim.learn.scenarios import build_episode_trains, congested_windows, load_assets
 from derbysim.sim.reward import RewardedDynamicEnv
@@ -141,3 +141,46 @@ def test_masked_categorical_never_samples_padding():
     g = torch.Generator().manual_seed(0)
     draws = torch.multinomial(dist.probs.expand(200, -1), 1, generator=g)
     assert int(draws.max().item()) <= 1
+
+
+def test_driver_denormalises_the_critic_output():
+    """critic 预测的是**归一化值**, driver 必须还原成原始单位再交给 GAE。
+
+    否则 δ = r + γV' − V 里 r 是原始单位(运营日整局 −3 万量级)而 V 是 ~N(0,1),
+    两边量纲差 4 个数量级, 优势直接是垃圾 —— 而且不会报错, 只会安静地训不出东西。
+    """
+    ad, res, (net, params, ptc, dwell, w) = _setup()
+    dev = pick_device()
+    pol = _policy(ad).to(dev)
+    rn = RunningMoments(mean=-3000.0, var=800.0 ** 2, count=1e6)
+    plain = TorchPanelDriver(pol, dev, greedy=True)
+    normed = TorchPanelDriver(pol, dev, greedy=True, ret_norm=rn)
+    env = RewardedDynamicEnv(net, params, ptc, dwell)
+    obs, _ = env.reset(build_episode_trains(w, seed=0))
+    dec = env.decision()
+    enc = ad.encode(obs, dec)
+    i0, lp0, v_hat = plain(enc)
+    i1, lp1, v_raw = normed(enc)
+    assert (i0, lp0) == (i1, lp1)                     # 动作与 logp 不受影响
+    assert v_raw == pytest.approx(v_hat * rn.std + rn.mean, rel=1e-5)
+    assert v_raw < -1000.0                            # 确实回到了原始量级, 不是 ~N(0,1)
+
+
+def test_return_normalisation_keeps_value_loss_in_a_sane_range():
+    """写死的 reward_scale 在运营日上会让值损失 ~10^4–10^5, 把策略梯度整个压掉。"""
+    ad, res, _ = _setup(n_dec=40)
+    dev = pick_device()
+    big = [type(t)(t.enc, t.option_idx, t.logp, t.value, t.reward * 500.0, t.dt, t.done)
+           for t in res.transitions]                  # 把奖励放大到运营日量级
+    cfg_off = PPOConfig(minibatch=16, update_epochs=1, kl_beta=0.0,
+                        normalise_returns=False, reward_scale=1.0)
+    cfg_on = PPOConfig(minibatch=16, update_epochs=1, kl_beta=0.0)
+
+    def value_loss(cfg, rn):
+        pol = _policy(ad, seed=5).to(dev)
+        bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID, None, dev)
+        opt = torch.optim.Adam(pol.parameters(), lr=1e-3)
+        return ppo_update(pol, bc, opt, prepare_batch(big, cfg, ret_norm=rn), cfg, dev)["value_loss"]
+    off, on = value_loss(cfg_off, None), value_loss(cfg_on, RunningMoments())
+    assert on < off / 100.0, f"归一化后值损失 {on:.3g} 相对 {off:.3g} 没有明显下降"
+    assert on < 100.0

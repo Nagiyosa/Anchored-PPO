@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from derbysim.sim.reward import RewardConfig, can_complete, realized_weighted_delay
+from derbysim.sim.reward import (RewardConfig, can_complete, has_reached_goal,
+                                 realized_weighted_delay)
 
 
 @dataclass
@@ -42,8 +43,8 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
     这里记绝对值仅供**同环境内**跨策略相减。
     """
     trains = list(engine.trains.values())
-    able = [t for t in trains if can_complete(t)]        # 结构上可能到达出区口的车(分母)
-    reached = [t for t in trains if t.reached_exit]
+    able = [t for t in trains if can_complete(t)]        # 有可观测目标的车(分母, 含终到车 D29)
+    reached = [t for t in trains if has_reached_goal(t)]  # 出区 或 终到车服务了站台
     stops = [t for t in trains if (t.stop_pids or t.booked_platform is not None)]
     booked_ok = 0
     for t in stops:
@@ -52,7 +53,7 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
         booked_ok += bool(served & want)
     return {
         "n_trains": len(trains),
-        "n_completable": len(able),                       # 分母: 排除空出区口组的结构不可能车
+        "n_completable": len(able),                       # 分母: 只排除"无可观测目标"的车(D29)
         "n_impossible": len(trains) - len(able),
         "n_reached_exit": len(reached),
         "completion_rate": (len(reached) / len(able)) if able else 1.0,
@@ -192,11 +193,22 @@ def collect_rollout(env_factory, adapter, policy_factory, episode_iter, target_s
 
 def evaluate_policy(env_factory, adapter, policy_factory, episodes,
                     max_decisions: int = 3000) -> dict:
-    """在**固定** (窗口, 注入种子) 上评估 → 跨 iteration 可比的曲线。
+    """在**固定** (场景, 注入种子) 上评估 → 跨 iteration 可比的曲线。
 
-    训练时每 iter 随机抽窗口, 窗口间难度差很大(实测步数 180–4586) → 训练回报不可比。
-    评估必须固定场景, 这也是 M12d/M13 "同一环境/同一评估窗口/同一指标"的要求。
-    `episodes` 产出 **(标签, 造车函数)** —— 同上, 必须每局新造车, 否则跨策略互相污染。
+    训练时每 iter 随机抽场景, 场景间难度差很大 → 训练回报不可比。评估必须固定场景,
+    这也是 M12d/M13 "同一环境/同一评估集/同一指标"的要求。
+    `episodes` 产出 **(标签, 造车函数[, 地平线])** —— 必须每局新造车, 否则跨策略互相污染。
+
+    **汇总一律微平均(pooled), 不按局宏平均**(2026-08-01 修, 见 M11_DESIGN §2 薄日):
+    运营日的车数从 **5 到 241** 差 48 倍(09-01=5 / 09-30=17 / 12-07=37 是数据缺口日,
+    M11 已记录并决定"保留、按天量计权"), 而旧写法 `sum(r[k])/len(rows)` 让 5 辆车的日子和
+    241 辆车的日子**等权** —— 11 个 val 日里一个薄日就占 9% 的分数, 且 12-07 在 test 里,
+    会直接进 M13 的最终数字。改法:
+      - `completion_rate` = **Σ到达 / Σ可完成**(旧口径留在 `..._macro` 作对照);
+      - 延误/回报/步数/碰撞是**可加量** → 报**总量**(另给每车均量与每日均量);
+      - `frac_wait/set/cancel` 按**步数**加权。
+    (训练侧不受影响: `collect_rollout` 按步数预算收集, 薄日天然只贡献少量步 —— M11 留作
+     "可选"的按天量计权, 在 RL 训练里已经免费生效。)
     """
     rows = []
     for item in episodes:
@@ -207,10 +219,28 @@ def evaluate_policy(env_factory, adapter, policy_factory, episodes,
                              max_decisions=max_decisions, horizon=horizon).metrics)
         m["episode"] = tag
         rows.append(m)
-    keys = ("completion_rate", "weighted_secondary_delay_s", "episode_reward",
-            "n_reached_exit", "n_collisions", "n_steps",
-            "frac_wait", "frac_set", "frac_cancel")
-    out = {f"eval_{k}": float(sum(r[k] for r in rows) / len(rows)) for k in keys} if rows else {}
+    if not rows:
+        return {"eval_episodes": []}
+    n_days = len(rows)
+    tot = lambda k: float(sum(r[k] for r in rows))                       # noqa: E731
+    able, reach, steps = tot("n_completable"), tot("n_reached_exit"), tot("n_steps")
+    out = {
+        "eval_completion_rate": (reach / able) if able else 1.0,          # 微平均 = headline
+        "eval_completion_rate_macro": tot("completion_rate") / n_days,    # 旧口径, 仅作对照
+        "eval_weighted_secondary_delay_s": tot("weighted_secondary_delay_s"),   # 总量
+        "eval_delay_per_train_s": (tot("weighted_secondary_delay_s") / able) if able else 0.0,
+        "eval_episode_reward": tot("episode_reward"),                     # 总量(评估集固定 → 与均值同序)
+        "eval_reward_per_day": tot("episode_reward") / n_days,
+        "eval_n_days": n_days,
+        "eval_n_completable": able,
+        "eval_n_reached_exit": reach,
+        "eval_n_impossible": tot("n_impossible"),
+        "eval_n_collisions": tot("n_collisions"),                         # **总量**: 安全项不许被平均稀释
+        "eval_n_steps": steps,
+    }
+    for k in ("frac_wait", "frac_set", "frac_cancel"):
+        out[f"eval_{k}"] = (sum(r[k] * r["n_steps"] for r in rows) / steps) if steps else 0.0
     out["eval_deadlocks"] = int(sum(bool(r["deadlocked"]) for r in rows))
+    out["eval_truncated"] = int(sum(bool(r.get("truncated")) for r in rows))
     out["eval_episodes"] = rows
     return out

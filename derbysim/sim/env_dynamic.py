@@ -261,7 +261,7 @@ class DynamicEngine:
     def run(self, trains):
         self.trains = {t.train_id: t for t in trains}
         for t in trains:
-            t.goal = train_goal(t.route_chain, self.net, t.stop_pids)
+            t.goal = train_goal(t.route_chain, self.net, t.stop_pids, self.plat_tc_to_pid)
             self.q.push(t.entry_time, "arrive", {"tr": t.train_id})
         guard = 0
         limit = 500000 + 5000 * len(trains)
@@ -314,12 +314,25 @@ class DynamicEngine:
         self.q.push(self.now + hold, "try_advance", {"tr": t.train_id, "idx": idx})
 
     def _release_behind(self, t, idx):
-        if 0 <= idx < len(t.path):
-            tc = t.path[idx]
-            key = self.res.reserved.get(tc)
-            if key is not None and key[1] == t.train_id:   # 只释放**自己**的预留
-                self.res.release_tc(tc, key)
-                self._wake()
+        """车尾清出 `path[idx]` → 释放该段。
+
+        **不得释放车前方仍要用的段(2026-08-01 修, D6 红线)**: `path[idx-2]` 只在"路径不回头"时
+        才真的在车后面。但**进路链是策略在线选的**, 策略完全可以把车导成环 —— 实测随机策略选出
+        `RDC5061A→RDC5075A→RDC5083A` = `TDAB→TDAC→TDAB→TDAC→TDAB→TDAC`, 于是 `path[idx-2]`
+        与车**当前所在**的 TC 是同一段: 车把自己脚下的锁释放掉 → 另一辆车(5E38)把它锁走 →
+        本车再进 → **碰撞**。全量核查确认这不是数据问题(98 天 18650 辆车的原始链 **0** 条有重复
+        TC), 而是**策略可达的环境漏洞** —— 属于"RL 找到漏洞就系统性堵掉"那一类, 不是调参。
+        判据: 该 TC 只要还出现在 `path[t.pos:]`(当前位置及前方)里, 就不许释放。
+        """
+        if not (0 <= idx < len(t.path)):
+            return
+        tc = t.path[idx]
+        if tc in t.path[t.pos:]:                       # 当前所在或前方仍需 → 留着
+            return
+        key = self.res.reserved.get(tc)
+        if key is not None and key[1] == t.train_id:   # 只释放**自己**的预留
+            self.res.release_tc(tc, key)
+            self._wake()
 
     def _wake(self):
         for t in self.trains.values():

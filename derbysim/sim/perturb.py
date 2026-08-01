@@ -7,6 +7,24 @@
       按 (train,route) 记身份=动 M9 已验证核心)。改用真实拥堵窗口造冲突。
 
 真实数据(德比 TRUST): LATE 50%/晚点重尾。primary 延误注入见下(α=0.36 Palmqvist 出处, §4.1)。
+
+**D28(2026-08-01): 合成延误注入已退出主线。** `DelaySampler` / `inject_primary_delays` /
+`PRIMARY_FRACTION(α)` **不再用于训练、验证或测试** —— 全部改用真实历史。保留代码仅供**可选的**
+鲁棒性消融, 使用时必须在论文里同时声明 α 未在德比数据上验证。
+撤下的理由(逐条):
+  ① 入区时刻(TD 观测)**本身已含当天真实的 primary + secondary 晚点**; 我们要问的反事实是
+     "同样这批车、同样时刻到达区界, 换一套进路决策, 区内延误会不会更少" —— 这是良定义且
+     审稿人一听就懂的问题, 注入把它搅浑成"在一个从未发生过、按瑞典系数缩放的世界里……"。
+  ② α=0.36 出自 Palmqvist 的**瑞典**案例(SSRN 4168505, 区间 20–50%), **从未在德比数据上验证**;
+     我们验证过的只是注入**幅度的边际分布**(bootstrap 自真实德比晚点), 从未验证注入后产生的
+     **拥堵形态**与现实一致 —— 这两件事不是一回事。
+  ③ 实测(3 个 val 运营日, 信号员回放): 注入把加权次生延误从 **6544s 抬到 16487s(2.5 倍)**,
+     而回放的人**没有机会重新决策** ⇒ 人类对照锚被系统性压低, 我们跟它比偏易。
+  ④ "扰动下是否 robust"用真实数据里**本来就有的乱日子**分层报告即可(`congested_windows` 的
+     n_late 分位), 比合成扰动更强。
+  ⑤ 若将来 val 出现过拟合(环境确定 → 65 个训练日各被重放约 90 次), 该加的随机性是
+     **M5 标定过的逐 TC 占用时分残差**(我们自己的德比数据, 验收过中位残差无偏/中位绝对值<5s),
+     不是 α。
 """
 
 from __future__ import annotations
@@ -105,9 +123,9 @@ def build_clean_window_dyn_trains(td_win, net, dwell_by_platform, plat_tc_to_pid
     与 BC 数据集(dataset.py)同一份干净车。
     """
     from derbysim.sim.env import build_env_trains_for_window
-    from derbysim.sim.dataset import _chain_continuity, chain_is_continuous
+    from derbysim.sim.dataset import _chain_continuity, split_broken_chains
     from derbysim.sim.reward import to_dyn_trains
     built = build_env_trains_for_window(td_win, net, dwell_by_platform, plat_tc_to_pid, cif_map=cif_map)
     succ, pair = _chain_continuity(net)
-    clean = [b for b in built if chain_is_continuous(b[0].route_chain, net, succ, pair)]
+    clean = split_broken_chains(built, net, succ, pair, plat_tc_to_pid)   # D31: 切分不丢弃
     return to_dyn_trains(clean)

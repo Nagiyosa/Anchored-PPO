@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M12b: 在真实拥堵窗口上训练 maskable PPO(KL-to-BC + no-prior BC 热启动, SMDP)。
+"""M12b: 在真实运营日上训练 maskable PPO(KL-to-BC + no-prior BC 热启动, SMDP)。
 
 用法(本地 GPU):
     python scripts/13_train_ppo.py --iters 40 --steps-per-iter 2048 --kl-beta 0.1 \
@@ -10,9 +10,10 @@
     --half-life    SMDP 折扣半衰期(秒)。**默认不给 = γ=1 不打折**(§10-G); M12e 扫 300/900/3600
     --encoder      mlp/deepsets/settransformer/gnn (D9 消融; bring-up 用 deepsets)
     --split        train/val (test 是完全留出集, 本脚本**拒绝**跑 test, §10-E)
-    场景 = **运营日**(03:00→次日03:00, 全部 98 天按时间划分 train65/val11/test22), 不再筛拥堵窗口(D26)
+    场景 = **运营日**(03:00→次日03:00, 98 天按时间划分 train65/val11/test22), 不筛拥堵窗口(D27),
+                   **真实历史、不注入合成扰动**(D28)
     --steps-per-iter 每轮更新的步数预算(不是局数 —— 局长在 180-4586 间晃, batch 会不稳)
-    --eval-every   每 N 轮在**固定评估集**上评一次(同窗口同注入种子, 跨 iteration/跨策略可比),
+    --eval-every   每 N 轮在**固定评估集**上评一次(val 运营日, **真实历史不注入** D28),
                    并与三条基线参照线(信号员回放 / 有路就办 / 随机)同图对照
 
 诚实: 无 `--bc-ckpt` 时 KL 参照是随机初始化的网络 —— 那只是**跑通用**, 不是热启动, 结果无意义。
@@ -34,7 +35,8 @@ from derbysim import config
 from derbysim.learn.features import Featurizer
 from derbysim.learn.panel import PanelAdapter
 from derbysim.learn.panel_models import PanelOptionPolicy, pick_device
-from derbysim.learn.ppo import PPOConfig, TorchPanelDriver, frozen_bc, ppo_update, prepare_batch
+from derbysim.learn.ppo import (PPOConfig, RunningMoments, TorchPanelDriver, frozen_bc,
+                                ppo_update, prepare_batch)
 from derbysim.learn.rollout import (as_factory, collect_rollout, evaluate_policy,
                                     make_greedy_set_policy, make_random_policy,
                                     signaller_replay_factory)
@@ -62,7 +64,6 @@ def main() -> None:
                     help="单次更新的策略 KL 上限, 超过就提前结束该轮 epoch 循环")
     ap.add_argument("--eval-days", type=int, default=999,
                     help="固定评估集用几个 val 运营日; 默认取满(11 天)")
-    ap.add_argument("--eval-seeds", type=int, default=2)
     ap.add_argument("--days", type=int, default=999,
                     help="训练用几个**运营日**(03:00→次日03:00); 默认取满(train 段 65 天)。"
                          "此前是'最堵的 6 个 3h 窗口'= 18 小时 = 全量的 0.77%%(见 D26 更正)")
@@ -72,7 +73,14 @@ def main() -> None:
                     help="SMDP 折扣半衰期(秒); 缺省 = γ=1 不打折(§10-G)")
     ap.add_argument("--lam", type=float, default=1.0,
                     help="GAE λ; 默认 1.0 = 蒙特卡洛(实测 λ=0.95 让第0步只看到 0.2%% 的回报)")
-    ap.add_argument("--reward-scale", type=float, default=0.01)
+    ap.add_argument("--reward-scale", type=float, default=1.0,
+                    help="固定奖励缩放; **只在 --no-return-norm 时有意义**(旧默认 0.01 是在 3h "
+                         "窗口上标的, 运营日回报量级差 50 倍)")
+    ap.add_argument("--no-return-norm", action="store_true",
+                    help="关掉回报标准化, 回退到固定 --reward-scale(消融对照)")
+    ap.add_argument("--rollout-device", default="cpu", choices=["cpu", "cuda", "same"],
+                    help="rollout 期策略跑在哪(默认 cpu): batch=1 的 GPU 前向 73%% 是 kernel 启动"
+                         "往返, 小网在 CPU 上更快; 副作用是训练变成纯 CPU 单核 → 矩阵可并发")
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--hidden", type=int, default=64)
     ap.add_argument("--minibatch", type=int, default=64)
@@ -133,18 +141,27 @@ def main() -> None:
     cfg = PPOConfig(lr=args.lr, lam=args.lam, half_life_s=args.half_life, kl_beta=args.kl_beta,
                     minibatch=args.minibatch, update_epochs=args.update_epochs,
                     reward_scale=args.reward_scale,
+                    normalise_returns=not args.no_return_norm,
                     target_kl=(args.target_kl if args.target_kl > 0 else None))
     opt = torch.optim.Adam(policy.parameters(), lr=cfg.lr)
-    driver = TorchPanelDriver(policy, dev, generator=gen)
+    # critic 预测归一化值 → driver 必须还原成原始单位再交给 GAE(见 smdp.RunningMoments)。
+    ret_norm = RunningMoments() if cfg.normalise_returns else None
+    # 方案 B(D32): rollout 期把策略放 CPU —— batch=1 的 GPU 前向 73% 是 kernel 启动往返。
+    # `--rollout-device` 缺省 cpu; 传 same 则沿用训练设备(消融/对照用)。
+    roll_dev = dev if args.rollout_device == "same" else torch.device(args.rollout_device)
+    roll_gen = gen if roll_dev == dev else torch.Generator(device=roll_dev).manual_seed(args.seed)
+    driver = TorchPanelDriver(policy, roll_dev, generator=roll_gen, ret_norm=ret_norm)
     rcfg = RewardConfig()
 
     # ---- 固定评估集(同窗口/同注入种子, 跨 iteration 与跨策略完全可比) + 基线参照线 ----
+    # **D28: 一律真实历史, 不注入合成扰动**(旧代码用注入种子 0/1, 与 M10_DESIGN §4.4 的设计
+    # "固定评估=真实历史窗口, 不注入"自相矛盾; 且注入把信号员的延误抬到 2.5 倍而人无法重新决策)。
+    # 环境是确定的 → 同一天跑两次逐位相同, 不需要评估种子。
     ev_wins = operating_days("val")[:args.eval_days]
-    mk = lambda w, sd: (lambda: build_day_trains(w, seed=sd))
-    eval_eps = [(f"{str(w['start'])[:16]}|s{sd}", mk(w, sd), day_horizon(w))
-                for w in ev_wins for sd in range(args.eval_seeds)]
+    eval_eps = [(str(w["start"])[:16], (lambda w=w: build_day_trains(w)), day_horizon(w))
+                for w in ev_wins]
     env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg)
-    print(f"[eval] 固定集 = {len(ev_wins)} 个 val 运营日 × {args.eval_seeds} 种子 = {len(eval_eps)} 局"
+    print(f"[eval] 固定集 = {len(eval_eps)} 个 val 运营日(**真实历史, 不注入**, D28)"
           f" | 训练 {len(windows)} 个 {args.split} 运营日")
     print(f"[warmup] 前 {args.critic_warmup_iters} 轮只训 critic(行首标 *), 策略冻结; "
           f"**EV 是关键诊断** —— EV≈0 表示优势只是'位置噪声', 此时放开策略必被推坏")
@@ -173,14 +190,17 @@ def main() -> None:
         def episode_stream():
             while True:
                 w = windows[int(rng.integers(len(windows)))]
-                sd = int(rng.integers(1 << 30))
-                yield (f"{str(w['start'])[:16]}|s{sd}",
-                       (lambda w=w, sd=sd: build_day_trains(w, seed=sd)),
+                yield (str(w["start"])[:16],
+                       (lambda w=w: build_day_trains(w)),      # D28: 真实历史, 不注入
                        day_horizon(w))
         t_roll = time.time()
+        if roll_dev != dev:
+            policy.to(roll_dev)                       # 权重搬到 rollout 设备(小模型, 开销可忽略)
         transitions, ep_metrics = collect_rollout(
             env_factory, adapter, as_factory(driver), episode_stream(),
             target_steps=args.steps_per_iter, max_decisions=args.max_decisions)
+        if roll_dev != dev:
+            policy.to(dev)                            # 更新在训练设备上做
         roll_s = time.time() - t_roll
         total_steps += len(transitions)
         t_upd = time.time()
@@ -189,21 +209,29 @@ def main() -> None:
             frac = it / max(args.iters - 1, 1)
             for gp in opt.param_groups:
                 gp["lr"] = args.lr * (1.0 - frac * (1.0 - args.lr_final_frac))
-        stats = ppo_update(policy, bc_ref, opt, prepare_batch(transitions, cfg), cfg, dev,
+        stats = ppo_update(policy, bc_ref, opt,
+                           prepare_batch(transitions, cfg, ret_norm=ret_norm), cfg, dev,
                            value_only=warming)
         upd_s = time.time() - t_upd
         row = {"iter": it, "steps": len(transitions), "episodes": len(ep_metrics), **stats,
                "train_reward_mean": float(np.mean([m["episode_reward"] for m in ep_metrics])),
                "train_completion_mean": float(np.mean([m["completion_rate"] for m in ep_metrics])),
                "rollout_s": roll_s, "update_s": upd_s,
-               "steps_per_s": len(transitions) / max(roll_s, 1e-9)}
+               "steps_per_s": len(transitions) / max(roll_s, 1e-9),
+               "ret_mean": (ret_norm.mean if ret_norm else 0.0),
+               "ret_std": (ret_norm.std if ret_norm else 1.0)}
         print(f"it {it:>3}{'*' if warming else ' '}| steps {row['steps']:>5} ({row['episodes']} eps) "
               f"| **EV {row['explained_variance']:>6.3f}** | KL {row['kl_to_bc']:.4f} "
               f"| ent {row['entropy']:.3f} | aKL {row.get('approx_kl', 0):.3f} "
               f"| rollout {roll_s:>5.1f}s ({row['steps_per_s']:>4.0f}步/s) upd {upd_s:>4.1f}s")
         if args.eval_every and ((it + 1) % args.eval_every == 0 or it == args.iters - 1):
+            if roll_dev != dev:
+                policy.to(roll_dev)
             ev = evaluate_policy(env_factory, adapter,
-                                 as_factory(TorchPanelDriver(policy, dev, greedy=True)), eval_eps)
+                                 as_factory(TorchPanelDriver(policy, roll_dev, greedy=True,
+                                                             ret_norm=ret_norm)), eval_eps)
+            if roll_dev != dev:
+                policy.to(dev)
             ev.pop("eval_episodes", None)
             ev["iter"] = it
             evals.append(ev)
@@ -214,6 +242,8 @@ def main() -> None:
                 ck = config.ARTIFACTS_REPORTS / f"{run_id}_best.pt"
                 torch.save({"model": {k: v.detach().to("cpu") for k, v in policy.state_dict().items()},
                             "iter": it, "eval": {k: v for k, v in ev.items() if k != "eval_episodes"},
+                            # critic 输出是归一化值 → 不存 (μ,σ) 就还原不回原始单位, 断点无法复用
+                            "ret_norm": (ret_norm.state_dict() if ret_norm else None),
                             "args": vars(args), "run_id": run_id}, ck)
                 print(f"        ↑ 新最佳, 已存 {ck.name}")
                 since_best = 0

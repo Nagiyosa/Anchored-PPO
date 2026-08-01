@@ -129,6 +129,32 @@ def random_factory(seed: int = 0):
     return factory
 
 
+def loop_the_train_factory(env):
+    """**开环**: 优先选那条会把车带回它刚走过的 TC 的进路。
+
+    2026-08-01 由随机策略偶然触发后补进红队。进路链是策略**在线**选的, 没有任何机制阻止策略把
+    车导成环(`RDC5061A→RDC5075A→RDC5083A` = `TDAB→TDAC→TDAB→TDAC→TDAB→TDAC`); 而
+    `_release_behind(idx-2)` 原先假设"路径不回头", 于是车把**自己脚下**的锁释放掉 → 别的车锁走
+    → 本车再进 = **碰撞**(D6 红线)。这不是数据问题: 98 天 18650 辆车的原始链里 0 条有重复 TC。
+    留作常备用例, 任何改动都要保证它跑出 0 碰撞。
+    """
+    def act(enc):
+        best, best_rank = 0, -1
+        for i, s in enumerate(enc["slots"]):
+            if s.kind != "set":
+                continue
+            t = env.engine.trains.get(getattr(s, "train_id", None))
+            rid = getattr(s, "route_id", None)
+            r = env.net.routes.get(rid) if rid else None
+            if t is None or r is None:
+                continue
+            back = len(set(r.tc_sequence) & set(t.path))   # 与已走过的路径重叠越多越"绕"
+            if back > best_rank:
+                best, best_rank = i, back
+        return (best, 0.0, 0.0) if best_rank >= 0 else (0, 0.0, 0.0)
+    return act
+
+
 def greedy_factory(_env):
     return make_greedy_set_policy()
 
@@ -147,5 +173,6 @@ RED_TEAM = {
     "skip_platform": skip_platform_factory,
     "late_dispatch": late_dispatch_factory,
     "random_legal": random_factory(0),
+    "loop_the_train": loop_the_train_factory,
 }
 REFERENCES = {"greedy_set": greedy_factory, "signaller_replay": signaller_factory}

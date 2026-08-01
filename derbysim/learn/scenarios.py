@@ -1,15 +1,27 @@
-"""M12b 训练/评估场景构造：真实拥堵窗口 + primary 延误注入（§10-H，无 torch）。
+"""M12 训练/评估场景构造（无 torch）。
 
-**为什么只取拥堵窗口**: M10 复审实测——常态窗口注入延误 **Δ=0**(稀疏咽喉无 overlap 可扰),
-常态 episode 近似白跑。冲突(=学习信号)只在真实拥堵时段有。故训练场景 =
-`rank_high_disruption_windows`(真实最堵时段, 真车真时刻) → `build_clean_window_dyn_trains`
-(链清洗, 保无碰撞不变式, 与 BC 数据集同一份干净车) → 每 episode 按种子注入 primary 延误(α=0.36)。
+**当前口径(D27, 2026-07-31)**: episode = **运营日 03:00→次日 03:00**, 全部 98 天按时间划分,
+**不做拥堵度筛选** —— 见本文件下半部分 `operating_days` 上方的长注释(含 03:00 的数据依据)。
+入口: `operating_days` / `build_day_trains` / `day_horizon`。
 
-**诚实代价(必须写进论文)**: 训练分布 ≠ 真实运营分布, agent 在常态时段是 out-of-distribution。
-M13 **必须常态/扰动分开报**(§14.0); 常态若不如基线, 如实写。
+**已作废的旧口径**: "只取真实拥堵的 3h 窗口"。其依据"常态窗口注入延误 Δ=0"是单窗口测量,
+全量分层实测推翻了由它推出的"常态窗口没有学习信号"。`congested_windows` /
+`build_episode_trains` / `episode_horizon` **保留但不再是训练场景**, 用途仅两项:
+①§14.0 的常态 vs 扰动**分层报告**; ②"只训拥堵 vs 全量"消融。
 
-**时间划分(§10-E)**: train ≤ 2023-11-15 / test ≥ 2023-11-16(~3 周完全留出, 最后报一次);
-val = 从 train 窗口里切一部分(调超参/早停), 不碰 test。
+**时间划分(§10-E, 两种粒度共用)**: train < 2023-11-16 / test ≥ 2023-11-16(~3 周完全留出,
+最后报一次); val = 从 train 段**末尾**切一部分(调超参/早停), 不碰 test。
+
+**不注入合成扰动(D28, 2026-08-01)**: 训练/验证/测试一律真实历史。`DelaySampler` /
+`inject_primary_delays` / α 已退出主线, 仅作可选鲁棒性消融(须显式开启)。理由: ①入区时刻本身
+已含当天真实晚点, 我们的反事实问题是"同样这批车同样时刻到达区界, 换一套进路决策会怎样",
+注入把这个良定义的问题搅浑; ②α=0.36 来自瑞典案例, 从未在德比数据上验证; ③注入把信号员回放的
+延误抬到 **2.5 倍**(6544s→16487s)而人**没有机会重新决策** ⇒ 人类对照锚被系统性压低, 我们跟它
+比偏易; ④"扰动下是否 robust"用**真实数据里本来就有的乱日子**分层报告即可(见 `congested_windows`)。
+
+**薄日**: 98 天里 09-01(5)/09-30(17)/12-07(37) 决策数远低于中位 568(数据缺口, M11_DESIGN §2
+已记录, 决定**保留**)。训练侧 `collect_rollout` 按步数预算收集 → 天然按天量计权;
+评估侧 `rollout.evaluate_policy` 一律**微平均**, 不按局等权(否则 5 辆车的日子 = 241 辆的日子)。
 """
 from __future__ import annotations
 
@@ -121,11 +133,11 @@ def congested_windows(split: str = "train", win_hours: float = 3.0, top_k: int =
     raise ValueError(f"unknown split {split!r}; use train/val/test/all")
 
 
-def build_episode_trains(window: dict, seed: int | None = None, inject: bool = True,
+def build_episode_trains(window: dict, seed: int | None = None, inject: bool = False,
                          p_late: float = 0.50):
-    """一个窗口 → 一 episode 的 DynTrain 列表(链清洗 + 可选 primary 延误注入)。
+    """一个 3h 窗口 → 一 episode 的 DynTrain 列表(链清洗)。**默认不注入(D28)**, 同 `build_day_trains`。
 
-    `seed=None` 或 `inject=False` → 不注入(用于**固定评估**: 真车真时刻, 可复现, 答辩无可辩驳)。
+    窗口粒度本身已不是训练场景(D27), 本函数只服务于分层报告与消融。
     """
     net, _params, dwell, ptc = load_assets()
     td = _td_events()
@@ -165,8 +177,14 @@ def episode_horizon(window: dict, drain_s: float = 1200.0) -> float:
 # 按 90min 间隙重切趟后实测(98 天):
 #     03:00 **0.80 趟/天**(最少) · 02:00 0.90 · 12:00 1.41 · **00:00 自然日 2.49** · 06:00 4.11(最差)
 # ⇒ 03:00 比自然日好 3.1 倍。这是**新约定**(项目原先只有自然日 `.dt.date` 与 90min 切趟两条规则),
-#   故跨午夜必须用 `dataset.build_cif_map_days` 的 (headcode, 日期) 双键, 否则午夜后的车会拿到
-#   差 24 小时的 `planned_ref`(实测确认)。
+#   故跨午夜必须用 `dataset.build_cif_index` 的**按趟就近匹配**(以每趟首个 TD 事件为锚, 超
+#   `_RUN_GAP_S` 视为不匹配), 否则午夜后的车会拿到差 24 小时的 `planned_ref`(实测确认);
+#   同 headcode 同日多趟的互相覆盖也一并修掉(全量 6.0% 趟次受影响, 见 M10_DESIGN F12)。
+#
+# **薄日不剔除**: 09-01(5 决策, TD 从 14:51 才开始) / 09-30(17, 期中数据缺口) / 12-07(37, TD 到
+#   06:23 结束), 对比中位 568。M11_DESIGN §2 已记录这 3 天并决定**保留**(BC 侧它们只占 0.01%
+#   样本)。RL 侧沿用: 训练按步数预算收集 → 自动按天量计权; 评估用微平均(见 evaluate_policy)。
+#   注意"只保留被数据范围完整覆盖的日"这类规则**抓不到 09-30**(它在期中), 故不采用。
 OPERATING_DAY_CUT_HOUR = 3
 
 
@@ -193,9 +211,15 @@ def operating_days(split: str = "train", val_frac: float = 0.15) -> list[dict]:
     raise ValueError(f"unknown split {split!r}; use train/val/test/all")
 
 
-def build_day_trains(day: dict, seed: int | None = None, inject: bool = True,
+def build_day_trains(day: dict, seed: int | None = None, inject: bool = False,
                      p_late: float = 0.50):
-    """一个运营日 → DynTrain 列表(链清洗 + 可选 primary 延误注入)。跨午夜, 故用双键 CIF map。"""
+    """一个运营日 → DynTrain 列表(链清洗)。跨午夜, 故用按趟就近匹配的 CIF 索引。
+
+    **`inject` 默认 False(D28, 2026-08-01 定案, 不再合成扰动)**。合成延误注入已退出主线:
+    训练/验证/测试一律用**真实历史**。注入只保留为可选的鲁棒性消融, 且必须显式传 `inject=True`
+    —— 默认值从 True 改成 False 就是为了让"忘了关"这件事不可能发生。理由见 D28 与
+    `derbysim/sim/perturb.py` 顶部。
+    """
     net, _params, dwell, ptc = load_assets()
     td = _td_events()
     win = td[(td["ts"] >= day["start"]) & (day["end"] > td["ts"])].copy()

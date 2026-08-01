@@ -77,16 +77,34 @@ def realized_weighted_delay(engine, cfg: RewardConfig, horizon: float | None = N
 
 
 def can_complete(t) -> bool:
-    """该车**结构上**是否可能到达出区口(目标出区口组非空)。
+    """该车是否有**可观测的目标**(出区口组非空, 或是终到站台的车)。
 
-    M12b 复审(2026-07-30): 部分车的 `goal.exit_group` 为**空** —— 其区内链只是一段(终到站台/
-    窗口边界碎片), `_at_goal_exit` 对它们恒为 False。**真值对照**: 用信号员日志决策回放 8 个真实
-    拥堵窗口, 在"有出区口目标"的车里**一辆未漏**(0/8 窗口有遗漏), 漏掉的恰好全是这批空目标车
-    (每窗 1–7 辆, 至多占 21%)。故它们连信号员本人都"完成"不了 → 罚 `p_incomplete` 是**必然误罚**
-    (同 M10 §12 R4 的边界碎片问题)。完成率的分母也应只算这批可完成的车。
+    M12b 复审(2026-07-30): 部分车的 `goal.exit_group` 为**空**, `_at_goal_exit` 对它们恒为 False。
+    真值对照: 信号员回放 8 个真实拥堵窗口, "有出区口目标"的车**一辆未漏**, 漏掉的恰好全是这批空
+    目标车 → 对它们罚 `p_incomplete` 是必然误罚。
+
+    **D29 修正(2026-08-01)**: 当时的处理是把它们整体**排除**, 且把成因写成"窗口边界碎片" ——
+    **两点都不对**。全 98 天实测 **1651/18650 = 8.85%** 的车 `exit_group` 为空; 3 天样本里 45 辆
+    中只有 **2 辆**贴日界(其余在日中), 而 20 天样本里 **82% 末段落在站台 TC 上**, 车次号以
+    1C/2A/1K/1F/1V/1D 为主 = **在德比终到的客运列车**(车次号在此消亡, 之后以 ECS 新号入库)。
+    它们**有**目标, 就是"到达站台并停稳"; 排除的后果是 agent 把终到车晾在咽喉区不受任何惩罚,
+    而现实里它正堵着站台。故: **终到车(`goal.terminates_at_platform`)回到分母**, 完成判据 =
+    `served_platform`。仍排除的只剩"无出区口目标且末段不在站台"的车(20 天样本 18%, 多为进入
+    未建模的 Etches Park 库内区段), 那类我们确实没有可观测目标。
     """
     g = getattr(t, "goal", None)
-    return bool(g and getattr(g, "exit_group", None))
+    if not g:
+        return False
+    return bool(getattr(g, "exit_group", None) or getattr(g, "terminates_at_platform", False))
+
+
+def has_reached_goal(t) -> bool:
+    """达成目标: 出区车 = 到达出区口组; **终到车 = 服务了站台**(D29)。"""
+    if getattr(t, "reached_exit", False):
+        return True
+    g = getattr(t, "goal", None)
+    return bool(g and getattr(g, "terminates_at_platform", False)
+                and getattr(t, "served_platform", False))
 
 
 def _expects_stop(t) -> bool:
@@ -114,7 +132,7 @@ def platform_tier_reward(t, plat_tc_to_pid: dict, cfg: RewardConfig) -> float:
 
 def on_time_bonus(t, plat_tc_to_pid: dict, cfg: RewardConfig) -> float:
     """完成车在 planned_ref+容差内到达测量点(客运=首个服务站台占用时刻/直通=出区末TC)→ +b_ontime。"""
-    if getattr(t, "planned_ref", None) is None or not t.reached_exit:
+    if getattr(t, "planned_ref", None) is None or not has_reached_goal(t):
         return 0.0
     t_measure = None
     if _expects_stop(t):
@@ -194,7 +212,7 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
         for t in self.engine.trains.values():
             if t.train_id in self._finalized:
                 continue
-            if t.done and t.reached_exit:
+            if t.done and has_reached_goal(t):
                 r += platform_tier_reward(t, self.plat_tc_to_pid, self.cfg)
                 r += on_time_bonus(t, self.plat_tc_to_pid, self.cfg)
                 self._finalized.add(t.train_id)
@@ -211,7 +229,8 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
             for t in self.engine.trains.values():
                 if t.train_id in self._finalized:
                     continue
-                if not t.reached_exit and can_complete(t):     # 结构上不可能完成的车不误罚
+                # 终到车按"是否服务了站台"结算(D29); 无可观测目标的车仍不误罚
+                if not has_reached_goal(t) and can_complete(t):
                     r -= self.cfg.p_incomplete
                     self._finalized.add(t.train_id)
         return r

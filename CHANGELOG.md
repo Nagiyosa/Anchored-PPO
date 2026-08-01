@@ -124,6 +124,143 @@ policy: 92–99% of the delay came from trains that never finished. Near human l
 trains" gradient — a sensible progression, so rescaling would not be justified. Tests: 121 passed,
 3 skipped.
 
+### M12c — three scope decisions frozen: D30 / D31 / D32 (2026-08-01)
+- **D30 — the encoder ablation crosses only the primary method.** PPO gets all four encoders × 3
+  seeds; DQN, IQL, CQL, AWAC and AWAC-online each use DeepSets × 3 seeds. D9 asks whether the
+  architecture matters, and M11 already answered that on BC (the four encoders tie at macro
+  0.85–0.86); confirming it once on PPO answers it for the online setting, whereas crossing all six
+  methods repeats the same finding six times. Every method and every other ablation axis is still
+  done — only this one axis stops being a Cartesian product. Runs needing environment rollouts drop
+  from 117 to about 57.
+- **D31 — broken chains are split into separate movements instead of the whole train being dropped.**
+  The old filter discarded 303 of 2,056 trains over ten days, but selectively: 5.5% of express and
+  5.6% of stopping passenger services against 45.8% of empty stock, 32.3% of light engines and 17.5%
+  of freight. 159 of 169 empty-stock breaks look like `TEDJ → TEDG` — a train entering Etches Park
+  depot, sitting in track we do not model, and coming back out. Those are two independent movements,
+  not one broken chain, so `dataset.split_broken_chains` now emits one train per continuous segment,
+  keyed `<id>@<n>`, with entry taken from the observed occupancy of the segment's first circuit,
+  `planned_ref` given only to the first segment, and stops assigned to whichever segment contains the
+  platform. Both the BC and RL construction paths use it. On 2023-11-05 the day goes from 176 to 192
+  trains; the signaller still completes 1.000 with zero collisions. **The BC dataset must be
+  regenerated and all M11 numbers re-run** — not yet done.
+- **D32 — throughput: policy on CPU during rollout, then run the matrix concurrently.** Of the 5.6 ms
+  per rollout step, 4.06 ms is the kernel-launch round trip for a batch-of-one forward on a
+  hidden-64 network, while pure CPU simulation and encoding take 1.5 ms; GPU compute is 11.5% of wall
+  time, so a faster card buys nothing. `--rollout-device` now defaults to cpu. The useful side effect
+  is that a run becomes a pure single-core CPU job, so the ~57 runs can go 32-wide without contending
+  for the GPU: 319 hours serial becomes roughly 4. Prebuilding trains with deepcopy and thinning
+  evaluation come next; vectorised parallel environments are deferred until there is a bit-exact
+  equivalence test, and rewriting the simulator core is ruled out because it would touch the D6
+  safety guarantee. Also noted: the 2M-step budget was assumed, not measured — the first thing after
+  the definitions settle is a full learning curve.
+
+### M12c — no synthetic perturbation, terminating trains get a goal (2026-08-01)
+Two definitional decisions, both frozen; they change what the headline number means.
+- **D28: synthetic delay injection is removed from training, validation and testing.** The recorded
+  entry times already contain the real delay of that day, so the counterfactual we actually want to
+  pose — "given the same trains arriving at the region boundary at the same times, would a different
+  set of routing decisions have produced less delay inside the region?" — is well posed without any
+  injection, and injection only muddies it. The primary-delay share α = 0.36 comes from Palmqvist's
+  Swedish case study and has never been validated on Derby data; what we had validated was only the
+  marginal distribution of the injected magnitudes, never that the resulting congestion pattern
+  resembles reality. Those are not the same claim. Measured over three validation operating days,
+  injection raises the signaller's weighted secondary delay from 6,544 s to 16,487 s — 2.5× — while
+  the replayed human never gets to re-decide, so our own human reference was being systematically
+  depressed. Robustness under disruption will instead be reported by stratifying the real days by
+  observed disruption. The `inject` default flips from True to False so that forgetting the flag
+  cannot silently perturb a run, and `--eval-seeds` is gone. Limitation to state in the paper: we
+  cannot test conditions worse than anything observed. Note the environment is fully deterministic
+  (`_adv` and dwell are point estimates), so 65 training days replayed ~90 times each is a real
+  overfitting risk — but a detectable one, and the grounded fix if it appears is sampling the
+  M5-calibrated per-TC traversal residuals, not α.
+- **D29: trains that terminate at Derby now have a goal instead of being excluded.** 1,651 of 18,650
+  trains across all 98 days have an empty exit group. The previous note attributed this to window
+  boundary fragments; diagnosis shows otherwise — only 2 of 45 in a three-day sample sit near the
+  boundary, while 82% of a twenty-day sample end on a platform track circuit with headcodes 1C, 2A,
+  1K, 1F, 1V, 1D. They are terminating passenger services whose headcode dies at the platform. They
+  do have a goal: reach the platform and stop. Excluding them meant an agent could leave a
+  terminating train standing in the throat at no cost while it blocked a platform. Completion is now
+  judged by `has_reached_goal`, which checks the exit group for through trains and `served_platform`
+  for terminating ones. The completable denominator goes from 477 to 513 over three validation days,
+  the excluded set from 45 to 9, and the signaller still scores 1.000 (513/513) — which is itself
+  evidence the goal definition is right.
+- Reference lines on three validation operating days, real history: signaller 1.000 / 6,544 s /
+  +166; oscillate-set-cancel 0.575; dispatch-when-possible 0.561; loop-the-train 0.183; random
+  0.113; always-wait 0.014; zero collisions and zero deadlocks throughout. Open: oscillate now edges
+  out dispatch-when-possible, which touches red-team invariant 2; the red-team audit runs on 3-hour
+  windows and does not see it, so this needs checking on operating days.
+- **Open finding — the chain-continuity filter is selective.** It drops 303 of 2,056 trains over ten
+  days (14.7%), but unevenly: 5.5% of express and 5.6% of stopping passenger services against 45.8%
+  of empty stock moves, 32.3% of light engines and 17.5% of freight. The cause is Etches Park depot:
+  159 of 169 empty-stock breaks look like `TEDJ → TEDG`, a train entering the depot, sitting in
+  track we do not model, and coming back out. That is a modelling boundary, not dirty data, and
+  automatic repair is not viable (of 303 breaks, 1 has a unique connecting path, 216 have several,
+  86 have none). The consequence is that our scenarios contain roughly half the empty-stock movement
+  that really occurs, and empty stock is a major source of throat conflict at a terminus — so
+  conflict intensity is systematically understated, in the BC dataset as well as in the RL
+  scenarios. Options recorded in M12_DESIGN §15; splitting a broken chain into separate movements is
+  the most faithful but would require rebuilding the BC dataset and re-running all of M11.
+- Tests: **143 passed, 3 skipped**.
+
+### M12c — full-data recheck: three open findings (2026-08-01)
+Not fixed, recorded for decision (`docs/M12_DESIGN.md` §14).
+- **8.85% of trains have no exit target, and it is not the day boundary.** Across all 98 days,
+  1,651 of 18,650 trains have an empty `goal.exit_group` and are therefore excluded from the
+  completion denominator. Both D27 and M10_DESIGN F8 state that these are the trains cut by the
+  window boundary; that is wrong — in a three-day sample only 2 of 45 sit near the boundary, and
+  80% of them have a route chain of length 1 against a typical length of 4. Cause not yet
+  established: chain cleaning truncating at a discontinuity, gaps in the TD feed, or services that
+  genuinely terminate inside the region. This is a denominator definition, so it moves the headline.
+- **The fixed evaluation set contradicts its own design.** M10_DESIGN §4.4 is titled "fixed
+  evaluation (real historical windows, no injection)", but `scripts/13` builds it with injection
+  seeds 0 and 1. Measured over three validation operating days, injection raises the signaller's
+  weighted secondary delay from 6,544 s to 16,487 s — 2.5× — while the replayed human never gets to
+  re-decide, so the human reference is systematically depressed and we are comparing against an
+  unfairly weak anchor. Proposal: headline evaluation returns to real history, injection becomes a
+  robustness ablation reported separately.
+- **The experiment matrix is larger than stated.** The "47 runs" figure was my own arithmetic and is
+  too low. §14.2/§14.4 commit six learning methods crossed with four encoders and multiple seeds,
+  plus KL, half-life, warm-start and mask ablations — about 111 training runs, roughly 26 days
+  serial at the current throughput. Needs a decision on whether the encoder ablation really crosses
+  all six methods or only the primary one.
+- **Correction to a stale claim**: M12_DESIGN §3/§8 said "the environment is fast (13.5k decision
+  steps/s), so it is not the bottleneck". That number is from the M7/M8 static engine. Measured now:
+  1,157 steps/s for the bare dynamic engine, 667 with reward and the state adapter, 180 in actual
+  training — 20× off. That sentence is why nobody looked at performance for months.
+
+### M12c — evaluation pooling, return normalisation, and a second collision (2026-08-01)
+- **Evaluation now pools across episodes instead of weighting each day equally.** With whole
+  operating days the per-day train count spans 5 to 241. `M11_DESIGN` §2 had already identified and
+  recorded the three thin days (09-01 = 5 decisions, 09-30 = 17, 12-07 = 37, against a median of
+  568) and decided to keep them — correct for BC, where they are 0.01% of 48,021 samples, but in RL
+  a day is a whole episode: one thin day was 9% of the validation score, and 12-07 sits in the test
+  split and would have gone straight into the M13 headline. Completion is now Σreached / Σcompletable;
+  delay, reward, steps and collisions are reported as totals; action fractions are weighted by steps;
+  the old per-episode mean is kept as `..._macro`. Training needed no change — step-budgeted
+  collection already weights days by their length, which is the "weight by day volume" that M11 left
+  as optional. We did **not** drop the thin days: a "drop days not fully covered by the data range"
+  rule would miss 09-30, which sits mid-period.
+- **`reward_scale` replaced by running return normalisation** (`smdp.RunningMoments`). The constant
+  0.01 was calibrated on 3-hour windows; on operating days within a single episode |r| spans five
+  orders of magnitude (median 0.00, p99 826, max 8,968, with the terminal alone accounting for 29% of
+  total |r|) and episode returns run from +40 for the signaller to −31,966 for dispatch-when-possible.
+  The critic now predicts normalised values and the driver un-normalises before GAE — get that wrong
+  and the advantage is off by four orders of magnitude without any error being raised, so it is
+  pinned by a test. No PopArt weight compensation, so the critic re-adapts when (μ,σ) shift; drift is
+  slow because the statistics are running rather than per-batch, and `--no-return-norm` is kept for
+  the ablation.
+- **A second collision, and the reporting change is what found it.** The random policy scored one
+  collision on 2023-11-07. Root cause: route chains are chosen online by the policy, so a policy can
+  drive a train in a circle — `RDC5061A→RDC5075A→RDC5083A` traverses `TDAB→TDAC` three times — and
+  `_release_behind(idx-2)` assumed a path never revisits a track circuit. The train released the lock
+  under its own wheels, another train took it, and the first train drove back in. This is not a data
+  defect: across all 98 days and 18,650 trains, zero planned chains contain a repeated track circuit.
+  Fixed by refusing to release any circuit still present in `path[pos:]`. Added `loop_the_train` to
+  the standing red team and a direct invariant test. Note the old evaluation code averaged collisions
+  over episodes, so one collision in three days printed as 0 — the defect had been reachable and
+  invisible.
+- Tests: **143 passed, 3 skipped**.
+
 ### M12c — scenarios reworked into continuous operating days (2026-07-31)
 The user pushed back twice, and both times the design was wrong rather than the tuning.
 - **An episode is now a whole operating day, 03:00 to 03:00, over all 98 days** (train 65 / val 11 /

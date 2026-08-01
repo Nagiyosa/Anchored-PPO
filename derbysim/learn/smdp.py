@@ -70,20 +70,82 @@ def discounted_return(rewards, dts, half_life_s: float | None = None) -> float:
     return float(out)
 
 
-def prepare_batch(transitions, cfg, last_value: float = 0.0) -> dict:
+class RunningMoments:
+    """回报的运行均值/方差(Welford)——**取代写死的 `reward_scale`**。
+
+    为什么需要(2026-08-01 实测, 运营日 episode):
+      单步奖励在**一局之内**就横跨 5 个数量级 —— |r| 中位 0.00 / p99 826 / 最大 8968,
+      末尾那一记终局罚独占全局 |r| 的 **29%**；整局回报从信号员的 **+40** 到"有路就办"的
+      **−31966**。写死的 `reward_scale=0.01` 是在 3h 窗口上标的(那时"有路就办" ≈ −613),
+      换成运营日就差 50 倍: 值目标 ~10², `vf_coef·(V−R)²` 初值 ~10⁴–10⁵, 而策略损失是 O(1)
+      → 梯度被值损失整个吃掉(正是第 3 轮 "critic 无用、优势与步序相关 0.77–0.96" 的同一病根)。
+      更根本的是: **策略一变强, 回报量级就跟着变**(−3 万 → −100), 任何常数都只对一个阶段成立。
+
+    做法(PopArt 的简化版): critic 预测**归一化值** v̂; 真值 v = v̂·σ + μ。GAE 全程在**原始单位**
+    上算(所以 `TorchPanelDriver` 必须还原), 只有喂给值损失的目标被归一化。优势另有自己的归一化。
+    **诚实记下的缺陷**: 不做 PopArt 的末层权重补偿, 故 (μ,σ) 更新时旧的归一化目标会整体平移,
+    critic 需重新适应。因每轮只更新一次**运行**统计量(非逐批), 漂移很慢; 且留了
+    `normalise_returns=False` 作消融对照。EV 对仿射变换不变, 诊断口径不受影响。
+    """
+
+    __slots__ = ("mean", "var", "count")
+
+    def __init__(self, mean: float = 0.0, var: float = 1.0, count: float = 1e-4) -> None:
+        self.mean, self.var, self.count = float(mean), float(var), float(count)
+
+    @property
+    def std(self) -> float:
+        return float(max(math.sqrt(max(self.var, 0.0)), 1e-6))
+
+    def update(self, x) -> "RunningMoments":
+        x = np.asarray(x, dtype=np.float64).ravel()
+        if x.size == 0:
+            return self
+        bm, bv, bn = float(x.mean()), float(x.var()), float(x.size)
+        delta, tot = bm - self.mean, self.count + bn
+        self.mean += delta * bn / tot
+        m_a, m_b = self.var * self.count, bv * bn
+        self.var = (m_a + m_b + delta * delta * self.count * bn / tot) / tot
+        self.count = tot
+        return self
+
+    def normalise(self, x):
+        return (np.asarray(x, dtype=np.float64) - self.mean) / self.std
+
+    def denormalise(self, x):
+        return np.asarray(x, dtype=np.float64) * self.std + self.mean
+
+    def state_dict(self) -> dict:
+        return {"mean": self.mean, "var": self.var, "count": self.count}
+
+    def load_state_dict(self, d: dict) -> "RunningMoments":
+        self.mean, self.var, self.count = float(d["mean"]), float(d["var"]), float(d["count"])
+        return self
+
+
+def prepare_batch(transitions, cfg, last_value: float = 0.0, ret_norm=None) -> dict:
     """转移列表 → numpy 批 + 优势/回报(SMDP GAE)。**纯 numpy** —— 放在这里以便沙盒单测。
 
-    `cfg.reward_scale` 是纯数值缩放(整局回报量级 ~10³, critic 拟合吃力); 优势随后要归一化,
-    故不改变最优策略。`cfg.lam` 默认 1.0, 理由见该字段注释(λ=0.95 时第0步只看到 0.2% 回报)。
+    `transitions[i].value` 必须是**原始单位**的 V(还原过的, 见 `RunningMoments`),
+    GAE 因此整段在原始单位上算。`ret_norm` 给定时: 先用本批 returns 更新运行统计量,
+    再把 `ret` 归一化后交给值损失; `ret_raw` 保留原值供诊断/日志。
+    `cfg.reward_scale` 退为**可选的额外常数**(默认 1.0, 只在 `normalise_returns=False` 的
+    消融里用)。`cfg.lam` 默认 1.0, 理由见该字段注释(λ=0.95 时第 0 步只看到 0.2% 回报)。
     """
     sc = getattr(cfg, "reward_scale", 1.0)
     adv, ret = compute_gae([t.reward * sc for t in transitions], [t.value for t in transitions],
                            [t.dt for t in transitions], [t.done for t in transitions],
                            last_value=last_value, half_life_s=cfg.half_life_s, lam=cfg.lam)
-    return {
+    out = {
         "encs": [t.enc for t in transitions],
         "actions": np.asarray([t.option_idx for t in transitions], np.int64),
         "old_logp": np.asarray([t.logp for t in transitions], np.float32),
         "adv": adv.astype(np.float32),
-        "ret": ret.astype(np.float32),
+        "ret_raw": ret.astype(np.float64),
     }
+    if ret_norm is not None:
+        ret_norm.update(ret)
+        out["ret"] = ret_norm.normalise(ret).astype(np.float32)
+    else:
+        out["ret"] = ret.astype(np.float32)
+    return out

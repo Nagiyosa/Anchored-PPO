@@ -50,6 +50,70 @@ def chain_is_continuous(route_chain, net, succ=None, pair=None):
     return True
 
 
+def split_broken_chains(built, net, succ=None, pair=None, plat_tc_to_pid=None):
+    """把链断裂的车**切分成多段独立的车**, 而不是整车丢弃(D31, 2026-08-01)。
+
+    **为什么改**: 原做法 `chain_is_continuous` 为假就丢整车, 10 天实测丢 **303/2056 = 14.7%**,
+    且**丢得极不均匀** —— 1x/2x 客运只丢 5.5%/5.6%, 而 **5x ECS 丢 45.8%**、0x 单机 32.3%、
+    6x 货运 17.5%。诊断: 被丢的 ECS 里 **159/169** 的断点形如 `TEDJ→TEDG`, 即车进 **Etches Park
+    车辆段**、在我们**没有建模**的库内区段停留、再出库。**这是建模边界不是脏数据** ——
+    进库和出库本来就是**两次独立的调动**, 把它们当成一条断链丢掉, 等于系统性删掉近一半的 ECS,
+    而 ECS 正是终点站咽喉冲突的重要来源(冲突强度被低估, BC 数据集与 RL 场景同时受影响)。
+    自动补链不可行(303 个断点: 唯一可补 1 / 多解 216 / 无解 86 —— 多解等于我们替信号员编走行)。
+
+    切分规则(与 `build_env_trains_for_window` 的过滤规则保持一致, 否则两条构造路径会分叉):
+      - 每段自成一辆 `EnvTrain`, id 记作 `<原id>@<段序>`(原车不断链时**保持原 id 不变**);
+      - 段内 `entry` = 该段首 TC 的**观测占用时刻**; 无观测占用或 `len(path)<2` 的段丢弃;
+      - `planned_ref` 只给**第一段**(计划时刻属于整趟, 给后续段会凭空造出准点/晚点);
+      - `stop_pids` 按站台 TC 落在哪一段就归哪一段; `booked_platform`/`service_class` 全段继承。
+    """
+    from derbysim.sim.env import EnvTrain
+    if succ is None:
+        succ, pair = _chain_continuity(net)
+    out = []
+    for et, occ_first in built:
+        cuts = [0]
+        last_tc = last_end = None
+        for i, rid in enumerate(et.route_chain):
+            r = net.routes.get(rid)
+            if not r or not r.tc_sequence:
+                continue
+            if last_tc is not None and not (
+                    r.signal == last_end
+                    or r.tc_sequence[0] in succ.get(last_tc, ())
+                    or (last_end is not None and pair.get(last_end) == r.signal)):
+                cuts.append(i)
+            last_tc = r.tc_sequence[-1]; last_end = r.end_signal
+        if len(cuts) == 1:
+            out.append((et, occ_first))                       # 本来就连续 → 原样, id 不变
+            continue
+        cuts.append(len(et.route_chain))
+        for k in range(len(cuts) - 1):
+            lo, hi = cuts[k], cuts[k + 1]
+            chain = list(et.route_chain[lo:hi])
+            times = list(et.req_times[lo:hi])
+            path = []
+            for rid in chain:
+                r = net.routes.get(rid)
+                for tc in (r.tc_sequence if r else ()):
+                    if not path or path[-1] != tc:
+                        path.append(tc)
+            if len(path) < 2 or path[0] not in occ_first:     # 同 build_env_trains_for_window
+                continue
+            # 站台停站按站台 TC 落在哪一段就归哪一段(段外的停站不属于本段)。
+            # 无 plat_tc_to_pid 时保守起见全段继承(宁可多停不可漏停 —— 漏停会被 −P_nostop 误罚)。
+            pids = set(getattr(et, "stop_pids", set()))
+            if plat_tc_to_pid is not None:
+                seen = {plat_tc_to_pid[tc] for tc in path if tc in plat_tc_to_pid}
+                pids &= seen
+            seg = EnvTrain(f"{et.train_id}@{k}", chain, times, occ_first[path[0]], pids)
+            seg.service_class = et.service_class
+            seg.booked_platform = getattr(et, "booked_platform", None)
+            seg.planned_ref = getattr(et, "planned_ref", None) if k == 0 else None
+            out.append((seg, occ_first))
+    return out
+
+
 def build_cif_map(occ_df: pd.DataFrame, date: str) -> dict:
     """{headcode: {booked_platform, planned_ref(epoch s), service_class}} for a given date."""
     sub = occ_df[occ_df["date"].astype(str) == date]
@@ -160,10 +224,11 @@ def generate_decisions(net, params, plat_tc_to_pid, dwell_by_platform, td_win,
     built = build_env_trains_for_window(td_win, net, dwell_by_platform, plat_tc_to_pid,
                                         cif_map=cif_map)
     succ, pair = _chain_continuity(net)
+    # D31(2026-08-01): 断链**切分成多段独立的车**, 不再整车丢弃(丢法对 ECS 有 45.8% 的选择性偏差,
+    # 成因是 Etches Park 库内未建模 —— 进库/出库本就是两次独立调动)。见 `split_broken_chains`。
     dropped = [b[0].train_id for b in built
                if not chain_is_continuous(b[0].route_chain, net, succ, pair)]
-    trains = [b[0] for b in built
-              if chain_is_continuous(b[0].route_chain, net, succ, pair)]   # 丢断链(H6乱序)车
+    trains = [b[0] for b in split_broken_chains(built, net, succ, pair, plat_tc_to_pid)]
     byid = {t.train_id: t for t in trains}
     env = DerbyEnv(net, params, plat_tc_to_pid, dwell_by_platform)
     env.reset(trains)

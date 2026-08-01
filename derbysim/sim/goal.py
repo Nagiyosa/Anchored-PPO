@@ -84,12 +84,21 @@ def _reach(net, start: int, insc: set[int]) -> tuple[set[int], set[int]]:
 
 @dataclass
 class Goal:
-    exit_group: frozenset[int]        # 去向一致的出区口组(空=区内终止,如 ECS 入库)
+    exit_group: frozenset[int]        # 去向一致的出区口组(空=不出区)
     must_serve_platform: bool         # 客运(停站)须服务一个站台
+    # **终到车(2026-08-01, D29)**: 无出区口目标, 但观测链的末段停在**站台**上 → 它的目标是
+    # "到达站台并停稳", 不是"没有目标"。全 98 天实测 1651/18650 = 8.85% 的车 exit_group 为空,
+    # 其中 **82% 末段落在站台 TC 上**, 车次号以 1C/2A/1K/1F/1V/1D 为主(客运), 即**在德比终到的
+    # 客运列车**(车次号在此消亡, 之后以 ECS 新车次号入库/折返)。此前把这批车整体**排除出完成率
+    # 分母**, 后果是: agent 把终到车晾在咽喉区**不受任何惩罚**, 而现实里它正堵着站台。
+    terminates_at_platform: bool = False
 
 
-def train_goal(route_chain, net, stops) -> Goal:
-    """从列车的进路链推目标: 观测出区口所属方向组 + 是否停站(须服务站台)."""
+def train_goal(route_chain, net, stops, plat_tc_to_pid=None) -> Goal:
+    """从列车的进路链推目标: 观测出区口所属方向组 + 是否停站 + 是否为终到车。
+
+    `plat_tc_to_pid` 缺省时退化为旧行为(终到车判不出来) —— 引擎侧一律传入。
+    """
     groups = exit_direction_groups(net)
     exit_grp: frozenset[int] = frozenset()
     for rid in route_chain:                # 取链中通向区外的进路, 其 end_signal 的方向组
@@ -97,7 +106,13 @@ def train_goal(route_chain, net, stops) -> Goal:
         if r and r.end_signal in groups:
             exit_grp = groups[r.end_signal]
             break
-    return Goal(exit_group=exit_grp, must_serve_platform=bool(stops))
+    term = False
+    if not exit_grp and plat_tc_to_pid and route_chain:
+        last = net.routes.get(route_chain[-1])
+        if last and last.tc_sequence:
+            term = plat_tc_to_pid.get(last.tc_sequence[-1]) is not None
+    return Goal(exit_group=exit_grp, must_serve_platform=bool(stops) or term,
+                terminates_at_platform=term)
 
 
 class Reachability:

@@ -366,3 +366,111 @@ def test_cif_lookup_matches_the_right_run():
     assert not bad, f"这些车的计划时刻偏离超过 12 小时(= 匹到了别的趟): {bad}"
     runs = [t for t in trains if "#" in t.train_id]          # 被切成多趟的 headcode
     assert runs, "该运营日应存在同 headcode 多趟的车(否则这条测试没在测东西)"
+
+
+# ---------- 评估汇总口径: 微平均, 薄日不得等权 ----------
+def test_eval_pools_across_days_instead_of_weighting_thin_days_equally():
+    """`evaluate_policy` 必须**微平均**(Σ到达/Σ可完成), 不按局等权。
+
+    98 个运营日的车数从 **5 到 241** 差 48 倍(09-01=5 / 09-30=17 / 12-07=37 是数据缺口日,
+    M11_DESIGN §2 已记录并决定保留)。旧写法 `sum(r[k])/len(rows)` 让 5 车的日子和 241 车的
+    日子等权: 11 个 val 日里一个薄日就占 9% 的分数, 而 12-07 在 **test** 划分里, 会直接进
+    M13 的最终数字。这里用一个"1 车全完成 + 1 车全不完成(99 车)"的构造把两种口径分开。
+    """
+    from derbysim.learn.rollout import evaluate_policy
+
+    class _FakeRes:
+        def __init__(self, m):
+            self.metrics = m
+
+    rows = [{"n_completable": 1, "n_reached_exit": 1, "completion_rate": 1.0,
+             "weighted_secondary_delay_s": 0.0, "episode_reward": 10.0, "n_steps": 2,
+             "n_impossible": 0, "n_collisions": 0, "deadlocked": False, "truncated": False,
+             "frac_wait": 1.0, "frac_set": 0.0, "frac_cancel": 0.0},
+            {"n_completable": 99, "n_reached_exit": 0, "completion_rate": 0.0,
+             "weighted_secondary_delay_s": 9900.0, "episode_reward": -90.0, "n_steps": 198,
+             "n_impossible": 0, "n_collisions": 0, "deadlocked": False, "truncated": False,
+             "frac_wait": 0.0, "frac_set": 1.0, "frac_cancel": 0.0}]
+    seq = iter(rows)
+    import derbysim.learn.rollout as R
+    orig = R.run_episode
+    R.run_episode = lambda *a, **k: _FakeRes(dict(next(seq)))
+    try:
+        out = evaluate_policy(lambda: None, None, (lambda _e: None),
+                              [("薄日", lambda: None), ("正常日", lambda: None)])
+    finally:
+        R.run_episode = orig
+    assert out["eval_completion_rate"] == pytest.approx(1 / 100)     # 微平均: 1/(1+99)
+    assert out["eval_completion_rate_macro"] == pytest.approx(0.5)   # 旧口径会报 0.5 —— 差 50 倍
+    assert out["eval_weighted_secondary_delay_s"] == pytest.approx(9900.0)   # 总量, 不是均值
+    assert out["eval_delay_per_train_s"] == pytest.approx(99.0)
+    assert out["eval_episode_reward"] == pytest.approx(-80.0)        # 总量
+    assert out["eval_frac_wait"] == pytest.approx(2 / 200)           # 按步数加权, 不是 0.5
+    assert out["eval_n_completable"] == 100 and out["eval_n_days"] == 2
+
+
+def test_collisions_are_summed_not_averaged():
+    """安全项必须报**总量**: 20 局里 1 次碰撞被平均成 0.05, 四舍五入就看不见了。"""
+    from derbysim.learn.rollout import evaluate_policy
+    import derbysim.learn.rollout as R
+
+    base = {"n_completable": 10, "n_reached_exit": 10, "completion_rate": 1.0,
+            "weighted_secondary_delay_s": 0.0, "episode_reward": 0.0, "n_steps": 10,
+            "n_impossible": 0, "n_collisions": 0, "deadlocked": False, "truncated": False,
+            "frac_wait": 0.0, "frac_set": 1.0, "frac_cancel": 0.0}
+    rows = [dict(base) for _ in range(20)]
+    rows[7]["n_collisions"] = 1
+    seq = iter(rows)
+
+    class _FakeRes:
+        def __init__(self, m):
+            self.metrics = m
+
+    orig = R.run_episode
+    R.run_episode = lambda *a, **k: _FakeRes(dict(next(seq)))
+    try:
+        out = evaluate_policy(lambda: None, None, (lambda _e: None),
+                              [(f"d{i}", lambda: None) for i in range(20)])
+    finally:
+        R.run_episode = orig
+    assert out["eval_n_collisions"] == 1.0
+
+
+# ---------- 回报标准化 ----------
+def test_running_moments_matches_batch_statistics():
+    from derbysim.learn.smdp import RunningMoments
+    rng = np.random.default_rng(0)
+    xs = [rng.normal(-3000.0, 800.0, size=n) for n in (37, 512, 129, 4096)]
+    rm = RunningMoments()
+    for x in xs:
+        rm.update(x)
+    allx = np.concatenate(xs)
+    assert rm.mean == pytest.approx(allx.mean(), rel=1e-6)
+    assert rm.std == pytest.approx(allx.std(), rel=1e-3)
+    z = rm.normalise(allx)
+    assert abs(z.mean()) < 1e-3 and z.std() == pytest.approx(1.0, rel=1e-3)
+    assert np.allclose(rm.denormalise(z), allx)                 # 可逆 → driver 能还原成原始单位
+    rm2 = RunningMoments().load_state_dict(rm.state_dict())     # 断点可复用
+    assert (rm2.mean, rm2.std) == (rm.mean, rm.std)
+
+
+def test_return_normalisation_leaves_advantages_untouched():
+    """归一化只作用于**值损失的目标**, 不许碰优势 —— 否则改的就是优化目标本身了。"""
+    from derbysim.learn.smdp import RunningMoments, prepare_batch
+
+    class _T:
+        def __init__(self, r, v, dt, done):
+            self.enc, self.option_idx, self.logp = None, 0, 0.0
+            self.reward, self.value, self.dt, self.done = r, v, dt, done
+
+    class _Cfg:
+        lam, half_life_s, reward_scale = 1.0, None, 1.0
+
+    tr = [_T(-500.0, 0.0, 60.0, False), _T(-1.0, 0.0, 3.0, False), _T(-8900.0, 0.0, 0.0, True)]
+    plain = prepare_batch(tr, _Cfg())
+    rm = RunningMoments()
+    normed = prepare_batch(tr, _Cfg(), ret_norm=rm)
+    assert np.allclose(plain["adv"], normed["adv"])                       # 优势不变
+    assert np.allclose(plain["ret_raw"], normed["ret_raw"])               # 原始回报留档
+    assert np.allclose(rm.denormalise(normed["ret"]), plain["ret_raw"], rtol=1e-4)
+    assert abs(float(np.mean(normed["ret"]))) < 1.0 < abs(float(np.mean(plain["ret"])))

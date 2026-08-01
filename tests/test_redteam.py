@@ -33,14 +33,15 @@ def _audit():
     specs = [(w, sd) for w in congested_windows("val", top_k=2) for sd in SPEC_SEEDS]
     out = {}
     for name, fac in list(REFERENCES.items()) + list(RED_TEAM.items()):
-        c = d = r = 0.0
+        c = d = r = col = 0.0
         for w, sd in specs:
             env = RewardedDynamicEnv(net, params, ptc, dwell)
             m = run_episode(env, ad, fac(env), build_episode_trains(w, seed=sd),
                             horizon=episode_horizon(w)).metrics
             c += m["completion_rate"]; d += m["weighted_secondary_delay_s"]; r += m["episode_reward"]
+            col += m["n_collisions"]
         n = len(specs)
-        out[name] = {"completion": c / n, "delay": d / n, "reward": r / n}
+        out[name] = {"completion": c / n, "delay": d / n, "reward": r / n, "collisions": col}
     return out
 
 
@@ -134,3 +135,17 @@ def test_horizon_makes_stranding_cost_the_same_span_for_everyone():
                       build_episode_trains(w, seed=0)).metrics
     assert m_h["weighted_secondary_delay_s"] >= m_n["weighted_secondary_delay_s"]
     assert env_h.horizon == H and env_n.horizon is None
+
+
+def test_no_policy_can_cause_a_collision(audit):
+    """D6 红线: **任何**策略下碰撞恒为 0 —— 由预留结构性保证, 不靠奖励劝阻。
+
+    2026-08-01 破过一次: 进路链是策略**在线**选的, 策略可以把车导成环
+    (`RDC5061A→RDC5075A→RDC5083A` = `TDAB→TDAC→TDAB→TDAC→TDAB→TDAC`), 而
+    `_release_behind(idx-2)` 假设"路径不回头" → 车释放掉**自己脚下**的锁 → 别的车锁走 →
+    本车再进 = 碰撞。**不是数据问题**(98 天 18650 辆车的原始链 0 条有重复 TC)。
+    旧的评估汇总按局**平均**碰撞数(3 局 1 次 → 0.33 → 打印成 0)把它藏住了, 改报总量后现形。
+    `loop_the_train` 已进红队常备。
+    """
+    bad = {k: v["collisions"] for k, v in audit.items() if v["collisions"]}
+    assert not bad, f"这些策略造成了碰撞(D6 破了): {bad}"

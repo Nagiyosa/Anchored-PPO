@@ -23,7 +23,7 @@ import torch.nn as nn
 
 from derbysim.learn.panel import collate_panels
 from derbysim.learn.panel_models import to_tensors, valid_routing_rows
-from derbysim.learn.smdp import prepare_batch  # noqa: F401  (纯 numpy, 从 smdp 再导出)
+from derbysim.learn.smdp import RunningMoments, prepare_batch  # noqa: F401  (纯 numpy, 再导出)
 
 
 @dataclass
@@ -44,9 +44,14 @@ class PPOConfig:
     half_life_s: float | None = None       # None = γ≡1(不打折, §10-G); M12e 扫 300/900/3600
     kl_beta: float = 0.1                   # KL-to-BC 固定档位(手动扫描: 0/0.01/0.1/1/10)
     normalise_adv: bool = True
-    # 纯数值缩放: 整局回报量级 ~10³, 让 critic 去拟合 −2000 这种目标数值上很吃力。
-    # 缩放**不改变**最优策略(优势还要归一化), 只让值损失/学习率处在正常量级。
-    reward_scale: float = 0.01
+    # **回报标准化**(2026-08-01 取代写死的 reward_scale, 理由见 `smdp.RunningMoments`):
+    #   运营日 episode 的单步 |r| 中位 0.00 / p99 826 / 最大 8968, 末步独占 29%;
+    #   整局回报信号员 +40 vs "有路就办" −31966。写死的常数只对一个场景+一个策略水平成立。
+    #   critic 改预测**归一化值**, GAE 仍在原始单位上算(driver 负责还原)。
+    #   `False` = 回退到固定常数(消融对照)。
+    normalise_returns: bool = True
+    # 仅在 `normalise_returns=False` 时起作用的固定缩放(旧行为 = 0.01, 3h 窗口上标的)。
+    reward_scale: float = 1.0
     # PPO 标准护栏: 一次更新内策略走太远就提前停 epoch 循环。实测三轮训练都在解冻后约 20 轮见顶
     # 然后塌(KL-to-BC 0.028→0.044, 熵 0.888→0.769) —— 更新步长失控是主要嫌疑。
     target_kl: float | None = 0.02
@@ -59,13 +64,24 @@ def masked_categorical(logits, opt_mask):
 
 
 class TorchPanelDriver:
-    """把 torch 策略包成 `rollout.run_episode` 要的 `act_fn(enc) -> (idx, logp, value)`。"""
+    """把 torch 策略包成 `rollout.run_episode` 要的 `act_fn(enc) -> (idx, logp, value)`。
 
-    def __init__(self, policy, device, generator=None, greedy: bool = False) -> None:
+    `ret_norm` 给定时, critic 输出的是**归一化值**, 这里**必须还原成原始单位**再交给 GAE ——
+    否则 `δ = r + γV' − V` 里 r 是原始单位而 V 是归一化单位, 两边量纲不同, 优势直接是垃圾。
+    """
+
+    def __init__(self, policy, device, generator=None, greedy: bool = False,
+                 ret_norm=None) -> None:
+        # **D32/方案 B**: rollout 期一律 batch=1, GPU 上每次前向的 kernel 启动往返实测 ≈4.06 ms,
+        # 占 rollout 时间的 **73%**(纯 CPU 侧仿真+编码只要 1.5 ms/步); 而网络只有 hidden=64 的
+        # deepsets, 真算是微秒级 —— GPU 全程在等指令, 换 A100 也一样。故 driver 不接受"必须用
+        # 传入 device"的约束: 调用方给什么就用什么, `scripts/13` 在 rollout 期传 CPU、更新期用
+        # GPU。副作用同样重要: 每次训练变成纯 CPU 单核任务 → 实验矩阵可以 N 路并发而不抢 GPU。
         self.policy = policy
         self.device = device
         self.generator = generator
         self.greedy = greedy
+        self.ret_norm = ret_norm
 
     def __call__(self, enc):
         batch = to_tensors(collate_panels([enc]), self.device)
@@ -79,7 +95,10 @@ class TorchPanelDriver:
                 probs = dist.probs
                 idx = torch.multinomial(probs, 1, generator=self.generator).squeeze(-1)
             logp = dist.log_prob(idx)
-        return int(idx.item()), float(logp.item()), float(value.item())
+        v = float(value.item())
+        if self.ret_norm is not None:
+            v = float(self.ret_norm.denormalise(v))
+        return int(idx.item()), float(logp.item()), v
 
 
 def routing_kl(policy, bc_ref, batch) -> torch.Tensor:

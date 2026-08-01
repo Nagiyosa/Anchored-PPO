@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -291,3 +292,25 @@ def test_cancel_episode_deterministic():
     assert c1 == c2
     assert {t.train_id: t.path for t in d1} == {t.train_id: t.path for t in d2}
     assert {t.train_id: t.sim_occ for t in d1} == {t.train_id: t.sim_occ for t in d2}
+
+
+def test_release_behind_never_frees_a_track_the_train_still_needs():
+    """不变式: 车只能释放**它再也用不到**的 TC(2026-08-01, D6 红线回归测试)。
+
+    `_release_behind(idx-2)` 原先假设路径不回头。但进路链是策略在线选的, 策略可以把车导成环
+    —— 此时 `path[idx-2]` 与车**当前所在**的 TC 是同一段, 旧实现会把自己脚下的锁释放掉,
+    另一辆车随即锁走, 本车再进 = 碰撞。这里用最小构造直接钉死判据, 不依赖能否抽到那一天。
+    """
+    from derbysim.learn.scenarios import load_assets
+    net, params, dwell, ptc = load_assets()
+    eng = DynamicEngine(net, params, ptc, dwell)
+    eng.trains = {}
+    t = SimpleNamespace(train_id="LOOP", path=["A", "B", "A", "B", "A", "B"], pos=2, done=False,
+                        pending_route=None)
+    eng.res.reserved = {"A": ("r0", "LOOP"), "B": ("r1", "LOOP")}
+    eng.res.holder_fp = {("r0", "LOOP"): frozenset({"A"}), ("r1", "LOOP"): frozenset({"B"})}
+    eng._release_behind(t, 0)                       # path[0] == "A" == 车当前所在
+    assert eng.res.reserved.get("A") == ("r0", "LOOP"), "把车脚下的 TC 释放掉了"
+    t.pos = 5                                       # 已走到最后一段, 前方不再需要 A
+    eng._release_behind(t, 4)                       # path[4] == "A", 但 path[5:] 里没有 A
+    assert "A" not in eng.res.reserved, "车确实用不到了却没释放 → 会假死锁"
