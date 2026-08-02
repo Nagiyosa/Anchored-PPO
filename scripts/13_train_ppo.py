@@ -60,8 +60,12 @@ def main() -> None:
                          "20 轮见顶后塌, 继续跑纯属浪费且最终策略远差于峰值")
     ap.add_argument("--lr-final-frac", type=float, default=0.1,
                     help="学习率线性退火到初始值的这个比例(1.0=不退火)")
-    ap.add_argument("--target-kl", type=float, default=0.02,
-                    help="单次更新的策略 KL 上限, 超过就提前结束该轮 epoch 循环")
+    ap.add_argument("--target-kl", type=float, default=0.05,
+                    help="单次更新的策略 KL 上限, 超过就提前结束该轮 epoch 循环。**0.05 而不是 0.02**"
+                         "(2026-08-02 重标): 0.02 是在**三轮已知有缺陷的训练**(dropout 污染 ratio / "
+                         "扁平 argmax / 热启动被稀释)上定的; dropout 修好后 approx_kl 才第一次反映"
+                         "**真实的策略位移**, 实测稳定在 0.019-0.024 —— 正好卡在旧阈值上, 25-50% 的 "
+                         "epoch 被无谓截断。护栏是防爆不是限速")
     ap.add_argument("--eval-days", type=int, default=999,
                     help="固定评估集用几个 val 运营日; 默认取满(11 天)")
     ap.add_argument("--days", type=int, default=999,
@@ -69,6 +73,10 @@ def main() -> None:
                          "此前是'最堵的 6 个 3h 窗口'= 18 小时 = 全量的 0.77%%(见 D26 更正)")
     ap.add_argument("--split", default="train", choices=["train", "val"])
     ap.add_argument("--kl-beta", type=float, default=0.1)
+    ap.add_argument("--kind-anchor-beta", type=float, default=0.05,
+                    help="**时机锚**: p(动作类别) 到信号员实测构成的 KL 系数。0=关(消融)。"
+                         "不加锚时实测 cancel 占比会从 0%% 漂到 58%%(真实撤销率仅 10.44%%), "
+                         "completion 从 0.306 退回 0.241 —— kind_head 是唯一没有行为锚的分支")
     ap.add_argument("--half-life", type=float, default=None,
                     help="SMDP 折扣半衰期(秒); 缺省 = γ=1 不打折(§10-G)")
     ap.add_argument("--lam", type=float, default=1.0,
@@ -142,6 +150,7 @@ def main() -> None:
                     minibatch=args.minibatch, update_epochs=args.update_epochs,
                     reward_scale=args.reward_scale,
                     normalise_returns=not args.no_return_norm,
+                    kind_anchor_beta=args.kind_anchor_beta,
                     target_kl=(args.target_kl if args.target_kl > 0 else None))
     opt = torch.optim.Adam(policy.parameters(), lr=cfg.lr)
     # critic 预测归一化值 → driver 必须还原成原始单位再交给 GAE(见 smdp.RunningMoments)。
@@ -165,6 +174,22 @@ def main() -> None:
           f" | 训练 {len(windows)} 个 {args.split} 运营日")
     print(f"[warmup] 前 {args.critic_warmup_iters} 轮只训 critic(行首标 *), 策略冻结; "
           f"**EV 是关键诊断** —— EV≈0 表示优势只是'位置噪声', 此时放开策略必被推坏")
+    # **热启动体检(§17)**: 训练前先在固定评估集上跑一次 argmax, 看初始动作构成。
+    # 上一轮冒烟正是栽在这里: 所有单点指标正常, 但策略从第一步就在刷 cancel。
+    if roll_dev != dev:
+        policy.to(roll_dev)          # 体检也走 rollout 设备(否则 driver 的输入在 cpu、权重在 cuda)
+    _chk = evaluate_policy(env_factory, adapter,
+                           as_factory(TorchPanelDriver(policy, roll_dev, greedy=True,
+                                                       ret_norm=ret_norm)), eval_eps)
+    if roll_dev != dev:
+        policy.to(dev)
+    print(f"[热启动体检] (**完整评估集**, 与后续 EVAL 可比) 初始 argmax 动作构成: WAIT {_chk['eval_frac_wait']:.0%} / "
+          f"set {_chk['eval_frac_set']:.0%} / cancel {_chk['eval_frac_cancel']:.0%} "
+          f"| 初始 completion {_chk['eval_completion_rate']:.3f}")
+    if _chk["eval_frac_cancel"] > 0.20 or not (0.02 <= _chk["eval_frac_wait"] <= 0.60):
+        print("  ⚠️ **动作构成异常** —— 参考: 信号员实测 WAIT 10% / set 90% / cancel 0%, "
+              "真实撤销率 10.44%。这一类'热启动静默失效'不会有任何其它指标报警, 先查再跑。")
+
     baselines = {}
     for tag, fac in (("signaller_replay", signaller_replay_factory),
                      ("greedy_set", as_factory(make_greedy_set_policy())),
@@ -221,9 +246,14 @@ def main() -> None:
                "ret_mean": (ret_norm.mean if ret_norm else 0.0),
                "ret_std": (ret_norm.std if ret_norm else 1.0)}
         print(f"it {it:>3}{'*' if warming else ' '}| steps {row['steps']:>5} ({row['episodes']} eps) "
-              f"| **EV {row['explained_variance']:>6.3f}** | KL {row['kl_to_bc']:.4f} "
+              f"| **完成率 {row['train_completion_mean']:.3f}** | EV {row['explained_variance']:>5.3f} | KL {row['kl_to_bc']:.4f} "
+              f"| 锚 {row.get('kind_anchor_kl', 0):.3f} "
               f"| ent {row['entropy']:.3f} | aKL {row.get('approx_kl', 0):.3f} "
+              f"| 早停 {row.get('kl_stop_rate', 0):.0%}"
               f"| rollout {roll_s:>5.1f}s ({row['steps_per_s']:>4.0f}步/s) upd {upd_s:>4.1f}s")
+        if not warming and row.get("kl_stop_rate", 0) >= 0.5:
+            print("        ⚠️ **target_kl 护栏在主导训练** —— 半数以上 epoch 在第一个 minibatch 就 "
+                  "break, 实际只执行了很小一部分更新。查 approx_kl 为何在学习前就偏高。")
         if args.eval_every and ((it + 1) % args.eval_every == 0 or it == args.iters - 1):
             if roll_dev != dev:
                 policy.to(roll_dev)

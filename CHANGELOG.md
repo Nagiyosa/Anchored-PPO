@@ -124,6 +124,145 @@ policy: 92–99% of the delay came from trains that never finished. Near human l
 trains" gradient — a sensible progression, so rescaling would not be justified. Tests: 121 passed,
 3 skipped.
 
+### M12d — the bottleneck is *when* to dispatch, not *which* route (2026-08-02)
+- **The kind anchor works but does not unlock learning.** A KL from the action-kind distribution to
+  the signaller's measured mix (`kind_anchor_beta = 0.05`) held cancellations at 0% for all 200
+  iterations, against the 50–58% drift of the previous run. Completion nonetheless wandered between
+  0.187 and 0.296 with no trend over 860k steps, peaking at 0.289 — still short of
+  dispatch-when-possible at 0.297.
+- **The diagnosis came from splitting completion by entry time.** Over six equal bins across one
+  operating day: the signaller holds 1.00 in every bin; dispatch-when-possible starts at 0.83 and
+  decays monotonically to 0.24; the zero-learning lookup starts at 0.52 and decays to 0.29. Every
+  automated policy shows the same shape — a decent start, monotone decay, no recovery. The region
+  silts up over the day and never clears. This is not a single bad decision; it is cumulative.
+- **Routing is not the bottleneck.** The lookup reproduces the human's route choice 90.6% of the
+  time and yet does *worse* in closed loop than picking the first available option (0.389 against
+  0.461). That single comparison explains everything that had been puzzling: BC improving from 0.627
+  to 0.933 overall while closed-loop performance did not move at all (0.284 to 0.289), and 860k PPO
+  steps producing nothing. We had been optimising a quantity that is not binding.
+- **Framing correction.** Describing this as "ordering versus routing" was wrong. D24 and §14.5 item
+  2 define Path A as the agent having full control of *when to dispatch, whether to dispatch, and
+  which route*, and M11 §0 states plainly that BC learns which route and not when. Deciding which
+  train to serve and when is already part of "when". So the correct statement is that the bottleneck
+  falls exactly on the half that BC by definition does not cover and only M12's RL can learn — which
+  sharpens the M12 claim rather than changing the story: routing is already near its ceiling
+  (0.906–0.933 against a candidate-feature ceiling of 0.928), so all remaining headroom is in timing.
+- Added `scripts/17_diagnose_bottleneck.py` with two decisive experiments: overlap depth 0/1/2 to
+  test whether region capacity is modelled too tightly, and a timing-axis by routing-axis crossing to
+  read off which axis explains the variance in closed-loop quality. Also moved training completion to
+  the front of the per-iteration log — it was computed every iteration all along and simply never
+  printed, so a flat run could not be spotted early.
+
+### M12d — two more silent failures found by the warm-start check (2026-08-01)
+The pre-training action-mix check added alongside the factorisation immediately paid for itself.
+- **The `target_kl` guard sat before the optimiser step.** If the first minibatch exceeded the
+  threshold, the whole update was skipped with `n_minibatch = 0` and training silently did nothing.
+  It never fired before because the policy was near-uniform and matched the behaviour data; once the
+  warm start actually took effect the policy became peaked and it triggered immediately. Moved after
+  the step, matching the usual PPO implementations.
+- **Greedy evaluation cannot use a flat argmax over a factorised distribution.** The check reported
+  WAIT 100% and completion 0.028 — the level of the always-wait red-team policy. With
+  log p(option) = log p(kind) + log p(option | kind), WAIT is a single option holding all of p=0.15
+  while the set branch spreads 0.80 across N candidates, so once N exceeds about 5.3 every individual
+  route is less probable than WAIT and the argmax must pick WAIT; waiting then lets trains
+  accumulate, which raises N further. Sampling is unaffected, so training was fine and only greedy
+  evaluation was distorted. `greedy_option()` now takes the most likely kind first and then the best
+  option within it, with a test that pins the failure mode.
+
+All three problems in this round — uncalibrated logit scales diluting the warm start, the guard
+placed before the step, and the flat argmax — share a property: no single metric reports them. They
+were only visible by loading the weights and running one real day end to end and looking at the
+action mix.
+
+### M12d — the warm start was never actually taking effect (2026-08-01)
+Smoke run 6 passed every hygiene check — explained variance 0.431 to 0.974, return std steady, zero
+collisions, zero deadlocks — and still learned nothing: completion frozen at 0.208 across four
+evaluations, with the last two identical to the digit, against 0.385 for dispatch-when-possible and
+0.109 for random. KL-to-BC sat at 0.0006 throughout, which we had been reading as "the routing branch
+is faithfully tracking BC". The action mix told the real story: WAIT 0%, set 42–45%, cancel 55–58%,
+while the environment only offers a cancel option at 11.7% of decision points under the signaller's
+trajectory. The policy was taking cancel almost whenever it was available, and each cancellation
+queued more requests which offered more cancel options — a self-amplifying loop. Entropy of 0.84–0.93
+nats over roughly 2.4 effective options confirms the policy was close to uniform, which is why
+completion landed between random and dispatch-when-possible.
+
+The cause is structural. `PanelOptionPolicy` put WAIT, the BC pointer's route scores, and a randomly
+initialised cancel head into a single softmax. The pointer's logit scale is only meaningful between
+routes, because it was trained under a softmax over routes alone; placed alongside untrained heads
+the joint distribution is uncalibrated, and the routing knowledge from the warm start is diluted to
+near-uniform. KL-to-BC constrains only the routing conditional by design, so nothing pulled it back.
+This explains the long-standing puzzle of why a warm-started PPO could not beat a zero-learning
+lookup: it never started from BC's level at all.
+
+Fixed structurally rather than by tuning: the action distribution is now factorised as
+log p(option) = log p(kind) + log p(option | kind). The set conditional is exactly the pointer, so the
+warm start transfers in full and now coincides with the object KL-to-BC acts on. A three-way
+`kind_head` replaces `wait_head`, masked by which kinds are available, with its final layer zeroed and
+its bias set to log of a calibrated mix (0.15 wait / 0.80 set / 0.05 cancel) drawn from the
+signaller's measured 10.2/89.8/0.0 over 2,857 steps and the measured 10.44% cancellation rate. Three
+guards were added, since nothing else reports this class of failure: an initial-mix test, a test that
+the set conditional is exactly the pointer distribution, and a pre-training action-mix check in
+`scripts/13` that warns loudly if cancel exceeds 20%.
+
+### M11e — with the leak closed, the no-prior BC loses to a zero-learning lookup on its own features (2026-08-01)
+The `--no-prior` DeepSets run under the corrected split gives holdout macro 0.499, overall 0.627,
+long-tail 0.269, against a validation macro of 0.609 — a generalisation gap of 0.11 that the old
+holdout-based early stopping had hidden entirely. To separate "the task is hard" from "the model is
+bad", two zero-learning predictors were evaluated on exactly the same features and the same split:
+
+| predictor (D31, holdout, multi-choice only) | macro | overall | long-tail |
+|---|---|---|---|
+| feature-signature lookup (no route prior, no signal id) | 0.632 | 0.885 | 0.058 |
+| per-signal most frequent | 0.650 | 0.906 | 0.000 |
+| `route_prior` feature alone, argmax | 0.650 | 0.906 | 0.000 |
+| no-prior neural BC (clean split) | 0.499 | 0.627 | 0.269 |
+| with-prior neural BC (old, leaky split) | 0.714–0.757 | 0.899–0.907 | 0.19–0.31 |
+
+Three things follow. The `route_prior` feature *is* the most-frequent baseline — the three metrics
+agree to the digit — so the with-prior model is a network with a lookup table bolted on as a feature,
+and the two must never be presented as independent. On head decisions that model does not beat the
+table it is handed: its overall accuracy, 0.899–0.907, is the table's 0.906. Its one real
+contribution is the long tail, 0.19–0.31 against 0.00–0.06. And the no-prior model falls well short
+of what its own features support, 0.499 against 0.632 macro and 0.627 against 0.885 overall, so the
+root cause identified in M11 §11 — the model and its training, not the features — was never actually
+fixed; M11d's remedy was to feed the lookup in as a feature and route around it.
+
+This bears directly on where M12 starts: decision A warm-starts PPO from the no-prior model, so the
+policy begins below a zero-learning table on the same inputs and KL then holds it there. That is
+consistent with the earlier closed-loop finding where a lookup scored 0.883 against PPO's 0.791 after
+336k steps. Three candidate remedies are recorded in M11_DESIGN §15 — fix the no-prior model so
+scoring is candidate-dominant with the state only modulating it (decision features are 117-dim, 36 of
+them signal one-hot, against 20-dim candidate features, so the state drowns the candidates); abandon
+decision A and warm-start from the with-prior model; or distil the lookup into the pointer network.
+The choice must be made on closed-loop quality via `scripts/16`, not on match rate (D23).
+
+### M11e — four encoders on the D31 dataset, and early stopping was reading the holdout (2026-08-01)
+- **Re-ran on the rebuilt dataset** (with prior): MLP 0.757 macro / 0.907 overall, GNN 0.753 / 0.906,
+  DeepSets 0.749 / 0.899 (longtail 0.308, best of the four), Set-Transformer 0.714 / 0.905; the
+  per-signal most-frequent baseline is 0.650 and random 0.306. Against the old dataset's 0.85–0.86
+  this looks like a regression, but the comparison is invalid because the task changed: the baseline
+  fell from 0.801 to 0.650. D31 put back the trains the old filter was selectively discarding —
+  empty-stock multi-choice decisions are up 84% — and empty stock does not have one dominant route
+  per signal, so a per-signal lookup collapses on it. **BC's margin over the baseline went from
+  +0.05 to +0.099, roughly doubling.** Putting the hard traffic back makes a learned policy more
+  valuable relative to a table, not less, which strengthens the D9 and D23 story rather than
+  weakening it. The four encoders still tie (spread 0.043, within the epoch-to-epoch noise of the
+  validation curve), so D9's answer is unchanged: the architecture does not matter.
+- **Found and fixed: early stopping was selecting on the holdout set.** `scripts/12` passed
+  `val_samples=ho` to `train_bc`, so the per-epoch macro was computed on the holdout, the best epoch
+  restored from it, and then the same set reported as the held-out result — the logged
+  `best_val_macro` and the reported `holdout macro` are identical to the digit. With the per-epoch
+  value swinging between 0.63 and 0.76, taking the maximum over eleven epochs is itself a selection,
+  so the reported figures are optimistically biased by an estimated 0.03 to 0.08. This has been
+  present since early stopping was introduced in M11d. The training段 is now split by date, the last
+  15% (9 days, 10-23 to 10-31) serving as validation for early stopping and checkpoint selection,
+  with the holdout untouched until the final report; the route prior is fitted on the reduced
+  training set so the validation prior features are out of sample. Reports now also carry the
+  validation figures so the size of the bias is visible. **The four numbers above must be re-run
+  before they count.**
+- Also fixed: `scripts/12` overwrote `bc_<enc>.json` and `.pt` in place, and this run destroyed the
+  previous with-prior reports. Timestamped copies are now written alongside.
+
 ### M12c — BC dataset rebuilt under D31, and the oscillator question settled (2026-08-01)
 - **BC dataset regenerated** into `bc_dataset_all_d31.parquet` (the previous version is kept whole in
   `artifacts/dataset_pre_D31_backup/`; `scripts/11` now takes `BC_FULL_DIR` so a change of definition

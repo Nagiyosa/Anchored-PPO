@@ -34,7 +34,7 @@ def route_inverse_freq_weights(samples, cap=10.0) -> dict:
 
 def train_bc(encoder, train_samples, dims, val_samples=None, epochs=30, batch_size=256,
              lr=1e-3, weight_decay=1e-4, dropout=0.2, route_weight=None, patience=6,
-             seed=0, device=None, hidden=64, log=print):
+             seed=0, device=None, hidden=64, log=print, early_stop_metric="overall"):
     import torch
     import torch.nn.functional as F
     device = device or get_device()
@@ -62,15 +62,16 @@ def train_bc(encoder, train_samples, dims, val_samples=None, epochs=30, batch_si
             tot += float(loss.item()) * len(s); n += len(s)
         rec = {"epoch": ep, "train_loss": round(tot / max(n, 1), 4)}
         if val_samples is not None:
-            acc = _macro_acc(model, val_samples, dims, device)
-            rec["val_macro_acc"] = round(acc, 4)
+            acc = _val_acc(model, val_samples, dims, device, early_stop_metric)
+            rec[f"val_{early_stop_metric}_acc"] = round(acc, 4)
+            rec["val_macro_acc"] = round(_val_acc(model, val_samples, dims, device, "macro"), 4)
             if acc > best_acc:                                    # 早停: 保留最佳 val macro
                 best_acc, best_state, since = acc, copy.deepcopy(model.state_dict()), 0
             else:
                 since += 1
         hist.append(rec); log(rec)
         if val_samples is not None and since >= patience:
-            log({"early_stop": ep, "best_val_macro": round(best_acc, 4)}); break
+            log({"early_stop": ep, f"best_val_{early_stop_metric}": round(best_acc, 4)}); break
     if best_state is not None:
         model.load_state_dict(best_state)                          # 恢复最佳
     return model, hist
@@ -94,6 +95,20 @@ def predict_records(model, samples, dims, device, batch_size=512):
     return out
 
 
-def _macro_acc(model, samples, dims, device):
+def _val_acc(model, samples, dims, device, metric: str = "overall"):
+    """早停判据。**默认 `overall` 而不是 `macro`(2026-08-01 修)**。
+
+    macro 按决策信号平均, 而 holdout 里 **23 个信号中有 4 个各只有 1 条决策**, 每条单独占
+    headline 的 **4.3%** —— 逐 epoch 的 val macro 在 **0.63–0.76** 之间跳, 量级正好是这几个单点
+    在翻面。四次实测全部在第 10–12 epoch(上限 30)被 patience 叫停, 而 `train_loss` 仍在稳定下降
+    (0.1379→0.1057) ⇒ **模型是被噪声叫停的, 且欠训练**。
+    **早停用什么与最终报什么是两回事**: 报告仍报 macro(用户明确要求现阶段不改估计量), 这里只把
+    "挑哪一轮"的依据换成稳定量。
+    """
     from derbysim.learn.evaluate import match_metrics
-    return match_metrics(predict_records(model, samples, dims, device))["macro_signal_acc"]
+    m = match_metrics(predict_records(model, samples, dims, device))
+    return m["overall_acc"] if metric == "overall" else m["macro_signal_acc"]
+
+
+def _macro_acc(model, samples, dims, device):          # 兼容旧调用
+    return _val_acc(model, samples, dims, device, "macro")

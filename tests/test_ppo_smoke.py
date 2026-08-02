@@ -14,7 +14,8 @@ from derbysim.learn.features import Featurizer
 from derbysim.learn.panel import PanelAdapter, collate_panels
 from derbysim.learn.panel_models import PanelOptionPolicy, pick_device, to_tensors
 from derbysim.learn.ppo import (PPOConfig, RunningMoments, TorchPanelDriver, frozen_bc,
-                                masked_categorical, ppo_update, prepare_batch, routing_kl)
+                                greedy_option, masked_categorical, ppo_update, prepare_batch,
+                                routing_kl)
 from derbysim.learn.rollout import make_random_policy, run_episode
 from derbysim.learn.scenarios import build_episode_trains, congested_windows, load_assets
 from derbysim.sim.reward import RewardedDynamicEnv
@@ -56,13 +57,16 @@ def test_kl_to_bc_is_positive_when_policy_differs():
     dev = pick_device()
     pol = _policy(ad, seed=0).to(dev).eval()
     other = _policy(ad, seed=999)
+    with torch.no_grad():                       # 两个小初始化的随机 pointer 分布几乎一样(KL~1e-5),
+        for prm in other.pointer.parameters():  # 那测的是"随机初始化很接近", 不是 KL 会不会动。
+            prm.mul_(8.0)                       # 放大权重 → 分布真正不同, 才是这条测试要验的事。
     bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID,
                    other.pointer.state_dict(), dev)
     batch = to_tensors(collate_panels([t.enc for t in res.transitions]), dev)
     assert float(routing_kl(pol, bc, batch).item()) > 1e-4
 
 
-def test_kl_ignores_wait_and_cancel_heads():
+def test_kl_ignores_kind_and_cancel_heads():
     """§10-B: WAIT/cancel 完全放开 —— 改动这两个头不应改变 KL(它只看选路分布)。"""
     ad, res, _ = _setup()
     dev = pick_device()
@@ -71,7 +75,7 @@ def test_kl_ignores_wait_and_cancel_heads():
     batch = to_tensors(collate_panels([t.enc for t in res.transitions]), dev)
     before = float(routing_kl(pol, bc, batch).item())
     with torch.no_grad():
-        for head in (pol.wait_head, pol.cancel_head):
+        for head in (pol.kind_head, pol.cancel_head):
             for m in head.modules():
                 if isinstance(m, torch.nn.Linear):
                     m.weight.add_(torch.randn_like(m.weight))
@@ -184,3 +188,59 @@ def test_return_normalisation_keeps_value_loss_in_a_sane_range():
     off, on = value_loss(cfg_off, None), value_loss(cfg_on, RunningMoments())
     assert on < off / 100.0, f"归一化后值损失 {on:.3g} 相对 {off:.3g} 没有明显下降"
     assert on < 100.0
+
+
+def test_greedy_picks_the_most_likely_kind_not_the_singleton_wait():
+    """扁平 argmax 会系统性地选 WAIT —— 因子化之后必须**按类别贪心**(见 `greedy_option`)。
+
+    实测抓到: 初始体检 WAIT 100% / completion 0.028(与"永远WAIT"同级)。原因不是策略偏好, 而是
+    WAIT 类只有 1 个选项独占 p=0.15, 而 set 类的 0.80 摊到 N 条候选上 —— N>5.3 时每条都低于 WAIT。
+    这里构造一个"set 类概率最高但候选很多"的批, 断言贪心必须落在 set 上。
+    """
+    B, O, N = 3, 9, 8
+    kind = torch.zeros(B, O, dtype=torch.long); kind[:, 1:1 + N] = 1        # 0=WAIT, 其余=set
+    mask = torch.zeros(B, O); mask[:, :1 + N] = 1.0
+    k_lp = torch.log(torch.tensor([[0.15, 0.80, 0.05]]).expand(B, 3).contiguous())
+    logits = torch.full((B, O), float("-inf"))
+    logits[:, 0] = k_lp[:, 0]                                              # WAIT: log 0.15
+    logits[:, 1:1 + N] = k_lp[:, 1:2] - torch.log(torch.tensor(float(N)))  # 每条 set: log(0.8/8)
+    batch = {"opt_kind": kind, "opt_mask": mask}
+    flat = logits.argmax(dim=-1)
+    hier = greedy_option(logits, batch, {"kind_log_probs": k_lp})
+    assert (flat == 0).all(), "前提: 扁平 argmax 确实会选 WAIT(这正是要修的偏差)"
+    assert (hier >= 1).all() and (hier <= N).all(), f"按类别贪心必须落在 set 上, 得到 {hier.tolist()}"
+
+
+def test_importance_ratio_is_one_when_nothing_changed():
+    """**dropout 必须在 PPO 更新期关闭**, 否则重要性比比较的是两个不同的网络。
+
+    `old_logp` 是 rollout 期采的(driver 里 `policy.eval()`, dropout 关)。若更新期开 `train()`,
+    `ratio = exp(logp - old_lp)` 会带 dropout 噪声 —— 与参数有没有更新无关。实测后果: 1M 步那轮
+    `approx_kl` 在任何学习之前就有 0.023-0.081 > `target_kl=0.02`, 240 迭代触发 **895 次**早停,
+    每轮只做约 4 个 minibatch(本该 256), **实际只执行了 1.5% 的更新**, 曲线全程平坦。
+
+    钉死方式: 用**同一份策略、eval 模式**重算**同一批被记录动作**的 logp 当作 `old_logp`, 再以
+    `lr=0` 跑一次更新 —— 参数不动、动作不变, `approx_kl` 必须 ≈ 0。
+    (第一版这条测试是错的: 我用 driver 重采 logp, 而 driver 会**重新采样动作**, 于是 old_logp 对应
+     的动作与 `data["actions"]` 不是同一个, 自然对不上 —— 那测的是"两个不同动作的 logp 不同"。)
+    """
+    ad, res, _ = _setup(n_dec=40)
+    dev = pick_device()
+    pol = _policy(ad).to(dev)
+    bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID, None, dev)
+    data = prepare_batch(res.transitions, PPOConfig())
+    pol.eval()
+    old = []
+    for t in res.transitions:                       # **被记录动作**在 eval 模式下的 logp
+        b = to_tensors(collate_panels([t.enc]), dev)
+        with torch.no_grad():
+            logits, _v, _aux = pol(b)
+            dist = masked_categorical(logits, b["opt_mask"])
+            old.append(float(dist.log_prob(
+                torch.tensor([t.option_idx], device=dev)).item()))
+    data["old_logp"] = np.asarray(old, dtype=np.float32)
+    cfg = PPOConfig(minibatch=64, update_epochs=1, kl_beta=0.0, target_kl=None, lr=0.0)
+    opt = torch.optim.Adam(pol.parameters(), lr=0.0)
+    stats = ppo_update(pol, bc, opt, data, cfg, dev)
+    assert stats["n_minibatch"] > 0
+    assert abs(stats["approx_kl"]) < 5e-3, f"approx_kl={stats['approx_kl']:.4f} —— dropout 没关?"

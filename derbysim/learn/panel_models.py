@@ -26,6 +26,12 @@ from derbysim.learn.models import ENCODERS, PointerBC, masked_mean
 
 NEG = -1e9          # 掩码用有限大负数(非 -inf): 全屏蔽行 softmax 不出 NaN
 
+# 动作类别的**初始**边际分布(kind 头的偏置由它反解)。
+# 依据: 信号员回放在 6 个真实运营日 2857 步上的实测构成 = WAIT 10.2% / set 89.8% / cancel 0.0%
+# (回放策略永不撤销, 故 cancel 实测为 0)。撤销不能初始化成 0 概率 —— 它必须可达才谈得上探索,
+# 故按"真实撤销率 10.44%(92534 请求 / 9664 撤销)"给一个小而非零的份额。
+INIT_KIND_MIX = (0.15, 0.80, 0.05)      # (wait, set, cancel)
+
 
 def pick_device(prefer: str | None = None) -> torch.device:
     if prefer:
@@ -61,21 +67,37 @@ class PanelOptionPolicy(nn.Module):
                                        nn.Dropout(dropout), nn.Linear(hidden, hidden), nn.ReLU())
         self.panel_mix = nn.Sequential(nn.Linear(hidden + global_dim, hidden), nn.ReLU(),
                                        nn.Dropout(dropout))
-        # 从头学的两个头(§10-D)
+        # 从头学的两个头(§10-D): cancel 的**组内**打分 + **动作类别**头
         self.cancel_head = nn.Sequential(nn.Linear(hidden + cancel_dim, hidden), nn.ReLU(),
                                          nn.Dropout(dropout), nn.Linear(hidden, 1))
-        self.wait_head = nn.Sequential(nn.Linear(hidden, hidden), nn.ReLU(), nn.Linear(hidden, 1))
+        # kind_head 取代原来的 wait_head(§17 修): 输出 3 个类别 logit (wait/set/cancel)。
+        # 原设计把 WAIT/cancel/set 的 logit 丢进**同一个 softmax**, 而 set 那支的 logit 尺度来自
+        # 只含进路的 BC softmax, 与两个随机初始化的新头**不可比** → 热启动被稀释成近似均匀。
+        self.kind_head = nn.Sequential(nn.Linear(hidden, hidden), nn.ReLU(), nn.Linear(hidden, 3))
         self.critic = nn.Sequential(nn.Linear(hidden, hidden), nn.ReLU(), nn.Linear(hidden, 1))
         self._init_new_heads()
 
     def _init_new_heads(self) -> None:
-        """WAIT/cancel 头小随机 + WAIT 轻微负偏置 = 温和的"该办就办"先验(§10-D), 不是硬编码策略."""
-        for head in (self.cancel_head, self.wait_head):
-            for m in head.modules():
-                if isinstance(m, nn.Linear):
-                    nn.init.normal_(m.weight, std=0.01)
-                    nn.init.zeros_(m.bias)
-        nn.init.constant_(self.wait_head[-1].bias, -0.5)
+        """新头初始化: cancel 组内打分小随机; **kind 头末层权重置零、偏置 = log(目标构成)**。
+
+        末层权重置零 ⇒ 初始时类别分布**与状态无关地**恰等于 `INIT_KIND_MIX`(见该常量的依据),
+        而不是由随机权重决定。这条是 §17 的直接修复: 上一轮冒烟里 argmax 的动作构成是
+        **WAIT 0% / set 42–45% / cancel 55–58%**(真实撤销率只有 10.44%), 策略从第一步起就在刷
+        cancel, 而所有单点指标(KL≈0 / EV 0.97 / 维度对上 / 权重载入成功)**全都正常**。
+        """
+        for m in self.cancel_head.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, std=0.01)
+                nn.init.zeros_(m.bias)
+        for m in self.kind_head.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, std=0.01)
+                nn.init.zeros_(m.bias)
+        last = self.kind_head[-1]
+        nn.init.zeros_(last.weight)                       # 权重置零 → 输出只由偏置决定
+        mix = torch.tensor(INIT_KIND_MIX, dtype=last.bias.dtype)
+        with torch.no_grad():
+            last.bias.copy_(torch.log(mix / mix.sum()))
 
     # ---- 热启动 ----
     def load_bc_state_dict(self, bc_state: dict, strict: bool = True) -> None:
@@ -111,7 +133,6 @@ class PanelOptionPolicy(nn.Module):
                           batch["x_cancel"]], dim=-1)
         c_log = self.cancel_head(c_in).squeeze(-1)                                # [B,C]
         c_log = c_log.masked_fill(batch["cancel_mask"] < 0.5, NEG)
-        w_log = self.wait_head(summary).squeeze(-1)                               # [B]
         value = self.critic(summary).squeeze(-1)                                  # [B]
 
         flat_set = s_log.reshape(B, -1)                                           # [B,T*Ma]
@@ -119,12 +140,34 @@ class PanelOptionPolicy(nn.Module):
         idx = (batch["opt_row"] * Ma + batch["opt_col"]).clamp(min=0, max=flat_set.shape[1] - 1)
         gathered_set = torch.gather(flat_set, 1, idx)
         gathered_cancel = torch.gather(c_log, 1, batch["opt_row"].clamp(min=0, max=C - 1))
-        kind = batch["opt_kind"]
-        logits = torch.where(kind == 1, gathered_set,
-                             torch.where(kind == 2, gathered_cancel,
-                                         w_log.unsqueeze(1).expand_as(gathered_set)))
-        logits = logits.masked_fill(batch["opt_mask"] < 0.5, NEG)
-        return logits, value, {"set_logits": s_log, "summary": summary}
+
+        # ---- **因子化动作分布(§17 根治)**: log p(选项) = log p(类别) + log p(选项 | 类别) ----
+        # 为什么必须分层: BC pointer 的 logit 尺度**只在"路与路之间"有意义**(它是在只含进路的
+        # softmax 上训出来的); 把它和两个新头的 logit 丢进同一个 softmax, 联合分布就没有标定,
+        # 热启动带来的选路知识会被稀释。分层之后:
+        #   · 选路条件分布 p(选项 | set) 完全由 pointer 决定 → **热启动 100% 生效**, 且这正是
+        #     KL-to-BC 唯一作用的对象(§10-B), 两者从此在同一个数学对象上;
+        #   · 何时办/是否撤 由 kind 头单独学, 尺度自洽, 初始构成可标定(INIT_KIND_MIX)。
+        kind = batch["opt_kind"]                                                  # 0=wait 1=set 2=cancel
+        valid = batch["opt_mask"] > 0.5
+        m_wait, m_set, m_cancel = (kind == 0) & valid, (kind == 1) & valid, (kind == 2) & valid
+
+        def _within(scores, m):
+            """组内 log-softmax(组外置 NEG); 空组返回全 0, 因其类别 logit 会被屏蔽掉。"""
+            x = scores.masked_fill(~m, NEG)
+            return torch.where(m, torch.log_softmax(x, dim=-1), torch.zeros_like(x))
+
+        lp_in = (_within(torch.zeros_like(gathered_set), m_wait)      # WAIT 组只有一个选项 → log1=0
+                 + _within(gathered_set, m_set)
+                 + _within(gathered_cancel, m_cancel))
+
+        avail = torch.stack([m_wait.any(-1), m_set.any(-1), m_cancel.any(-1)], dim=-1)   # [B,3]
+        k_log = self.kind_head(summary).masked_fill(~avail, NEG)                 # [B,3]
+        k_lp = torch.log_softmax(k_log, dim=-1)
+        lp_kind = torch.gather(k_lp, 1, kind.clamp(min=0, max=2))                # [B,O]
+
+        logits = (lp_kind + lp_in).masked_fill(~valid, NEG)                      # 已是 log 概率
+        return logits, value, {"set_logits": s_log, "summary": summary, "kind_log_probs": k_lp}
 
 
 def to_tensors(batch: dict, device) -> dict:

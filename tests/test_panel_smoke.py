@@ -103,7 +103,7 @@ def test_wait_and_cancel_heads_are_new_not_from_bc():
     bc_keys = set(bc.state_dict())
     new_keys = {k for k in pol.state_dict() if not k.startswith("pointer.")}
     assert not (new_keys & {f"pointer.{k}" for k in bc_keys})
-    assert any(k.startswith("wait_head") for k in new_keys)
+    assert any(k.startswith("kind_head") for k in new_keys)
     assert any(k.startswith("cancel_head") for k in new_keys)
     assert any(k.startswith("critic") for k in new_keys)
 
@@ -168,3 +168,46 @@ def test_device_agnostic():
     m = PanelOptionPolicy("gnn", **DIMS, hidden=16).to(dev)
     lg, v, _ = m(b)
     assert lg.device.type == dev.type and v.device.type == dev.type
+
+
+def test_kind_head_starts_at_the_calibrated_action_mix():
+    """**热启动静默失效的守门测试(§17)**。
+
+    上一轮冒烟: 权重载入成功、维度对上、KL≈0、EV 0.97 —— **所有单点指标都正常**, 但 argmax 的
+    动作构成是 WAIT 0% / set 42-45% / **cancel 55-58%**(环境只在 11.7% 的决策点提供 cancel),
+    完成率 0.208 卡死。根因是三类动作的 logit 尺度不可比。分层之后, 初始类别分布必须**就是**
+    `INIT_KIND_MIX`, 且与状态无关(kind 头末层权重置零)。
+    """
+    from derbysim.learn.panel_models import INIT_KIND_MIX
+    b, _enc = _batch(B=6, seed=3)
+    torch.manual_seed(0)
+    m = PanelOptionPolicy("deepsets", **DIMS, hidden=16).eval()
+    with torch.no_grad():
+        _logits, _v, aux = m(b)
+    k = aux["kind_log_probs"].exp()
+    kind, valid = b["opt_kind"], b["opt_mask"] > 0.5
+    avail = torch.stack([((kind == j) & valid).any(-1) for j in range(3)], dim=-1)
+    tgt = torch.tensor(INIT_KIND_MIX)
+    for row, av in zip(k, avail):
+        exp = torch.where(av, tgt, torch.zeros_like(tgt))
+        exp = exp / exp.sum()                                   # 不可用的类别被屏蔽后重新归一
+        assert torch.allclose(row, exp, atol=1e-5), (row.tolist(), exp.tolist())
+
+
+def test_factorised_routing_conditional_is_exactly_the_pointer():
+    """分层的意义: p(选项 | set) **必须恰好等于** pointer 的选路分布 —— 热启动 100% 生效,
+    且与 KL-to-BC 作用的对象(`routing_log_probs`)是同一个数学量(§10-B)。"""
+    b, _enc = _batch(B=5, seed=7)
+    torch.manual_seed(1)
+    m = PanelOptionPolicy("deepsets", **DIMS, hidden=16).eval()
+    with torch.no_grad():
+        logits, _v, aux = m(b)
+        k_lp = aux["kind_log_probs"]
+    kind, valid = b["opt_kind"], b["opt_mask"] > 0.5
+    for j, tag in ((1, "set"), (2, "cancel")):
+        sel = (kind == j) & valid
+        for bi in range(logits.shape[0]):
+            if int(sel[bi].sum()) < 1:
+                continue
+            within = (logits[bi][sel[bi]] - k_lp[bi, j]).exp()
+            assert float(within.sum()) == pytest.approx(1.0, abs=1e-4), (tag, float(within.sum()))

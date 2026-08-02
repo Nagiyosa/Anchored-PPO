@@ -55,6 +55,14 @@ class PPOConfig:
     # PPO 标准护栏: 一次更新内策略走太远就提前停 epoch 循环。实测三轮训练都在解冻后约 20 轮见顶
     # 然后塌(KL-to-BC 0.028→0.044, 熵 0.888→0.769) —— 更新步长失控是主要嫌疑。
     target_kl: float | None = 0.02
+    # **时机锚(2026-08-02)**: 对 p(动作类别) 到信号员实测构成的 KL。§10-B 的设计只约束**选路**,
+    # `kind_head`(何时办/是否撤)完全没有锚 —— 当初假设"奖励会管住它", 实测**不会**: 撤销能立刻
+    # 释放预留、降低其它车的 held_time(即时正奖励), 而代价(完成率下降)是分摊到全局、延后到终局的
+    # 一笔总账; 即使 γ=1/λ=1 让信用完整回溯, 那笔账摊到 ~350 步上单步优势里几乎看不见。
+    # 实测后果: cancel 占比 0%→58%, completion 从 0.306 退回 0.241(真实撤销率只有 10.44%)。
+    # 与 KL-to-BC 完全同构, 锚点是**数据**(信号员 2857 步实测 WAIT 10.2%/set 89.8%/cancel 0%,
+    # 撤销按真实 10.44% 给非零下限 = `INIT_KIND_MIX`)。0 = 关掉(消融对照)。
+    kind_anchor_beta: float = 0.05
 
 
 def masked_categorical(logits, opt_mask):
@@ -87,10 +95,10 @@ class TorchPanelDriver:
         batch = to_tensors(collate_panels([enc]), self.device)
         self.policy.eval()
         with torch.no_grad():
-            logits, value, _aux = self.policy(batch)
+            logits, value, aux = self.policy(batch)
             dist = masked_categorical(logits, batch["opt_mask"])
             if self.greedy:
-                idx = logits.argmax(dim=-1)
+                idx = greedy_option(logits, batch, aux)
             else:
                 probs = dist.probs
                 idx = torch.multinomial(probs, 1, generator=self.generator).squeeze(-1)
@@ -99,6 +107,45 @@ class TorchPanelDriver:
         if self.ret_norm is not None:
             v = float(self.ret_norm.denormalise(v))
         return int(idx.item()), float(logp.item()), v
+
+
+def greedy_option(logits, batch, aux):
+    """因子化策略的**贪心动作 = 先选类别、再在类别内选** —— 不是在扁平 logits 上取 argmax。
+
+    **为什么不能扁平 argmax(2026-08-01 实测抓到)**: 分层之后
+    `log p(选项) = log p(类别) + log p(选项 | 类别)`。WAIT 类只有 **1 个**选项, 概率全给它;
+    set 类的 0.80 要摊到 N 条候选进路上, 每条只有 0.80/N。于是 **N > 5.3 时任何单条进路的概率都
+    低于 WAIT**, 扁平 argmax 必然选 WAIT —— 而 WAIT 又让车堆积、下个决策点候选更多, **自我放大**
+    成 WAIT 100%(实测初始体检: WAIT 100% / completion 0.028, 与"永远WAIT"红队策略同级)。
+    这**不是策略偏好, 是"把混合分布的众数当成决策"这个操作本身的偏差** —— 采样(训练时)完全没有
+    这个问题, 只有贪心评估会中招。正确的贪心是**按类别的边际取最大, 再在该类别内取最大**。
+    """
+    k_lp = aux.get("kind_log_probs") if isinstance(aux, dict) else None
+    if k_lp is None:
+        return logits.argmax(dim=-1)
+    kind, valid = batch["opt_kind"], batch["opt_mask"] > 0.5
+    best_kind = k_lp.argmax(dim=-1, keepdim=True)                 # [B,1] 不可用类别已是 NEG
+    sel = (kind == best_kind) & valid
+    sel = torch.where(sel.any(-1, keepdim=True), sel, valid)      # 兜底: 该类别恰好无有效选项
+    return logits.masked_fill(~sel, float("-inf")).argmax(dim=-1)
+
+
+def kind_anchor_kl(kind_log_probs, batch) -> torch.Tensor:
+    """KL(p(类别) ‖ 信号员实测构成) —— **按可用性重新归一化后**再比。
+
+    某类别在该决策点没有选项时它的概率恒为 0; 若不把锚也按同样的掩码重新归一化, 锚就会去推
+    一个**不可能的动作**, 那是纯噪声。
+    """
+    from derbysim.learn.panel_models import INIT_KIND_MIX
+    kind, valid = batch["opt_kind"], batch["opt_mask"] > 0.5
+    avail = torch.stack([((kind == j) & valid).any(-1) for j in range(3)], dim=-1)      # [B,3]
+    a = torch.as_tensor(INIT_KIND_MIX, dtype=kind_log_probs.dtype,
+                        device=kind_log_probs.device).unsqueeze(0) * avail
+    a = a / a.sum(-1, keepdim=True).clamp(min=1e-8)
+    p = kind_log_probs.exp()
+    term = torch.where(avail, p * (kind_log_probs - torch.log(a.clamp(min=1e-8))),
+                       torch.zeros_like(p))
+    return term.sum(-1).mean()
 
 
 def routing_kl(policy, bc_ref, batch) -> torch.Tensor:
@@ -146,10 +193,20 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
     if cfg.normalise_adv and n > 1:
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
     stats = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0,
-             "kl_to_bc": 0.0, "clip_frac": 0.0, "n_minibatch": 0, "explained_variance": 0.0,
+             "kl_to_bc": 0.0, "kind_anchor_kl": 0.0, "clip_frac": 0.0, "n_minibatch": 0, "explained_variance": 0.0,
              "approx_kl": 0.0, "kl_early_stops": 0}
     preds = np.zeros(n, dtype=np.float64)
-    policy.train()
+    # **必须 eval() 而不是 train() —— dropout 会污染重要性比(2026-08-01 实测)。**
+    # `old_logp` 是 rollout 时采的, 而 driver 里调的是 `policy.eval()`(dropout 关)。若这里开 train(),
+    # `logp` 带 dropout 噪声 ⇒ `ratio = exp(logp - old_lp)` 比较的是**两个不同的网络**, 与参数是否
+    # 更新无关。后果实测: `approx_kl` 在**任何学习发生之前**就有 0.023–0.081, 高于 `target_kl=0.02`
+    # ⇒ 每个 epoch 的第一个 minibatch 就 break。1M 步那轮 240 迭代共触发 **895 次早停 ≈ 每轮 3.7 次**
+    # (update_epochs=4) ⇒ 每轮只做约 4 个 minibatch 更新, 而本该做 (4096/64)×4 = 256 个 —— **实际
+    # 只执行了 1.5% 的更新**, 且这 1.5% 用的还是被噪声污染的 ratio。曲线因此从头到尾平坦
+    # (it9 0.284 → it239 0.274, 最佳 0.299 全在噪声带内)。
+    # 模型无 BatchNorm, eval() 只关 dropout, 梯度照常回传。RL 策略网络不用 dropout 是通行做法;
+    # BC 那边是监督学习, dropout 保留不变。
+    policy.eval()
     rng = np.random.default_rng(0)
     for _ in range(cfg.update_epochs):
         order = rng.permutation(n)
@@ -171,18 +228,19 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
             val_loss = ((value - mb_ret) ** 2).mean()
             ent = dist.entropy().mean()
             kl = routing_kl(policy, bc_ref, batch) if cfg.kl_beta > 0 else torch.zeros((), device=device)
+            kkl = (kind_anchor_kl(_aux["kind_log_probs"], batch)
+                   if (cfg.kind_anchor_beta > 0 and isinstance(_aux, dict)
+                       and "kind_log_probs" in _aux) else torch.zeros((), device=device))
             if value_only:
                 loss = val_loss                       # critic 预热: 策略不动
             else:
-                loss = pol_loss + cfg.vf_coef * val_loss - cfg.ent_coef * ent + cfg.kl_beta * kl
+                loss = (pol_loss + cfg.vf_coef * val_loss - cfg.ent_coef * ent
+                        + cfg.kl_beta * kl + cfg.kind_anchor_beta * kkl)
             preds[sel] = value.detach().to("cpu").numpy().astype("float64")
 
             with torch.no_grad():                     # 本次更新把策略推了多远(PPO 标准诊断)
                 approx_kl = float((old_lp - logp).mean().item())
             stats["approx_kl"] = max(stats.get("approx_kl", 0.0), abs(approx_kl))
-            if cfg.target_kl is not None and abs(approx_kl) > cfg.target_kl and not value_only:
-                stats["kl_early_stops"] = stats.get("kl_early_stops", 0) + 1
-                break
             optimizer.zero_grad()
             loss.backward()
             if cfg.max_grad_norm:
@@ -193,12 +251,21 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
             stats["value_loss"] += float(val_loss.item())
             stats["entropy"] += float(ent.item())
             stats["kl_to_bc"] += float(kl.item())
+            stats["kind_anchor_kl"] += float(kkl.item())
             stats["clip_frac"] += float(((ratio - 1).abs() > cfg.clip).float().mean().item())
             stats["n_minibatch"] += 1
+            # **护栏放在更新之后**(SB3 口径, 2026-08-01 修): 原先在 step 之前就 break —— 只要第一个
+            # minibatch 的 approx_kl 超阈, 整轮**一次更新都不做**且 `n_minibatch=0`, 训练静默空转。
+            # 行为策略与当前策略差得远时(如用随机策略采的数据热启动)必然触发。
+            if cfg.target_kl is not None and abs(approx_kl) > cfg.target_kl and not value_only:
+                stats["kl_early_stops"] = stats.get("kl_early_stops", 0) + 1
+                break
     k = max(stats["n_minibatch"], 1)
-    for key in ("policy_loss", "value_loss", "entropy", "kl_to_bc", "clip_frac"):
+    for key in ("policy_loss", "value_loss", "entropy", "kl_to_bc", "kind_anchor_kl", "clip_frac"):
         stats[key] /= k
     stats["explained_variance"] = explained_variance(preds, data["ret"])
+    # 护栏若长期主导, 训练就是在空转 —— 必须能一眼看见(而不是埋在 JSON 里)。
+    stats["kl_stop_rate"] = stats["kl_early_stops"] / max(cfg.update_epochs, 1)
     stats["value_only"] = bool(value_only)
     return stats
 
