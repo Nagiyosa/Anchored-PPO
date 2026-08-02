@@ -1,7 +1,7 @@
 """M12 训练/评估场景构造（无 torch）。
 
-**当前口径(D27, 2026-07-31)**: episode = **运营日 03:00→次日 03:00**, 全部 98 天按时间划分,
-**不做拥堵度筛选** —— 见本文件下半部分 `operating_days` 上方的长注释(含 03:00 的数据依据)。
+**当前口径(D27+D34)**: episode = **运营日 03:00→次日 03:00**，原始 98 天按时间划分，
+RL 默认排除首尾两个未覆盖完整 24h 的边界残日，使用 96 个完整运营日；**不做拥堵度筛选**。
 入口: `operating_days` / `build_day_trains` / `day_horizon`。
 
 **已作废的旧口径**: "只取真实拥堵的 3h 窗口"。其依据"常态窗口注入延误 Δ=0"是单窗口测量,
@@ -19,9 +19,8 @@
 延误抬到 **2.5 倍**(6544s→16487s)而人**没有机会重新决策** ⇒ 人类对照锚被系统性压低, 我们跟它
 比偏易; ④"扰动下是否 robust"用**真实数据里本来就有的乱日子**分层报告即可(见 `congested_windows`)。
 
-**薄日**: 98 天里 09-01(5)/09-30(17)/12-07(37) 决策数远低于中位 568(数据缺口, M11_DESIGN §2
-已记录, 决定**保留**)。训练侧 `collect_rollout` 按步数预算收集 → 天然按天量计权;
-评估侧 `rollout.evaluate_policy` 一律**微平均**, 不按局等权(否则 5 辆车的日子 = 241 辆的日子)。
+**缺口日**: BC 仍保留全部 98 天。RL 排除边界残日 09-01/12-07；期中缺口 09-30 无法由
+边界完整性规则识别，仍保留。训练按步数预算，评估一律**微平均**，二者都避免薄日等权放大。
 """
 from __future__ import annotations
 
@@ -181,15 +180,20 @@ def episode_horizon(window: dict, drain_s: float = 1200.0) -> float:
 #   `_RUN_GAP_S` 视为不匹配), 否则午夜后的车会拿到差 24 小时的 `planned_ref`(实测确认);
 #   同 headcode 同日多趟的互相覆盖也一并修掉(全量 6.0% 趟次受影响, 见 M10_DESIGN F12)。
 #
-# **薄日不剔除**: 09-01(5 决策, TD 从 14:51 才开始) / 09-30(17, 期中数据缺口) / 12-07(37, TD 到
-#   06:23 结束), 对比中位 568。M11_DESIGN §2 已记录这 3 天并决定**保留**(BC 侧它们只占 0.01%
-#   样本)。RL 侧沿用: 训练按步数预算收集 → 自动按天量计权; 评估用微平均(见 evaluate_policy)。
-#   注意"只保留被数据范围完整覆盖的日"这类规则**抓不到 09-30**(它在期中), 故不采用。
+# **边界残日与期中薄日分开处理(D34)**: 09-01(TD 14:51 才开始)和 12-07(TD 06:25 结束)
+#   缺失运营日的大部分历史，不能作为完整 RL episode，默认排除；原始 TD 与 BC 样本不删。
+#   09-30 是期中缺口，边界规则抓不到，仍保留并通过按步训练/微平均评估降低其影响。
 OPERATING_DAY_CUT_HOUR = 3
 
 
-def operating_days(split: str = "train", val_frac: float = 0.15) -> list[dict]:
-    """按时间顺序切运营日(03:00→次日 03:00); 划分沿用 §10-E 的日期界, 不做拥堵度筛选。"""
+def operating_days(split: str = "train", val_frac: float = 0.15,
+                   include_partial: bool = False) -> list[dict]:
+    """按时间顺序切运营日(03:00→次日 03:00), 不做拥堵度筛选。
+
+    默认排除数据首尾未完整覆盖 24h 的边界残日。它们仍留在原始 TD/BC 数据中；这里只是不把
+    缺失大半天历史的片段伪装成完整的 RL episode。`include_partial=True` 仅供审计原始覆盖范围。
+    期中缺口日(09-30)不会被这条边界规则隐藏，仍保留并由微平均降低其权重。
+    """
     td = _td_events()
     lo = (td["ts"].min() - pd.Timedelta(hours=OPERATING_DAY_CUT_HOUR)).normalize()
     hi = (td["ts"].max() - pd.Timedelta(hours=OPERATING_DAY_CUT_HOUR)).normalize()
@@ -197,6 +201,8 @@ def operating_days(split: str = "train", val_frac: float = 0.15) -> list[dict]:
              "end": d + pd.Timedelta(hours=OPERATING_DAY_CUT_HOUR) + pd.Timedelta(days=1)}
             for d in pd.date_range(lo, hi, freq="D")]
     days = [d for d in days if d["end"] > td["ts"].min() and d["start"] < td["ts"].max()]
+    if not include_partial:
+        days = [d for d in days if d["start"] >= td["ts"].min() and d["end"] <= td["ts"].max()]
     if split == "all":
         return days
     tr = [d for d in days if d["start"] < TRAIN_END]

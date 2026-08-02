@@ -336,7 +336,7 @@ def test_window_split_is_reproducible_and_pinned():
 
 
 def test_operating_day_split_is_pinned():
-    """运营日划分(03:00→次日03:00, 全部 98 天按时间切)也要指纹钉死, 理由同上一条。
+    """运营日划分(03:00→次日03:00, 边界完整的 96 天)也要指纹钉死, 理由同上一条。
 
     切在 03:00 是**数据定的**: 绕开按自然日分组的 `train_occurrences`(该表建表时把跨午夜趟次
     劈成两行, 结构上测不出 00:00 的切断), 从原始 TD 按 90min 间隙重切趟后实测 98 天 ——
@@ -345,13 +345,14 @@ def test_operating_day_split_is_pinned():
     import hashlib
     from derbysim.learn.scenarios import OPERATING_DAY_CUT_HOUR, operating_days
     assert OPERATING_DAY_CUT_HOUR == 3
-    expect = {"train": (65, "0b73a18f5505"), "val": (11, "81da1a644bed"),
-              "test": (22, "9ecbdf00101e")}
+    expect = {"train": (64, "14514768ea24"), "val": (11, "81da1a644bed"),
+              "test": (21, "4d5a4d7bfc04")}
     for split, (n_exp, fp_exp) in expect.items():
         ds = operating_days(split)
         fp = hashlib.sha1("|".join(str(d["start"]) for d in ds).encode()).hexdigest()[:12]
         assert (len(ds), fp) == (n_exp, fp_exp), f"{split}: {(len(ds), fp)} != {(n_exp, fp_exp)}"
-    assert len(operating_days("all")) == 98          # **全部 98 天, 无拥堵度筛选**
+    assert len(operating_days("all")) == 96          # 只排首尾残日, 无拥堵度筛选
+    assert len(operating_days("all", include_partial=True)) == 98
     S = lambda sp: {d["start"] for d in operating_days(sp)}
     assert not (S("train") & S("test")) and not (S("train") & S("val")) and not (S("val") & S("test"))
 
@@ -372,10 +373,9 @@ def test_cif_lookup_matches_the_right_run():
 def test_eval_pools_across_days_instead_of_weighting_thin_days_equally():
     """`evaluate_policy` 必须**微平均**(Σ到达/Σ可完成), 不按局等权。
 
-    98 个运营日的车数从 **5 到 241** 差 48 倍(09-01=5 / 09-30=17 / 12-07=37 是数据缺口日,
-    M11_DESIGN §2 已记录并决定保留)。旧写法 `sum(r[k])/len(rows)` 让 5 车的日子和 241 车的
-    日子等权: 11 个 val 日里一个薄日就占 9% 的分数, 而 12-07 在 **test** 划分里, 会直接进
-    M13 的最终数字。这里用一个"1 车全完成 + 1 车全不完成(99 车)"的构造把两种口径分开。
+    D34 已排除首尾两个边界残日，但完整运营日的车数仍相差很大，且期中的 09-30 缺口仍保留。
+    旧写法 `sum(r[k])/len(rows)` 会让薄日和正常日等权。这里用一个“1 车全完成 + 99 车全不
+    完成”的构造把两种口径分开。
     """
     from derbysim.learn.rollout import evaluate_policy
 

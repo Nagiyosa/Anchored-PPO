@@ -10,7 +10,8 @@
     --half-life    SMDP 折扣半衰期(秒)。**默认不给 = γ=1 不打折**(§10-G); M12e 扫 300/900/3600
     --encoder      mlp/deepsets/settransformer/gnn (D9 消融; bring-up 用 deepsets)
     --split        train/val (test 是完全留出集, 本脚本**拒绝**跑 test, §10-E)
-    场景 = **运营日**(03:00→次日03:00, 98 天按时间划分 train65/val11/test22), 不筛拥堵窗口(D27),
+    场景 = **运营日**(03:00→次日03:00, 完整覆盖的 96 天按时间划分 train64/val11/test21),
+    不筛拥堵窗口(D27+D34),
                    **真实历史、不注入合成扰动**(D28)
     --steps-per-iter 每轮更新的步数预算(不是局数 —— 局长在 180-4586 间晃, batch 会不稳)
     --eval-every   每 N 轮在**固定评估集**上评一次(val 运营日, **真实历史不注入** D28),
