@@ -124,6 +124,38 @@ policy: 92–99% of the delay came from trains that never finished. Near human l
 trains" gradient — a sensible progression, so rescaling would not be justified. Tests: 121 passed,
 3 skipped.
 
+### M12d — the bottleneck is compounding trajectory divergence, not route choice or ordering (2026-08-02)
+Two diagnostic experiments over four validation operating days.
+- **Overlap depth is a real but secondary factor.** Dispatch-when-possible scores 0.396 / 0.353 /
+  0.288 at overlap depths 0 / 1 / 2 while the signaller stays at 1.000 throughout. Region capacity is
+  genuinely tightened by the overlap model, but nothing here explains a gap between 1.000 and 0.35.
+  It belongs in the limitations and in the M13 robustness ablation, not in the causal account.
+- **The timing-axis experiment was mis-designed, and finding out why was the real result.** Five
+  ordering rules produced bit-identical outcomes. The reason is that the panel offers at most one
+  train at a time: of 1,017 signaller decision points, 914 offer exactly one train and **none offer
+  two or more**; the same holds under dispatch-when-possible. Choosing which train to serve first
+  does not exist in the action space — the engine serialises awaiting trains. The measurement was of
+  a degree of freedom that is not there. The agent's only timing lever is whether to act on the train
+  in front of it or wait, and waiting is itself the reordering mechanism.
+- **What is actually wrong.** Under dispatch-when-possible, **72% of decision points offer no set
+  option at all**, against 10% for the signaller. It is not declining to act; there is nothing to act
+  on, because trains are stuck and the reachability and deadlock masks have removed every candidate.
+  Meanwhile the signaller's own action mix is 11% wait and 89% set — it is *also* dispatching
+  whenever it can. The only difference is which route, and the lookup reproduces the human's route
+  choice 90.6% of the time while doing *worse* in closed loop. The one explanation consistent with
+  all of this is covariate shift: the logged route is the choice made in a world where the whole day
+  worked, and one step off that trajectory the "most frequent" route is no longer the right one.
+  Error compounds decision by decision and the environment offers no recovery. This is the textbook
+  compounding-error problem of imitation learning, and it accounts at once for BC improving from
+  0.627 to 0.933 with no closed-loop movement, for the lookup's high match rate and poor closed-loop
+  result, and for 860k PPO steps producing nothing. It is also precisely the problem online RL exists
+  to solve, so the premise of M12 stands.
+- Next, in order: a single-deviation recovery test (force one alternative legal route at step k of the
+  signaller replay, sweep k, and see whether the day recovers); a redesigned timing axis that varies
+  *when not to dispatch* rather than which train to serve; and an audit of why 72% of decision points
+  offer nothing, checking whether any of it is a modelling defect such as queued requests never being
+  retried.
+
 ### M12d — the bottleneck is *when* to dispatch, not *which* route (2026-08-02)
 - **The kind anchor works but does not unlock learning.** A KL from the action-kind distribution to
   the signaller's measured mix (`kind_anchor_beta = 0.05`) held cancellations at 0% for all 200
