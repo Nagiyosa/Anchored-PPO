@@ -81,7 +81,7 @@ def make_policy(env, route_axis: str, timing_axis: str, prior=None, sig_of=None)
             c = str(getattr(t, "service_class", "") or "9")
             return -float(c) if c.isdigit() else -9.0         # TOPS 1=最快 → 分最高
         if timing_axis == "fewest_remaining":
-            return -float(len(t.route_chain) - t.route_ptr)   # 快跑完的先放走
+            return -float(max(len(t.route_chain) - len(t.actual_chain), 0))  # 临时参考深度；D33 后重审
         return 0.0                                            # "first" = 面板顺序
 
     def score_route(slot):

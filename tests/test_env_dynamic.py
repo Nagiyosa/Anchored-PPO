@@ -89,11 +89,51 @@ def test_cancel_returns_train_to_awaiting():
     tB = DynTrain("B", [P.route_id], 0.0)
     eng.trains = {"B": tB}
     eng.res.request(P, "B")                           # B 请求 P → QUEUED
-    tB.pending_route = P.route_id
-    tB.route_ptr = 1
+    tB.pending_request = P.route_id
+    reference = tuple(tB.route_chain)
     eng._apply(PanelAction("cancel", "B"))
-    assert tB.pending_route is None and tB.awaiting_decision and tB.route_ptr == 0
+    assert tB.pending_request is None and tB.awaiting_decision
+    assert tB.actual_chain == [] and tuple(tB.route_chain) == reference
     assert not any(rid == P.route_id and tr == "B" for rid, tr in eng.res.queue)
+
+
+def test_reference_pending_actual_and_physical_state_are_separate():
+    """D33 step 2: an alternate lock must not rewrite or advance the logged reference chain."""
+    net, params, _, _, _ = _load()
+    eng = DynamicEngine(net, params)
+    logged, alternate = _disjoint_pair(net, eng.res)
+    t = DynTrain("T", [logged.route_id], 0.0)
+    eng.trains = {t.train_id: t}
+    reference = tuple(t.route_chain)
+
+    assert eng._request(t, alternate.route_id)
+    assert tuple(t.route_chain) == reference             # historical reference is read-only
+    assert t.pending_request is None
+    assert t.actual_chain == [alternate.route_id]        # committed route is the chosen route
+    assert t.path == list(alternate.tc_sequence)         # physical plan follows actual route
+    assert t.path_route_ids == [alternate.route_id] * len(t.path)
+    assert eng._decision_signal(t) == alternate.end_signal
+    with pytest.raises(AttributeError):
+        t.route_chain.append(alternate.route_id)
+
+
+def test_queued_request_enters_actual_chain_only_after_lock():
+    net, params, _, _, _ = _load()
+    eng = DynamicEngine(net, params)
+    route, _ = _disjoint_pair(net, eng.res)
+    eng.res.request(route, "A")
+    t = DynTrain("B", [route.route_id], 0.0)
+    eng.trains = {t.train_id: t}
+
+    assert not eng._request(t, route.route_id)
+    assert t.pending_request == route.route_id
+    assert t.actual_chain == [] and t.path == []
+
+    eng.res.release_route(route.route_id, "A")            # queue becomes physically LOCKED
+    eng._wake()                                            # engine observes that transition
+    assert t.pending_request is None
+    assert t.actual_chain == [route.route_id]
+    assert t.path == list(route.tc_sequence)
 
 
 def test_deadlock_flags_terminal():
@@ -306,7 +346,7 @@ def test_release_behind_never_frees_a_track_the_train_still_needs():
     eng = DynamicEngine(net, params, ptc, dwell)
     eng.trains = {}
     t = SimpleNamespace(train_id="LOOP", path=["A", "B", "A", "B", "A", "B"], pos=2, done=False,
-                        pending_route=None)
+                        pending_request=None)
     eng.res.reserved = {"A": ("r0", "LOOP"), "B": ("r1", "LOOP")}
     eng.res.holder_fp = {("r0", "LOOP"): frozenset({"A"}), ("r1", "LOOP"): frozenset({"B"})}
     eng._release_behind(t, 0)                       # path[0] == "A" == 车当前所在

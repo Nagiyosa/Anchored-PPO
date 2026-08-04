@@ -173,7 +173,7 @@ def collect_rollout(env_factory, adapter, policy_factory, episode_iter, target_s
     冒烟轮实测每 iter 的步数在 180–4586 之间晃(25×) —— batch 大小随机会让 PPO 本身不稳,
     且"这一轮回报"被"抽到哪个窗口"主导而非策略质量。改成凑够 `target_steps` 再更新。
     `episode_iter` 产出 **(标签, 造车函数)** —— 必须是**函数**不是车列表: `DynTrain` 有状态
-    (引擎推进 route_ptr/path), 复用同一批对象跑第二次会拿到"已跑完"的车 → 完成率/延误全是假的
+    (引擎推进 actual_chain/path/pos), 复用同一批对象跑第二次会拿到"已跑完"的车 → 完成率/延误全是假的
     (2026-07-30 实测撞到: 三个策略评出完全相同的数字)。`policy_factory(env) -> act_fn`(见 `as_factory`)。
     """
     transitions, metrics = [], []

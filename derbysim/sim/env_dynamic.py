@@ -39,15 +39,17 @@ class PanelDecision:
 @dataclass
 class DynTrain:
     train_id: str
-    route_chain: list[str]
+    route_chain: tuple[str, ...]                   # 只读历史参考链；不得表示反事实运行进度(D33)
     entry_time: float
     stop_pids: set = field(default_factory=set)
     booked_platform: int | None = None
     planned_ref: float | None = None       # CIF 计划参考时刻(供 signed 延误)
     service_class: str = ""                 # headcode 首位 = TOPS 优先级
-    path: list[str] = field(default_factory=list)      # 仅已锁进路的 TC
-    route_ptr: int = 0
-    pending_route: str | None = None
+    # 四轨状态(D33 step 2): 历史参考 / 待锁请求 / 已锁实际链 / 物理位置必须互不代用。
+    actual_chain: list[str] = field(default_factory=list)  # 仅 LOCKED 后追加，含入口进路
+    pending_request: str | None = None                   # QUEUED 请求；尚不属于 actual_chain
+    path: list[str] = field(default_factory=list)        # 已锁实际链展开出的 TC
+    path_route_ids: list[str] = field(default_factory=list)  # 与 path 逐位对齐的来源进路
     awaiting_decision: bool = False
     entered: bool = False
     pos: int = 0
@@ -58,7 +60,7 @@ class DynTrain:
     wait_time: float = 0.0
     blocked_since: float | None = None
     # M12b: "站在信号机前等面板给路"的时长。引擎原先只在**已请求进路但被排队**(blocked_since)时
-    # 计延误 → 干脆不给车办路反而零延误(实测: 随机策略 12 辆车 route_ptr 0/N、wait_time 全 0)。
+    # 计延误 → 干脆不给车办路反而零延误(实测: 随机策略 12 辆车实际链 0/N、wait_time 全 0)。
     # 车停着就是在耗时间, 与"排队等锁"对旅客无区别 → 单列累计, 与 blocked_since **互斥**(见 _apply)。
     held_time: float = 0.0
     hold_start: float | None = None
@@ -66,6 +68,10 @@ class DynTrain:
     sim_occ: dict = field(default_factory=dict)
     reached_exit: bool = False
     goal: object = None
+
+    def __post_init__(self):
+        # 输入通常来自 EnvTrain.list；转 tuple 让“只读参考”成为结构约束，而非注释约定。
+        self.route_chain = tuple(self.route_chain)
 
 
 class DynamicEngine:
@@ -129,16 +135,20 @@ class DynamicEngine:
         return out
 
     def _decision_signal(self, t):
-        prev = self.net.routes.get(t.route_chain[t.route_ptr - 1]) if t.route_ptr >= 1 else None
+        prev = self.net.routes.get(t.actual_chain[-1]) if t.actual_chain else None
         return prev.end_signal if prev else None
 
     def _append_locked(self, t, route_id):
         r = self.net.routes.get(route_id)
         if not r:
             return
+        if not self.res.is_locked(route_id, t.train_id):
+            raise RuntimeError(f"cannot commit unlocked route {(route_id, t.train_id)!r}")
+        t.actual_chain.append(route_id)
         for tc in r.tc_sequence:
             if not t.path or t.path[-1] != tc:
                 t.path.append(tc)
+                t.path_route_ids.append(route_id)
                 if (t.dwell_idx is None and tc in self.plat_tc_to_pid
                         and self.plat_tc_to_pid[tc] in t.stop_pids):
                     t.dwell_idx = len(t.path) - 1
@@ -146,13 +156,12 @@ class DynamicEngine:
 
     def _request(self, t, route_id):
         r = self.net.routes.get(route_id)
-        t.route_ptr += 1
         st = self.res.request(r, t.train_id) if r else LOCKED
         if st == LOCKED:
             self._append_locked(t, route_id)
-            t.pending_route = None
+            t.pending_request = None
             return True
-        t.pending_route = route_id
+        t.pending_request = route_id
         t.blocked_since = self.now
         if t.hold_start is None:
             # 请求被排队 = 车走不动 → 起计。**入区进路**也走这条路径: 卡在入区口的车原先
@@ -167,7 +176,7 @@ class DynamicEngine:
 
     def _blocker_sig(self, t):
         """挡住车 t 待办进路的持有者集合 (route_id, 车) —— 引擎原生量, 非自造指标。"""
-        r = self.net.routes.get(t.pending_route) if t.pending_route else None
+        r = self.net.routes.get(t.pending_request) if t.pending_request else None
         if r is None:
             return ()
         hs = {self.res.reserved.get(tc) for tc in self.res.footprint(r)}
@@ -188,7 +197,7 @@ class DynamicEngine:
         """
         out = []
         for t in self.trains.values():
-            if t.pending_route is None or t.done:
+            if t.pending_request is None or t.done:
                 continue
             if t.blocked_since is None or t.blocked_since >= self.now:
                 continue
@@ -205,8 +214,10 @@ class DynamicEngine:
                 r = self.net.routes.get(rid)
                 if r and not would_create_deadlock(self.res, r, t.train_id):   # 前瞻屏蔽
                     opts.append(PanelAction("set", t.train_id, rid))
-            if t.route_ptr < len(t.route_chain):
-                logged[t.train_id] = t.route_chain[t.route_ptr]
+            # Step 5 会改为按实际位置匹配；在此之前只允许这个历史参考读取点存在。
+            ref_idx = len(t.actual_chain)
+            if ref_idx < len(t.route_chain):
+                logged[t.train_id] = t.route_chain[ref_idx]
         for t in cancellable:
             opts.append(PanelAction("cancel", t.train_id))
         return opts, logged
@@ -221,12 +232,12 @@ class DynamicEngine:
             if has_deadlock(self.res):
                 self._flag_deadlock()
         elif a.kind == "cancel" and t is not None:
-            rid = t.pending_route
+            rid = t.pending_request
             if rid is not None:
                 self.res.queue = [(q, tr) for q, tr in self.res.queue
                                   if not (q == rid and tr == t.train_id)]
-                t.route_ptr -= 1                 # 撤销该决策 → 重回待决同一槽
-                t.pending_route = None
+                # queued request 从未进入 actual_chain；撤销只清 pending，不回退任何实际进度。
+                t.pending_request = None
                 if t.blocked_since is not None:          # 排队等锁的那段**必须结清**, 不能丢
                     t.wait_time += self.now - t.blocked_since
                     t.blocked_since = None
@@ -298,8 +309,8 @@ class DynamicEngine:
             self.collisions.append({"t": self.now, "tc": tc, "train": t.train_id,
                                     "holder_route": hr[0],
                                     "holder_train": hr[1],
-                                    "intruder_route": t.route_chain[t.route_ptr - 1]
-                                    if t.route_ptr >= 1 else None,
+                                    "intruder_route": t.actual_chain[-1]
+                                    if t.actual_chain else None,
                                     "intruder_pos": idx})
         t.pos = idx
         if t.hold_start is not None:                 # **只有真的动了**才结清"走不动"计时
@@ -336,11 +347,11 @@ class DynamicEngine:
 
     def _wake(self):
         for t in self.trains.values():
-            if t.done or t.pending_route is None:
+            if t.done or t.pending_request is None:
                 continue
-            if self.res.is_locked(t.pending_route, t.train_id):
-                self._append_locked(t, t.pending_route)
-                t.pending_route = None
+            if self.res.is_locked(t.pending_request, t.train_id):
+                self._append_locked(t, t.pending_request)
+                t.pending_request = None
                 if t.blocked_since is not None:
                     t.wait_time += self.now - t.blocked_since
                     t.blocked_since = None
@@ -353,12 +364,13 @@ class DynamicEngine:
     def _on_try_advance(self, d):
         t = self.trains[d["tr"]]
         idx = d["idx"]
-        if t.pos != idx or t.done or t.pending_route is not None or t.awaiting_decision:
+        if t.pos != idx or t.done or t.pending_request is not None or t.awaiting_decision:
             return
         if idx + 1 < len(t.path):
             self.q.push(self.now, "enter", {"tr": t.train_id, "idx": idx + 1})
             return
-        if t.route_ptr < len(t.route_chain):        # 段末 → 待决(面板相位处理)
+        # Transitional stop rule only: Step 4 replaces historical length with goal+route-cap.
+        if len(t.actual_chain) < len(t.route_chain):
             t.awaiting_decision = True
             if t.hold_start is None:
                 t.hold_start = self.now              # 开始"走不动": 站着等面板给路
@@ -369,8 +381,8 @@ class DynamicEngine:
             t.held_time += self.now - t.hold_start
             t.hold_start = None
         t.reached_exit = self._at_goal_exit(t)
-        for k in range(t.route_ptr):
-            self.res.release_route(t.route_chain[k], t.train_id)   # 带车: 不能释放别人的锁
+        for route_id in t.actual_chain:
+            self.res.release_route(route_id, t.train_id)   # 释放实际锁过的键，不碰历史参考链
         self._wake()
 
     def _delay_min(self, t):
@@ -393,8 +405,9 @@ class DynamicEngine:
                 "cur_tc": t.path[t.pos] if t.pos < len(t.path) else None,
                 "pos_idx": t.pos,
                 "awaiting": t.awaiting_decision,
-                "has_pending": t.pending_route is not None,
-                "pending_route": t.pending_route,      # M12a: cancel(t) 选项特征需要它(自身动作, 非泄露)
+                "has_pending": t.pending_request is not None,
+                # 保持面板观测契约名称；值来自独立的 pending-request 状态。
+                "pending_route": t.pending_request,
                 "served_platform": t.served_platform,
                 "booked_platform": t.booked_platform,
                 "delay_min": self._delay_min(t),
@@ -417,7 +430,7 @@ class DynamicEngine:
         }
 
     def _at_goal_exit(self, t):
-        last = self.net.routes.get(t.route_chain[t.route_ptr - 1]) if t.route_ptr >= 1 else None
+        last = self.net.routes.get(t.actual_chain[-1]) if t.actual_chain else None
         return bool(last and t.goal and last.end_signal in t.goal.exit_group)
 
 

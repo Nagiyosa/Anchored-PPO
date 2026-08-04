@@ -66,14 +66,14 @@ def _load_static():
 
 
 def _load():
-    """每次调用给**全新** DynTrain(引擎会推进 route_ptr/path), 静态资产走缓存。"""
+    """每次调用给**全新** DynTrain(引擎会推进 actual_chain/path/pos), 静态资产走缓存。"""
     net, params, dwell, ptc, specs = _load_static()
     dyn = [DynTrain(tid, list(rc), et, set(sp), bp) for tid, rc, et, sp, bp in specs]
     return net, params, dwell, ptc, dyn
 
 
 def _fresh(dyn):
-    """DynTrain 是有状态的(route_ptr/path 被引擎推进) → 每次 reset 必须给全新对象。"""
+    """DynTrain 是有状态的(actual_chain/path/pos 被引擎推进) → 每次 reset 必须给全新对象。"""
     return [DynTrain(t.train_id, list(t.route_chain), t.entry_time,
                      set(t.stop_pids), t.booked_platform) for t in dyn]
 

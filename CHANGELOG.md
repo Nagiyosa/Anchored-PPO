@@ -14,6 +14,29 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
+### D33 step 2 — separate reference, request, committed and physical state (2026-08-04)
+- Removed `DynTrain.route_ptr` instead of renaming it: one cursor can no longer stand for both logged
+  and counterfactual progress. The logged `route_chain` is converted to an immutable tuple;
+  `pending_request` exists only while a request is queued; `actual_chain` is appended only after the
+  route is physically locked; and `path`, parallel `path_route_ids`, plus `pos` represent movement.
+- Next-signal derivation, collision attribution, goal-exit checks and terminal release now read the
+  actual committed chain. The external observation key stays `pending_route` for M12a compatibility,
+  but its sole source is the independent queued-request state.
+- Added guards proving that an alternate lock cannot modify the reference chain, a queued route is not
+  committed before lock, cancel cannot rewind actual progress, and the physical path follows the
+  chosen route. Two non-overlapping regression batches cover the dynamic environment, rewards,
+  rollouts, red-team policies, datasets and M7/M8 compatibility: 110 passed.
+- Stop/continue is deliberately still a temporary historical-length rule, logged replay remains
+  depth-indexed and release timing is unchanged; these belong to D33 steps 3–5, so training stays off.
+
+### D33 steps 0–1 — pre-fix audit and complete operating days (2026-08-04)
+- The train-only audit covers 64 complete operating days and 17,583 trains. Logged chains including
+  entry have p99=4 and max=6, giving a total-actual-route safety cap of 12; the cap prevents infinite
+  cycling and never defines success. The 52,294-row BC dataset fingerprint is pinned.
+- D34 excludes boundary-partial 2023-09-01 and 2023-12-07 from RL episodes while preserving raw TD and
+  all 98 BC days. RL now uses 96 complete days (train64/val11/test21); 2023-09-30 remains and evaluation
+  stays micro-averaged. Repeated route-body TCs were rejected as loop evidence after audit validation.
+
 ### Decisions and doc alignment (2026-07-30)
 - **D25 — the MILP/alt-graph optimality-bound baseline is cancelled** (supersedes that item in D10).
   A microscopic MILP would be model-mismatched against the validated simulator, so both beating it and
