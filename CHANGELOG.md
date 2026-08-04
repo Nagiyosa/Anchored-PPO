@@ -1,7 +1,7 @@
 # Changelog
 
 Microscopic blocking-time simulator + signaller route-decision learning for the Derby station throat.
-Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D35),
+Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D39),
 `docs/IMPLEMENTATION_PLAN.md`, `docs/M9_DESIGN.md`–`docs/M12_DESIGN.md`.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
@@ -13,6 +13,49 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm start) on the M9
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
+
+### D33 step 8 — timing-contract gate passed; events batched per common time-cut (2026-08-04, D39)
+- Reworked the event loop so each timestamp forms exactly one panel: `DynamicEngine.run` +
+  new `_drain_slice`/`_time_slice` (replacing `_panel_phase`) drain every event at `t` (including
+  same-time events a SET schedules) before opening one joint panel; the agent may SET consecutively
+  within the cut, and a WAIT ends the cut so the loop advances to strictly `> t` (D24). Physical
+  lock/release/occupancy logic is unchanged.
+- Step 7 re-run (`d33_step7_20260804-215608.json`): gate_pass, deterministic, completion 1.000,
+  0 collision/deadlock/truncation/invariant/mismatch. Weighted secondary delay is **100,273.5s,
+  bit-identical to pre-fix**; the only change is `wait` 167→117 and `n_steps` 6209→6159 (`set`
+  unchanged) — 50 zero-duration WAITs removed, no physical timing moved, nothing to attribute.
+- Step 8 re-run (`d33_step8_20260804-215748.json`): all four contract points pass. Signaller
+  `next_event_same_time` 307→0, `zero_dt_wait` 28→0, `wait_while_same_time_pending` 126→0,
+  `max_set_trains` 1→2; WAIT always Δt>0 (min 4s / median 38s); `awaiting_no_geometry` 0.
+- Gate tests `tests/test_timing_contract.py` go red→green across all val days; regression subset
+  (`test_env_dynamic/test_reward/test_redteam/test_smdp_rollout/test_panel`) is 73 passed.
+- Honest boundaries (see M12_DESIGN §18.13): greedy `awaiting_no_geometry=4987` is greedy's own bad
+  routing (completion 0.62), not a contract bug; the signaller's clean 1.9% WAIT is still a replay-policy
+  residual, and whether it can serve as `kind_anchor` is a Step 9 question. Environment fix complete;
+  PPO / Step 9–10 unblocked. M11-on-D35 rerun remains a separate GPU task.
+
+### D33 step 8 — timing-contract gate failed (2026-08-04)
+- The 11-day audit preserves all safety/state guarantees, but finds 28 zero-duration WAITs and 307
+  panels opened while another event at the same timestamp is still pending. WAIT therefore does not yet
+  satisfy D24's time-extended macro-action contract.
+- Greedy replay has 4,179 multi-awaiting panels but never exposes set options for more than one train,
+  with 5,028 awaiting rows lacking a geometry option. Same-time events are being serialised into panels
+  before the timestamp is fully drained, so the current interface does not represent the intended
+  "when/which train" decision.
+- Step 8 is recorded as failed. Both the historical 10.2% and current 2.69% WAIT shares are invalid as
+  human timing anchors; PPO remains paused pending an agreed same-time event batching contract and a
+  repeat of the Step 7/8 gates.
+
+### D33 step 7 — full validation replay and determinism gate (2026-08-04)
+- Two fresh passes over all 11 validation days are exactly deterministic by per-day action, physical
+  path/timing and core-metric fingerprints. All 2,809 trains terminate; all 2,487 completable trains
+  complete, with zero collision, deadlock, truncation, invariant violation or reference-chain mismatch.
+- Current signaller delay is 100,273.5 seconds, reward 101.265 and 6,209 steps. Against the preserved
+  pre-D33 report, completion is unchanged while delay is +5,424.5 seconds, reward −79.38 and steps −402;
+  lifecycle-correct delay is allowed to change and is not forced to reproduce the defective timing.
+- Added the Step 8 read-only audit for the geometry→goal→deadlock-safe→set funnel, simultaneous panel
+  exposure and WAIT duration contract. The new replay WAIT share is 2.69%, but it is not treated as a
+  human timing target because position replay does not reconstruct original request timestamps.
 
 ### D33 step 6 — counterfactual terminal-state invariants (2026-08-04)
 - D35 is now materialised as 53,750 decisions (train 33,280 / holdout 20,470), including 25,077

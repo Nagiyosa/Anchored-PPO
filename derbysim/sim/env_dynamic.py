@@ -298,12 +298,41 @@ class DynamicEngine:
         self.deadlocked = True
         self.deadlock_cycle = deadlock_cycle(self.res) or []
 
-    def _panel_phase(self):
+    def _dispatch(self, ev):
+        if ev.kind == "arrive":
+            self._on_arrive(ev.data)
+        elif ev.kind == "enter":
+            self._on_enter(ev.data)
+        elif ev.kind == "try_advance":
+            self._on_try_advance(ev.data)
+
+    def _drain_slice(self, t_cut):
+        """D38 契约①: 弹尽并处理时间戳 == t_cut 的**全部**队列事件后才开面板。
+
+        同刻事件(arrive / enter / try_advance, 以及本 cut 内 SET 派生的同刻事件)必须全部落地,
+        否则面板会把此刻**物理上共同可见**的车串行化(Step 8 抓到的 307 个 next_event_same_time)。
+        """
+        while (len(self.q) and self.q._h[0].time <= t_cut
+               and not self.deadlocked):
+            ev = self.q.pop()
+            self.now = ev.time
+            self._dispatch(ev)
+
+    def _time_slice(self, t_cut):
+        """一个共同时间切面: 先排空 t_cut 的事件, 再开一个联合面板(D24 / D38 契约②③④)。
+
+        agent 可在同一 cut 内**连续 SET**(每次 SET 会把它排在 t_cut 的派生事件再次排空);
+        一旦 WAIT 就结束本 cut, 由 `run` 推进到严格 > t_cut 的下一批事件 → WAIT 恒为时间延展宏动作。
+        若无未来事件, 卡住的面板只在无 set/cancel 时静默返回并进入终局结算, 不再吐零时长 WAIT。
+        """
         guard = 0
         while not self.deadlocked:
             guard += 1
-            if guard > 10000:
+            if guard > 20000:
                 break
+            self._drain_slice(t_cut)
+            if self.deadlocked:
+                return
             awaiting = self._actionable()
             cancellable = self._cancellable()
             if not awaiting and not cancellable:
@@ -329,15 +358,10 @@ class DynamicEngine:
             guard += 1
             if guard > limit:
                 break
-            ev = self.q.pop()
-            self.now = ev.time
-            if ev.kind == "arrive":
-                self._on_arrive(ev.data)
-            elif ev.kind == "enter":
-                self._on_enter(ev.data)
-            elif ev.kind == "try_advance":
-                self._on_try_advance(ev.data)
-            yield from self._panel_phase()
+            # D38 契约①: 每个共同时间切面开**一个**面板。先按队列最前时间戳排空该刻全部环境事件,
+            # 使在 t_cut 变为 awaiting 的所有车联合可见(②③④); WAIT 后由本循环推进到严格 > t_cut。
+            t_cut = self.q._h[0].time
+            yield from self._time_slice(t_cut)
 
     def _on_arrive(self, d):
         t = self.trains[d["tr"]]
