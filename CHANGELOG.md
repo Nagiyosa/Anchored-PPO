@@ -14,24 +14,6 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
-### D33 steps 0-1 — pre-fix audit and complete operating days (2026-08-04)
-- Added a reproducible train-only route-budget and BC-fingerprint audit. Across all 64 complete
-  training operating days (17,583 trains), logged chains including entry have p99=4 and max=6; the
-  counterfactual total-actual-route safety cap is therefore 12 (`3 * ceil(train p99)`). The cap only
-  prevents infinite cycling and never defines successful completion.
-- Corrected the audit before using it: repeated track circuits are common at legitimate route
-  boundaries and are not loop evidence (2,695 chains). Repeated route IDs and route-start signals
-  occur in only 1 and 3 training chains respectively.
-- D34 excludes the two boundary-partial days from RL episodes: 2023-09-01 starts before TD coverage
-  and 2023-12-07 ends after it. RL now uses 96 complete days (train64/val11/test21); the mid-series
-  2023-09-30 gap remains and evaluation stays micro-averaged. Raw TD and all 98 BC days are preserved.
-- Pinned the 52,294-row BC dataset fingerprint (combined SHA-256
-  `aa8672584a4bf8915145fac92910ad3e1ba0befb5b23c5a0f5ea0933f6e21a84`), so the forthcoming dynamic
-  engine repair must not silently change M11 data. The D33 repair order is expanded to ten guarded
-  steps and the replay-delay requirement now allows attributable changes caused by corrected
-  GB-mainline-aligned release timing.
-- Added `scripts/18_audit_route_budget.py`, audit helpers and regression tests; 28 targeted tests pass.
-
 ### Decisions and doc alignment (2026-07-30)
 - **D25 — the MILP/alt-graph optimality-bound baseline is cancelled** (supersedes that item in D10).
   A microscopic MILP would be model-mismatched against the validated simulator, so both beating it and
@@ -141,75 +123,6 @@ policy: 92–99% of the delay came from trains that never finished. Near human l
 ~9 reward units, comparable to the on-time bonuses, while a poor policy gets a strong "stop stranding
 trains" gradient — a sensible progression, so rescaling would not be justified. Tests: 121 passed,
 3 skipped.
-
-### M12e — the engine is only correct on the logged trajectory (D33, 2026-08-02)
-A line-by-line review flagged, and grep plus a terminal-state snapshot confirmed, a structural defect
-that invalidates every counterfactual result.
-
-`t.route_chain` is never written to anywhere in the codebase. `_request()` only advances
-`route_ptr`, so **the route the agent actually chose is never recorded**. Five places then manage a
-deviating train using the historical chain: the next decision signal, whether to keep requesting,
-when the run is judged finished, `_at_goal_exit`, and — most damagingly —
-`release_route(route_chain[k], train)`, which looks up a key that was never locked, because the lock
-is held under `(the route the agent chose, train)`. Nothing is released. Measured on 2023-11-05 at
-end of day: the signaller leaves 0 residual reservations, 0 held by finished trains and 0 queued
-requests; dispatch-when-possible leaves 40, 9 and 108. The signaller is clean precisely because it
-always picks the logged route, so `route_chain[k]` happens to equal what was locked. What leaks is
-mainly the overlap reservation, which is not in `t.path` and can only be released by `release_route`
-— so region capacity quietly shrinks over the day, which is exactly the shape of the decaying
-delivery profile and the 72% of decision points with nothing to dispatch.
-
-**§17.9's causal claim is withdrawn.** Calling covariate shift "the only self-consistent explanation"
-and "a root cause established from data" was an overreach: a mechanism-level anomaly was in hand and
-should have been traced into the code rather than explained with a ready-made ML narrative. This is
-the second instance of the same error, after justifying congested-window-only training on a
-single-window measurement. The explanation is demoted to one candidate among others.
-
-**Still standing**: data cleaning, operating-day splits and per-run CIF matching; the BC three-way
-split and all BC figures; the PPO implementation and its seven guards; signaller replay consistency;
-the seven silent failures in §17.1–17.8; and the zero-collision result, since the leak is in release
-rather than acquisition and manifests as lost capacity, not as conflicting movements.
-**Demoted to contaminated leads**: closed-loop completion and delay for greedy, lookup and PPO;
-"routing is not the bottleneck"; "the environment cannot recover"; the measured effect of overlap
-depth; and every algorithmic comparison that rested on counterfactual routing.
-
-The repair order is now the ten guarded steps in M12_DESIGN §18.3. The goal remains a train property
-derived from the historical chain, while progress and route ownership move to actual state; signaller
-replay must match by physical position rather than a shared index. Replay must retain deterministic
-actions, paths, completion and safety. Delay may change only when attributable to the corrected
-GB-mainline-aligned release timing, and the simulator is not claimed to reproduce Derby SSI exactly.
-
-### M12d — the bottleneck is compounding trajectory divergence, not route choice or ordering (2026-08-02)
-Two diagnostic experiments over four validation operating days.
-- **Overlap depth is a real but secondary factor.** Dispatch-when-possible scores 0.396 / 0.353 /
-  0.288 at overlap depths 0 / 1 / 2 while the signaller stays at 1.000 throughout. Region capacity is
-  genuinely tightened by the overlap model, but nothing here explains a gap between 1.000 and 0.35.
-  It belongs in the limitations and in the M13 robustness ablation, not in the causal account.
-- **The timing-axis experiment was mis-designed, and finding out why was the real result.** Five
-  ordering rules produced bit-identical outcomes. The reason is that the panel offers at most one
-  train at a time: of 1,017 signaller decision points, 914 offer exactly one train and **none offer
-  two or more**; the same holds under dispatch-when-possible. Choosing which train to serve first
-  does not exist in the action space — the engine serialises awaiting trains. The measurement was of
-  a degree of freedom that is not there. The agent's only timing lever is whether to act on the train
-  in front of it or wait, and waiting is itself the reordering mechanism.
-- **What is actually wrong.** Under dispatch-when-possible, **72% of decision points offer no set
-  option at all**, against 10% for the signaller. It is not declining to act; there is nothing to act
-  on, because trains are stuck and the reachability and deadlock masks have removed every candidate.
-  Meanwhile the signaller's own action mix is 11% wait and 89% set — it is *also* dispatching
-  whenever it can. The only difference is which route, and the lookup reproduces the human's route
-  choice 90.6% of the time while doing *worse* in closed loop. The one explanation consistent with
-  all of this is covariate shift: the logged route is the choice made in a world where the whole day
-  worked, and one step off that trajectory the "most frequent" route is no longer the right one.
-  Error compounds decision by decision and the environment offers no recovery. This is the textbook
-  compounding-error problem of imitation learning, and it accounts at once for BC improving from
-  0.627 to 0.933 with no closed-loop movement, for the lookup's high match rate and poor closed-loop
-  result, and for 860k PPO steps producing nothing. It is also precisely the problem online RL exists
-  to solve, so the premise of M12 stands.
-- Next, in order: a single-deviation recovery test (force one alternative legal route at step k of the
-  signaller replay, sweep k, and see whether the day recovers); a redesigned timing axis that varies
-  *when not to dispatch* rather than which train to serve; and an audit of why 72% of decision points
-  offer nothing, checking whether any of it is a modelling defect such as queued requests never being
-  retried.
 
 ### M12d — the bottleneck is *when* to dispatch, not *which* route (2026-08-02)
 - **The kind anchor works but does not unlock learning.** A KL from the action-kind distribution to
