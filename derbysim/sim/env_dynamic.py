@@ -142,6 +142,11 @@ class DynamicEngine:
             if r.route_id in seen:
                 continue
             seen.add(r.route_id)
+            # D41 决策空间限于建模区域: 只提供 in-scope 进路(起始信号 ∈ 48 白名单)。可达性(_reach)
+            # 本就只在区内扩展、把区边界当出区口, 故此过滤与可达性一致; 真实列车 0/2809 用过区外进路,
+            # 对信号员回放零影响。旧行为会在区边界端出区外 route, 让策略被引出区、卡在 TDBN 等区外死点。
+            if not getattr(r, "in_scope", True):
+                continue
             if self.reach.route_keeps_goal(r, t.goal, t.served_platform):
                 out.append(r.route_id)
         return out
@@ -469,6 +474,13 @@ class DynamicEngine:
             return
         if len(t.actual_chain) >= TOTAL_ACTUAL_ROUTE_CAP:
             self._finish_train(t, "route_cap")        # failure guard, never success
+            return
+        # D41 到区边界即终止: 车到路径末端若无任何 in-scope 几何延续, 说明它已抵达区域边界出口
+        # (或到了无法再向目标推进的死点)。到**目标**出口在上面 _goal_termination_reason 已判为
+        # 成功; 走到这里说明不是目标出口 → 已离开可控区且未达标 → 记未完成并释放锁, 而非挂着占锁
+        # 卡死。占用/预留导致的暂时受阻不会走到这: 被占的进路仍在 _legal 里(请求会排队)。
+        if not self._legal(t, self._decision_signal(t)):
+            self._finish_train(t, "left_region")      # 离区未达目标: reached_exit/terminal 均 False
             return
         t.awaiting_decision = True
         if t.hold_start is None:

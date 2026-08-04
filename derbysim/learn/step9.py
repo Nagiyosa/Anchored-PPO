@@ -45,7 +45,7 @@ def _geometry_routes(engine, train) -> list[str]:
             routes.extend(engine._routes_by_first.get(tc, ()))
     seen, out = set(), []
     for r in routes:
-        if r.route_id not in seen:
+        if r.route_id not in seen and getattr(r, "in_scope", True):   # D41: 只算 in-scope 进路
             seen.add(r.route_id)
             out.append(r.route_id)
     return out
