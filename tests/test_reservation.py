@@ -12,6 +12,13 @@ from derbysim.infra import InfrastructureNetwork
 from derbysim.sim.reservation import RouteReservation, LOCKED, QUEUED
 
 
+def _assert_exact_reverse_index(res):
+    expected = {}
+    for tc, key in res.reserved.items():
+        expected.setdefault(key, set()).add(tc)
+    assert res.holder_fp == {key: frozenset(tcs) for key, tcs in expected.items()}
+
+
 @pytest.fixture(scope="module")
 def net():
     return InfrastructureNetwork.load()
@@ -76,6 +83,35 @@ def test_same_train_no_self_conflict(net):
     r = net.routes["RDC5061A(M)"]
     R.request(r, "TX")
     assert R.can_lock(r, "TX")              # 同车对自己已预留的路不算冲突
+
+
+def test_next_route_transfers_shared_tc_without_leaving_a_ghost_holder(net):
+    """D33 step 3: one TC has exactly one owner even across same-train route extension."""
+    R = RouteReservation(net)
+    first = net.routes["RDC5061A(M)"]       # body TDAB/TDAC, overlap TDAE
+    second = net.routes["RDC5075A(M)"]      # body TDAE/TDAF
+
+    assert R.request(first, "TX") == LOCKED
+    assert R.reserved["TDAE"] == (first.route_id, "TX")
+    assert R.request(second, "TX") == LOCKED
+    assert R.reserved["TDAE"] == (second.route_id, "TX")
+    assert "TDAE" not in R.holder_fp[(first.route_id, "TX")]
+    _assert_exact_reverse_index(R)
+
+    R.release_overlap(first.route_id, "TX")
+    assert R.reserved["TDAE"] == (second.route_id, "TX")
+    _assert_exact_reverse_index(R)
+
+
+def test_sectional_release_removes_empty_holder_record(net):
+    R = RouteReservation(net, overlap_depth=0)
+    route = net.routes["RDC5061A(M)"]
+    key = (route.route_id, "TX")
+    assert R.request(route, "TX") == LOCKED
+    for tc in route.tc_sequence:
+        R.release_tc(tc, key)
+    assert key not in R.holder_fp
+    _assert_exact_reverse_index(R)
 
 
 def test_same_route_used_by_two_trains_is_not_released_by_the_wrong_one(net):

@@ -14,6 +14,17 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
+### D33 step 3 — actual-route reservation lifecycle (2026-08-04)
+- Same-train route extension now transfers each shared boundary TC from the old route holder to the
+  new holder atomically. `reserved` and `holder_fp` remain exact reverse indices, empty holders are
+  removed, and updates touch only affected TCs rather than scanning the full reservation table.
+- Added path-aligned actual-route instance indices. Entering the next locked actual route releases the
+  previous route's remaining overlap; route bodies remain sectionally released behind the train and
+  final reservations remain until region exit. This is a GB-mainline-aligned approximation, not an
+  exact Derby SSI reconstruction.
+- New ownership and lifecycle guards plus dynamic-engine, deadlock, reward, rollout, panel and red-team
+  regressions pass (88 relevant tests). Terminal/goal/cap/cancel semantics remain step 4; training stays off.
+
 ### D33 step 2 — separate reference, request, committed and physical state (2026-08-04)
 - Removed `DynTrain.route_ptr` instead of renaming it: one cursor can no longer stand for both logged
   and counterfactual progress. The logged `route_chain` is converted to an immutable tuple;

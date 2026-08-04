@@ -50,6 +50,8 @@ class DynTrain:
     pending_request: str | None = None                   # QUEUED 请求；尚不属于 actual_chain
     path: list[str] = field(default_factory=list)        # 已锁实际链展开出的 TC
     path_route_ids: list[str] = field(default_factory=list)  # 与 path 逐位对齐的来源进路
+    path_commit_indices: list[int] = field(default_factory=list)  # 与 path 对齐的 actual_chain 实例序号
+    entered_commit_idx: int = -1                        # 物理上已进入的最后一个实际进路实例
     awaiting_decision: bool = False
     entered: bool = False
     pos: int = 0
@@ -144,11 +146,13 @@ class DynamicEngine:
             return
         if not self.res.is_locked(route_id, t.train_id):
             raise RuntimeError(f"cannot commit unlocked route {(route_id, t.train_id)!r}")
+        commit_idx = len(t.actual_chain)
         t.actual_chain.append(route_id)
         for tc in r.tc_sequence:
             if not t.path or t.path[-1] != tc:
                 t.path.append(tc)
                 t.path_route_ids.append(route_id)
+                t.path_commit_indices.append(commit_idx)
                 if (t.dwell_idx is None and tc in self.plat_tc_to_pid
                         and self.plat_tc_to_pid[tc] in t.stop_pids):
                     t.dwell_idx = len(t.path) - 1
@@ -313,6 +317,16 @@ class DynamicEngine:
                                     if t.actual_chain else None,
                                     "intruder_pos": idx})
         t.pos = idx
+        commit_idx = t.path_commit_indices[idx]
+        if commit_idx > t.entered_commit_idx:
+            # GB-mainline-aligned approximation: once the train passes the old
+            # route's end signal into the next locked route, release only the
+            # old route's remaining overlap.  Route body release stays sectional.
+            for old_idx in range(t.entered_commit_idx + 1, commit_idx):
+                if old_idx >= 0:
+                    self.res.release_overlap(t.actual_chain[old_idx], t.train_id)
+            t.entered_commit_idx = commit_idx
+            self._wake()
         if t.hold_start is not None:                 # **只有真的动了**才结清"走不动"计时
             t.held_time += self.now - t.hold_start
             t.hold_start = None

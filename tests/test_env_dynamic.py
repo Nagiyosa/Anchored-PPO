@@ -112,6 +112,7 @@ def test_reference_pending_actual_and_physical_state_are_separate():
     assert t.actual_chain == [alternate.route_id]        # committed route is the chosen route
     assert t.path == list(alternate.tc_sequence)         # physical plan follows actual route
     assert t.path_route_ids == [alternate.route_id] * len(t.path)
+    assert t.path_commit_indices == [0] * len(t.path)
     assert eng._decision_signal(t) == alternate.end_signal
     with pytest.raises(AttributeError):
         t.route_chain.append(alternate.route_id)
@@ -134,6 +135,31 @@ def test_queued_request_enters_actual_chain_only_after_lock():
     assert t.pending_request is None
     assert t.actual_chain == [route.route_id]
     assert t.path == list(route.tc_sequence)
+
+
+def test_entering_next_actual_route_releases_previous_overlap_lifecycle():
+    """D33 step 3: overlap release is driven by physical entry, not logged depth."""
+    net, params, _, _, _ = _load()
+    eng = DynamicEngine(net, params)
+    first = net.routes["RDC5061A(M)"]
+    second = net.routes["RDC5075A(M)"]
+    t = DynTrain("TX", [first.route_id, second.route_id], 0.0)
+    eng.trains = {t.train_id: t}
+
+    assert eng._request(t, first.route_id)
+    assert eng._request(t, second.route_id)
+    assert t.path_commit_indices == [0, 0, 1, 1]
+    assert eng.res.reserved["TDAE"] == (second.route_id, t.train_id)
+
+    eng._on_enter({"tr": t.train_id, "idx": 0})
+    assert t.entered_commit_idx == 0
+    eng._on_enter({"tr": t.train_id, "idx": 2})
+    assert t.entered_commit_idx == 1
+    assert eng.res.reserved["TDAE"] == (second.route_id, t.train_id)
+    assert eng.res.holder_fp == {
+        key: frozenset(tc for tc, owner in eng.res.reserved.items() if owner == key)
+        for key in set(eng.res.reserved.values())
+    }
 
 
 def test_deadlock_flags_terminal():

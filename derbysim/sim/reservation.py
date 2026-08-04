@@ -70,12 +70,24 @@ class RouteReservation:
     def can_lock(self, route, train: str) -> bool:
         return not any(self._conflict_tc(tc, train) for tc in self.footprint(route))
 
+    def _drop_holder_tc(self, key, tc: str) -> None:
+        remaining = self.holder_fp.get(key, frozenset()) - {tc}
+        if remaining:
+            self.holder_fp[key] = remaining
+        else:
+            self.holder_fp.pop(key, None)
+
     def _lock(self, route, train: str) -> None:
         fp = self.footprint(route)
         key = (route.route_id, train)
         for tc in fp:
+            old = self.reserved.get(tc)
+            if old is not None and old != key:
+                if old[1] != train:
+                    raise RuntimeError(f"cannot transfer {tc} from {old!r} to {key!r}")
+                self._drop_holder_tc(old, tc)
             self.reserved[tc] = key
-        self.holder_fp[key] = fp
+            self.holder_fp[key] = self.holder_fp.get(key, frozenset()) | {tc}
 
     def request(self, route, train: str) -> str:
         """办理一条进路: 可锁→立即预留(LOCKED); 冲突→入队(QUEUED)."""
@@ -91,7 +103,23 @@ class RouteReservation:
         key = tuple(key)
         if self.reserved.get(tc) == key:
             del self.reserved[tc]
-            self.holder_fp[key] = self.holder_fp.get(key, frozenset()) - {tc}
+            self._drop_holder_tc(key, tc)
+        self._pump_queue()
+
+    def release_overlap(self, route_id: str, train: str) -> None:
+        """Release the previous route's remaining overlap after its signal is passed.
+
+        Body TCs are released sectionally by the engine.  Any shared TC already
+        transferred to the next actual route is deliberately left untouched.
+        """
+        route = self.net.routes.get(route_id)
+        if route is None:
+            return
+        key = (route_id, train)
+        for tc in self.overlap(route):
+            if self.reserved.get(tc) == key:
+                del self.reserved[tc]
+                self._drop_holder_tc(key, tc)
         self._pump_queue()
 
     def release_route(self, route_id: str, train: str) -> None:
