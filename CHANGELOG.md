@@ -25,6 +25,9 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 - Injected residual-lock, orphan-owner and divergent-path states are detected; all reference and red-team
   policies report zero violations. The directly affected suites pass: dynamic environment 22, red team 7,
   rollout 25 (**54 passed**). Training remains disabled pending the full 11-day step-7 baseline.
+- Added a timestamped Step 7 runner for two fresh passes over all 11 validation days. It fingerprints
+  actions, actual paths/timings and metrics per day, enforces the complete safety/state/replay gate, and
+  reports attributable deltas against the preserved pre-D33 baseline without requiring delay equality.
 
 ### D33 step 5 — position-ordered replay and D35 dataset contract (2026-08-04)
 - A full-data audit proved that `Panel_Request` order is not always physical traversal order: signallers
