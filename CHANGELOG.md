@@ -1,7 +1,7 @@
 # Changelog
 
 Microscopic blocking-time simulator + signaller route-decision learning for the Derby station throat.
-Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D25),
+Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D35),
 `docs/IMPLEMENTATION_PLAN.md`, `docs/M9_DESIGN.md`–`docs/M12_DESIGN.md`.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
@@ -13,6 +13,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm start) on the M9
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
+
+### D33 step 5 — position-ordered replay and D35 dataset contract (2026-08-04)
+- A full-data audit proved that `Panel_Request` order is not always physical traversal order: signallers
+  can pre-request a downstream route before its feeder. Position reordering is accepted only when route
+  IDs are unique, every route has an exclusive observed Track timestamp, and discontinuities strictly
+  decrease; ambiguous shunts remain split at the modelling boundary.
+- Across 98 BC days, 773 of 22,023 trains are reliably reordered and 1,614 decisions are recovered;
+  across 96 complete RL days, the corresponding figures are 751 of 21,963 and 1,562. Online replay now
+  matches an unconsumed historical route among the current physical options and consumes it only after
+  the route is fully locked; queued/cancelled requests do not advance the reference.
+- The D31 52,294-row dataset, fingerprint, checkpoints and match rates are superseded. D35 must be built
+  in `full_d35`, and BC training now accepts an explicit dataset, versions D35 outputs, and archives every
+  checkpoint. Reordering merges false fragments to 16,631 train vehicles while leaving p99 route length
+  at 4, so the cap of 12 remains supported.
+- Relevant data, simulation, rollout, reward, reservation, compatibility and red-team regressions pass:
+  **118 passed**. A three-day signaller smoke remains 1.000 completion with zero collision/deadlock; this
+  is not the formal 11-day baseline. Training stays disabled until steps 6–7 pass.
 
 ### D33 step 4 — goal termination, loop guard and queued cancel (2026-08-04)
 - Completion now follows actual state: through trains must physically reach their exit group, while
@@ -55,9 +72,10 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   depth-indexed and release timing is unchanged; these belong to D33 steps 3–5, so training stays off.
 
 ### D33 steps 0–1 — pre-fix audit and complete operating days (2026-08-04)
-- The train-only audit covers 64 complete operating days and 17,583 trains. Logged chains including
+- The original D31 train-only audit covered 64 complete operating days and 17,583 fragments. D35 later
+  merged false request-order fragments to 16,631 trains. Logged chains including
   entry have p99=4 and max=6, giving a total-actual-route safety cap of 12; the cap prevents infinite
-  cycling and never defines success. The 52,294-row BC dataset fingerprint is pinned.
+  cycling and never defines success. The 52,294-row BC fingerprint is retained only as superseded history.
 - D34 excludes boundary-partial 2023-09-01 and 2023-12-07 from RL episodes while preserving raw TD and
   all 98 BC days. RL now uses 96 complete days (train64/val11/test21); 2023-09-30 remains and evaluation
   stays micro-averaged. Repeated route-body TCs were rejected as loop evidence after audit validation.

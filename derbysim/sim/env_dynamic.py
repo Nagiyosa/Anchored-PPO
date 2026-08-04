@@ -38,7 +38,7 @@ class PanelAction:
 class PanelDecision:
     now: float
     options: list[PanelAction]      # 可选动作(含 WAIT); set 已过 几何∩可达∩死锁前瞻
-    logged: dict = field(default_factory=dict)   # train_id -> 日志下一进路(回放便利)
+    logged: dict = field(default_factory=dict)   # train_id -> 与当前实际位置兼容的未消费历史请求
 
 
 @dataclass
@@ -50,6 +50,7 @@ class DynTrain:
     booked_platform: int | None = None
     planned_ref: float | None = None       # CIF 计划参考时刻(供 signed 延误)
     service_class: str = ""                 # headcode 首位 = TOPS 优先级
+    matched_reference_indices: set[int] = field(default_factory=set)  # 仅回放标签匹配；不表示实际进度
     # 四轨状态(D33 step 2): 历史参考 / 待锁请求 / 已锁实际链 / 物理位置必须互不代用。
     actual_chain: list[str] = field(default_factory=list)  # 仅 LOCKED 后追加，含入口进路
     pending_request: str | None = None                   # QUEUED 请求；尚不属于 actual_chain
@@ -149,12 +150,31 @@ class DynamicEngine:
         prev = self.net.routes.get(t.actual_chain[-1]) if t.actual_chain else None
         return prev.end_signal if prev else None
 
+    @staticmethod
+    def _match_reference_index(t, route_ids) -> int | None:
+        """Earliest unused historical request compatible with current position.
+
+        ``route_ids`` must come from the current physical option set.  Historical
+        array depth is deliberately irrelevant: downstream requests may have
+        been preset before their upstream feeder (D33 step 5).
+        """
+        allowed = set(route_ids)
+        for i, rid in enumerate(t.route_chain):
+            if i not in t.matched_reference_indices and rid in allowed:
+                return i
+        return None
+
     def _append_locked(self, t, route_id):
         r = self.net.routes.get(route_id)
         if not r:
             return
         if not self.res.is_locked(route_id, t.train_id):
             raise RuntimeError(f"cannot commit unlocked route {(route_id, t.train_id)!r}")
+        ref_idx = self._match_reference_index(t, {route_id})
+        if ref_idx is not None:
+            # A reference is consumed by physical commitment, never by a
+            # QUEUED request.  Cancelling a queued entry must leave it matchable.
+            t.matched_reference_indices.add(ref_idx)
         commit_idx = len(t.actual_chain)
         t.actual_chain.append(route_id)
         for tc in r.tc_sequence:
@@ -217,6 +237,10 @@ class DynamicEngine:
         for t in self.trains.values():
             if t.pending_request is None or t.done:
                 continue
+            if not t.entered:
+                # The entry route is an automatic infrastructure request
+                # (D14.8), not an agent decision, so it cannot appear as cancel.
+                continue
             if (t.pending_request, t.train_id) not in self.res.queue:
                 continue
             if self.res.is_locked(t.pending_request, t.train_id):
@@ -232,13 +256,14 @@ class DynamicEngine:
         logged = {}
         for t in awaiting:
             dsig = self._decision_signal(t)
+            offered = []
             for rid in self._legal(t, dsig):
                 r = self.net.routes.get(rid)
                 if r and not would_create_deadlock(self.res, r, t.train_id):   # 前瞻屏蔽
                     opts.append(PanelAction("set", t.train_id, rid))
-            # Step 5 会改为按实际位置匹配；在此之前只允许这个历史参考读取点存在。
-            ref_idx = len(t.actual_chain)
-            if ref_idx < len(t.route_chain):
+                    offered.append(rid)
+            ref_idx = self._match_reference_index(t, offered)
+            if ref_idx is not None:
                 logged[t.train_id] = t.route_chain[ref_idx]
         for t in cancellable:
             opts.append(PanelAction("cancel", t.train_id))

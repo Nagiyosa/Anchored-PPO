@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
+from statistics import median
 
 import pandas as pd
 
@@ -50,8 +52,47 @@ def chain_is_continuous(route_chain, net, succ=None, pair=None):
     return True
 
 
+def position_order_indices(et, occ_first, net, succ=None, pair=None) -> tuple[int, ...]:
+    """Conservatively recover traversal order from observed Track occupations.
+
+    ``Panel_Request`` records request time, not passage order: a downstream route
+    may be preset before its upstream feeder.  Reordering is accepted only when
+    route ids are unique, every route has an observed TC unique to that route,
+    and the resulting order strictly reduces physical discontinuities.  Repeated
+    shunt moves or insufficient observations remain unchanged rather than being
+    guessed and are handled by the existing D31 boundary split.
+    """
+    if succ is None:
+        succ, pair = _chain_continuity(net)
+    n = len(et.route_chain)
+    original = tuple(range(n))
+    if n < 2 or len(set(et.route_chain)) != n:
+        return original
+    routes = [net.routes.get(rid) for rid in et.route_chain]
+    if any(r is None or not r.tc_sequence for r in routes):
+        return original
+    tc_counts = Counter(tc for r in routes for tc in r.tc_sequence)
+    keys = []
+    for i, route in enumerate(routes):
+        times = [occ_first[tc] for tc in route.tc_sequence
+                 if tc_counts[tc] == 1 and tc in occ_first]
+        if not times:
+            return original
+        keys.append((float(median(times)), min(times), max(times), i))
+    order = tuple(k[-1] for k in sorted(keys))
+    if order == original:
+        return original
+
+    def n_breaks(indices):
+        chain = [routes[i].route_id for i in indices]
+        return sum(not chain_is_continuous(chain[j:j + 2], net, succ, pair)
+                   for j in range(len(chain) - 1))
+
+    return order if n_breaks(order) < n_breaks(original) else original
+
+
 def split_broken_chains(built, net, succ=None, pair=None, plat_tc_to_pid=None):
-    """把链断裂的车**切分成多段独立的车**, 而不是整车丢弃(D31, 2026-08-01)。
+    """先按观测位置保守复序，再把真断链切成独立车辆段(D31+D35)。
 
     **为什么改**: 原做法 `chain_is_continuous` 为假就丢整车, 10 天实测丢 **303/2056 = 14.7%**,
     且**丢得极不均匀** —— 1x/2x 客运只丢 5.5%/5.6%, 而 **5x ECS 丢 45.8%**、0x 单机 32.3%、
@@ -60,6 +101,11 @@ def split_broken_chains(built, net, succ=None, pair=None, plat_tc_to_pid=None):
     进库和出库本来就是**两次独立的调动**, 把它们当成一条断链丢掉, 等于系统性删掉近一半的 ECS,
     而 ECS 正是终点站咽喉冲突的重要来源(冲突强度被低估, BC 数据集与 RL 场景同时受影响)。
     自动补链不可行(303 个断点: 唯一可补 1 / 多解 216 / 无解 86 —— 多解等于我们替信号员编走行)。
+
+    **D35 / D33 step 5 (2026-08-04)**: Panel_Request 可先办下游后办上游，请求时间序不是
+    物理通过序。旧 D31 会把这类合法预办误切成碎片。切分前调用 `position_order_indices`，只有
+    “route id 唯一 + 每段有独占 Track 观测 + 复序严格减少物理断点”三条同时成立才复序；重复调车
+    或证据不足时不猜，仍走原 D31 边界切分。请求时间跟随各自 route 移动，保留预办时机真值。
 
     切分规则(与 `build_env_trains_for_window` 的过滤规则保持一致, 否则两条构造路径会分叉):
       - 每段自成一辆 `EnvTrain`, id 记作 `<原id>@<段序>`(原车不断链时**保持原 id 不变**);
@@ -72,9 +118,13 @@ def split_broken_chains(built, net, succ=None, pair=None, plat_tc_to_pid=None):
         succ, pair = _chain_continuity(net)
     out = []
     for et, occ_first in built:
+        order = position_order_indices(et, occ_first, net, succ, pair)
+        reordered = order != tuple(range(len(et.route_chain)))
+        route_chain = [et.route_chain[i] for i in order]
+        req_times = [et.req_times[i] for i in order]
         cuts = [0]
         last_tc = last_end = None
-        for i, rid in enumerate(et.route_chain):
+        for i, rid in enumerate(route_chain):
             r = net.routes.get(rid)
             if not r or not r.tc_sequence:
                 continue
@@ -84,14 +134,14 @@ def split_broken_chains(built, net, succ=None, pair=None, plat_tc_to_pid=None):
                     or (last_end is not None and pair.get(last_end) == r.signal)):
                 cuts.append(i)
             last_tc = r.tc_sequence[-1]; last_end = r.end_signal
-        if len(cuts) == 1:
+        if len(cuts) == 1 and not reordered:
             out.append((et, occ_first))                       # 本来就连续 → 原样, id 不变
             continue
-        cuts.append(len(et.route_chain))
+        cuts.append(len(route_chain))
         for k in range(len(cuts) - 1):
             lo, hi = cuts[k], cuts[k + 1]
-            chain = list(et.route_chain[lo:hi])
-            times = list(et.req_times[lo:hi])
+            chain = list(route_chain[lo:hi])
+            times = list(req_times[lo:hi])
             path = []
             for rid in chain:
                 r = net.routes.get(rid)
@@ -106,7 +156,8 @@ def split_broken_chains(built, net, succ=None, pair=None, plat_tc_to_pid=None):
             if plat_tc_to_pid is not None:
                 seen = {plat_tc_to_pid[tc] for tc in path if tc in plat_tc_to_pid}
                 pids &= seen
-            seg = EnvTrain(f"{et.train_id}@{k}", chain, times, occ_first[path[0]], pids)
+            seg_id = et.train_id if len(cuts) == 2 else f"{et.train_id}@{k}"
+            seg = EnvTrain(seg_id, chain, times, occ_first[path[0]], pids)
             seg.service_class = et.service_class
             seg.booked_platform = getattr(et, "booked_platform", None)
             seg.planned_ref = getattr(et, "planned_ref", None) if k == 0 else None
@@ -228,6 +279,9 @@ def generate_decisions(net, params, plat_tc_to_pid, dwell_by_platform, td_win,
     # 成因是 Etches Park 库内未建模 —— 进库/出库本就是两次独立调动)。见 `split_broken_chains`。
     dropped = [b[0].train_id for b in built
                if not chain_is_continuous(b[0].route_chain, net, succ, pair)]
+    reordered = [b[0].train_id for b in built
+                 if position_order_indices(b[0], b[1], net, succ, pair)
+                 != tuple(range(len(b[0].route_chain)))]
     trains = [b[0] for b in split_broken_chains(built, net, succ, pair, plat_tc_to_pid)]
     byid = {t.train_id: t for t in trains}
     env = DerbyEnv(net, params, plat_tc_to_pid, dwell_by_platform)
@@ -266,5 +320,6 @@ def generate_decisions(net, params, plat_tc_to_pid, dwell_by_platform, td_win,
         "n_mask_misses": len(env.engine.mask_misses) if env.engine else 0,
         "n_trains": len(trains),
         "n_dropped_broken_chain": len(dropped),
+        "n_position_reordered": len(reordered),
     }
     return records, stats

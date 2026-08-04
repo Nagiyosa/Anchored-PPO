@@ -9,7 +9,10 @@
     artifacts/dataset/bc_dataset_all.parquet                 # 合并 + split 列(train=9-10 / holdout=11-12)
     artifacts/dataset/bc_dataset_report.json                 # 分布/长尾/优先级/delay 报告
 数据来源全 98 天(2023-09-01→12-07); 决策=M8 回放物理触发点。
-**2026-08-01 口径变更(D31 + CIF 按趟匹配) —— 本文件产出的数字与 M11 首轮不可直接比较**:
+**2026-08-04 口径变更(D35: 位置复序) —— 须用新目录重建，不能覆盖 D31 版**:
+  · Panel_Request 可先办下游后办上游；先以独占 Track 占用保守复序，再做 D31 断链切分；
+  · 全量审计确认旧 D31 因预办乱序少保留约 3% 决策，旧 BC 指纹不再有效。
+**2026-08-01 口径变更(D31 + CIF 按趟匹配)**:
   · 断链车由"整车丢弃"改为**切分成多段独立的车**(`dataset.split_broken_chains`) ——
     旧丢法对 5x ECS 有 45.8% 的选择性偏差(Etches Park 库内未建模), 冲突强度被系统性低估;
   · CIF 由 `build_cif_map`(headcode 单键, 同日多趟互相覆盖 6.0% 趟次)改为
@@ -26,9 +29,10 @@ from derbysim import config
 from derbysim.infra import InfrastructureNetwork
 from derbysim.sim.occupation import load_params
 from derbysim.sim.dataset import build_cif_index, generate_decisions
+from derbysim.learn.route_audit import bc_dataset_fingerprint
 
 # 逐日产出目录。**每一版都留下来**(用户 2026-07-31 要求): 口径变更时用新目录, 不覆盖旧版。
-# 例: BC_FULL_DIR=full_d31 python scripts/11_build_full_dataset.py gen
+# 例: BC_FULL_DIR=full_d35 python scripts/11_build_full_dataset.py gen
 import os
 _TAG = os.environ.get("BC_FULL_DIR", "full")
 FULL = config.ARTIFACTS / "dataset" / _TAG
@@ -85,7 +89,8 @@ def gen(i0, i1):
         recs, stats = generate_decisions(net, params, ptc, dwell, win, cif_map=cif_idx)
         pd.DataFrame(_augment(recs, d)).to_parquet(out, index=False)
         print(f"{d}: dec={stats['n_decisions']} multi={stats['n_real_choices']} "
-              f"miss={stats['n_mask_misses']} drop={stats['n_dropped_broken_chain']}")
+              f"miss={stats['n_mask_misses']} raw_break={stats['n_dropped_broken_chain']} "
+              f"reordered={stats['n_position_reordered']}")
     print(f"[gen {i0}:{i1}] {len(sel)} days in {time.time()-t0:.1f}s")
 
 
@@ -118,6 +123,7 @@ def combine():
         "delay_min_pct": {q: round(float(dmin.quantile(q / 100)), 1) for q in (1, 5, 50, 95, 99)},
         "delay_abs_gt120_rate": round(float((dmin.abs() > 120).mean()), 4),
         "n_holdout_routes_unseen_in_train": None,
+        "fingerprint": bc_dataset_fingerprint(df),
     }
     tr = set(multi[multi["split"] == "train"]["chosen_route"])
     ho = set(multi[multi["split"] == "holdout"]["chosen_route"])

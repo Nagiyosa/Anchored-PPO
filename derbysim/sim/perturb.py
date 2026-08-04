@@ -116,7 +116,7 @@ def rank_high_disruption_windows(win_hours: float = 3.0, top_k: int = 8, path=No
 
 
 def build_clean_window_dyn_trains(td_win, net, dwell_by_platform, plat_tc_to_pid, cif_map=None):
-    """构造窗口 DynTrain 并按 dataset 链连续性过滤(H6 脏车)——**保无碰撞不变式**。
+    """构造 DynTrain，按观测位置复序预办进路并切开真断链——**保无碰撞不变式**。
 
     复审 R3 附带发现: 真实繁忙窗口的 raw build 含 H6 链断裂脏车, replay 会撞车(如 11-14 09-12 raw
     coll=1); 用 dataset.py 同一链连续性过滤(丢脏车)后 coll=0。故真实拥堵窗口造冲突**必须**走此清洗路径,

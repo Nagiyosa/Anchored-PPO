@@ -20,6 +20,11 @@ from derbysim.sim.goal import Goal, train_goal
 WIN = ("2023-11-06 07:00:00", "2023-11-06 10:00:00")
 
 
+def _clean_built(built, net, ptc):
+    from derbysim.sim.dataset import split_broken_chains
+    return split_broken_chains(built, net, plat_tc_to_pid=ptc)
+
+
 def _load():
     net = InfrastructureNetwork.load()
     params = load_params(config.ARTIFACTS_CALIB / "params.json")
@@ -33,7 +38,7 @@ def _load():
     td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
     td["ts"] = pd.to_datetime(td["time"])
     win = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
-    built = build_env_trains_for_window(win, net, dwell, ptc)
+    built = _clean_built(build_env_trains_for_window(win, net, dwell, ptc), net, ptc)
     dyn = [DynTrain(b[0].train_id, b[0].route_chain, b[0].entry_time,
                     b[0].stop_pids, b[0].booked_platform) for b in built]
     return net, params, dwell, ptc, dyn
@@ -116,6 +121,18 @@ def test_cancel_cannot_erase_a_request_already_promoted_to_lock():
     assert eng.res.is_locked(route.route_id, "B")
 
 
+def test_automatic_entry_request_is_not_a_cancel_action():
+    net, params, _, _, _ = _load()
+    eng = DynamicEngine(net, params)
+    route, _ = _disjoint_pair(net, eng.res)
+    eng.res.request(route, "A")
+    t = DynTrain("ENTRY", [route.route_id], 0.0)
+    eng.trains = {t.train_id: t}
+    assert not eng._request(t, route.route_id)
+    eng.now = 1.0
+    assert not t.entered and t not in eng._cancellable()
+
+
 def test_reference_pending_actual_and_physical_state_are_separate():
     """D33 step 2: an alternate lock must not rewrite or advance the logged reference chain."""
     net, params, _, _, _ = _load()
@@ -135,6 +152,17 @@ def test_reference_pending_actual_and_physical_state_are_separate():
     assert eng._decision_signal(t) == alternate.end_signal
     with pytest.raises(AttributeError):
         t.route_chain.append(alternate.route_id)
+
+
+def test_logged_reference_matches_position_not_historical_depth():
+    """1M00 preset its downstream route before the upstream feeder."""
+    t = DynTrain("1M00", ["RDW5306B(C)", "RTD5054B(M)",
+                           "RTD5040A(M)", "RTD5044A(M)"], 0.0)
+    t.matched_reference_indices = {0, 1}
+    upstream = DynamicEngine._match_reference_index(t, {"RTD5044A(M)"})
+    assert upstream == 3
+    t.matched_reference_indices.add(upstream)
+    assert DynamicEngine._match_reference_index(t, {"RTD5040A(M)"}) == 2
 
 
 def test_queued_request_enters_actual_chain_only_after_lock():
@@ -283,7 +311,7 @@ def _build_both(net, dwell, ptc):
     td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
     td["ts"] = pd.to_datetime(td["time"])
     w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
-    built = build_env_trains_for_window(w, net, dwell, ptc)
+    built = _clean_built(build_env_trains_for_window(w, net, dwell, ptc), net, ptc)
     m8 = [b[0] for b in built]
     dyn = [DynTrain(b[0].train_id, b[0].route_chain, b[0].entry_time,
                     b[0].stop_pids, b[0].booked_platform) for b in built]
@@ -306,16 +334,7 @@ def test_consistency_regression_vs_m8():
     m9p = {t.train_id: list(t.path) for t in dyn}
     common = set(m8p) & set(m9p)
     assert common
-    mismatched = [k for k in common if m8p[k] != m9p[k]]
-    # Step 4 now stops at an actually reached goal. A historical Panel_Request
-    # can be logged out of traversal order (1M00 presets 5040→5038 before
-    # 5044→5040), so the old M8 request-order path may retain a suffix after the
-    # goal. Step 5 replaces replay with position matching; until then only this
-    # goal-truncated prefix is allowed to differ.
-    assert set(mismatched) == {"1M00"}
-    assert all(m8p[k][:len(m9p[k])] == m9p[k] for k in mismatched)
-    assert all(next(t for t in dyn if t.train_id == k).termination_reason in
-               {"exit", "terminal_platform"} for k in mismatched)
+    assert all(m8p[k] == m9p[k] for k in common), "位置复序后 M8/M9 路径须逐车一致"
     # 物理 sanity
     assert len(eng.collisions) == 0 and not eng.deadlocked and all(t.done for t in dyn)
     assert all(t.wait_time >= 0 for t in dyn)                 # 延误守恒
@@ -377,7 +396,7 @@ def test_delay_conservation_monotonic():
     td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
     td["ts"] = pd.to_datetime(td["time"])
     w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
-    built = build_env_trains_for_window(w, net, dwell, ptc)
+    built = _clean_built(build_env_trains_for_window(w, net, dwell, ptc), net, ptc)
     base = _total_wait(net, params, ptc, dwell, built)
     assert all(x >= 0 for x in base.values())                      # 可归属、非负
     mover = max(base, key=base.get)
@@ -392,7 +411,7 @@ def test_overlap_depth_monotone_conflict():
     td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
     td["ts"] = pd.to_datetime(td["time"])
     w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
-    built = build_env_trains_for_window(w, net, dwell, ptc)
+    built = _clean_built(build_env_trains_for_window(w, net, dwell, ptc), net, ptc)
     w0 = sum(_total_wait(net, params, ptc, dwell, built, overlap_depth=0).values())
     w1 = sum(_total_wait(net, params, ptc, dwell, built, overlap_depth=1).values())
     w2 = sum(_total_wait(net, params, ptc, dwell, built, overlap_depth=2).values())
@@ -427,11 +446,14 @@ def test_cancel_in_running_episode():
     td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
     td["ts"] = pd.to_datetime(td["time"])
     w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
-    built = build_env_trains_for_window(w, net, dwell, ptc)
+    built = _clean_built(build_env_trains_for_window(w, net, dwell, ptc), net, ptc)
     env, dyn, n_cancel = _run_cancel_policy(net, params, ptc, dwell, built)
     assert n_cancel > 0, "窗口应有排队进路可撤销(否则测试空转)"
     assert env.done and len(env.engine.collisions) == 0
-    assert all(t.done for t in dyn), "撤销+改办后各车仍应完成"
+    unfinished = [(t.train_id, list(t.route_chain), list(t.actual_chain),
+                   sorted(t.matched_reference_indices), t.pending_request,
+                   t.awaiting_decision, t.termination_reason) for t in dyn if not t.done]
+    assert not unfinished, f"撤销+改办后各车仍应完成: {unfinished}"
     assert not env.engine.res.reserved and not env.engine.res.queue     # 结束预留/队列清空(状态一致)
 
 
@@ -441,7 +463,7 @@ def test_cancel_episode_deterministic():
     td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
     td["ts"] = pd.to_datetime(td["time"])
     w = td[(td["ts"] >= WIN[0]) & (td["ts"] < WIN[1])].copy()
-    built = build_env_trains_for_window(w, net, dwell, ptc)
+    built = _clean_built(build_env_trains_for_window(w, net, dwell, ptc), net, ptc)
     _, d1, c1 = _run_cancel_policy(net, params, ptc, dwell, built)
     _, d2, c2 = _run_cancel_policy(net, params, ptc, dwell, built)
     assert c1 == c2

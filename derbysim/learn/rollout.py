@@ -130,10 +130,11 @@ def make_random_policy(rng):
 
 
 def make_signaller_replay_policy(env):
-    """人类参照(M12d 基线之一): 按日志真实决策办路; 无可对应的日志动作则 WAIT。
+    """人类参照: 按实际位置匹配尚未消费的历史请求；无对应动作则 WAIT。
 
-    `PanelDecision.logged` 给出每辆待决车在日志里的下一条进路 —— 这是**信号员本人的选择**,
-    在同一环境/同一选项集上跑, 即 D23 的核心对照锚。
+    `PanelDecision.logged` 不按数组深度取值：信号员可先预办下游、后办上游，请求顺序不等于
+    通过顺序。历史进路只有 LOCKED 并进入 actual_chain 后才消费，QUEUED/cancel 不消费。
+    这是历史**选路**在同一环境中的对照，不声称复刻原始请求时刻。
     """
     def act(enc):
         dec = env.decision()

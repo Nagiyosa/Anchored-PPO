@@ -35,6 +35,8 @@ def main(argv):
     p = argparse.ArgumentParser()
     p.add_argument("encoders", nargs="*", default=["mlp"])
     p.add_argument("--epochs", type=int, default=15)
+    p.add_argument("--dataset", default=os.environ.get("BC_DATASET", "bc_dataset_all_d35.parquet"),
+                   help="artifacts/dataset 下的数据集文件；D35 重建版用 bc_dataset_all_d35.parquet")
     p.add_argument("--no-prior", action="store_true",
                    help="不用候选先验特征(热启动版: 保留偏离信号、长尾>随机, M11d 决定A)")
     p.add_argument("--hidden", type=int, default=64)
@@ -55,8 +57,9 @@ def main(argv):
     epochs = args.epochs
     use_prior = not args.no_prior
     net = InfrastructureNetwork.load(); ptc = _ptc()
-    # 默认用 **D31 重建版**(断链切分 + CIF 按趟匹配); 要跑旧口径对照设 BC_DATASET=bc_dataset_all.parquet
-    _ds = os.environ.get("BC_DATASET", "bc_dataset_all_d31.parquet")
+    # D35 是当前默认；旧 D31 只能显式选择。输出自动加 _d35，避免覆盖历史权重。
+    _ds = args.dataset
+    dataset_tag = "_d35" if Path(_ds).stem.endswith("_d35") else ""
     print(f"[data] {_ds}")
     df = pd.read_parquet(config.ARTIFACTS / "dataset" / _ds)
     # **三段划分(2026-08-01 修, 方法学硬伤)**: 早停/选最佳 checkpoint 此前用的就是 `holdout`,
@@ -123,7 +126,8 @@ def main(argv):
                "route_weight": not args.no_route_weight, "early_stop_on": args.early_stop_on,
                "history": hist}
         # **每一版都留下来**(用户 2026-07-31): 带时间戳另存一份, 同名文件仍写(供 scripts/13 直接引用)
-        suffix = ("" if use_prior else "_noprior") + ("" if not args.no_route_weight else "_nw")
+        suffix = (("" if use_prior else "_noprior")
+                  + ("" if not args.no_route_weight else "_nw") + dataset_tag)
         stamp = time.strftime("%Y%m%d-%H%M%S")
         (config.ARTIFACTS / "reports" / f"bc_{enc}{suffix}_{stamp}.json").write_text(
             json.dumps(rep, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -133,13 +137,17 @@ def main(argv):
             # **权重 + 元信息**: M12 要用它做热启动和 KL 参照, 元信息用于在 scripts/13 里
             # 硬校验(编码器/维度/hidden 必须一致; use_prior 必须 False —— M12_DESIGN §10-A③)。
             import torch
+            payload = {"model": {k: v.cpu() for k, v in model.state_dict().items()},
+                       "encoder": enc, "dims": list(dims), "hidden": args.hidden,
+                       "use_prior": bool(use_prior), "epochs": epochs,
+                       "dataset": _ds,
+                       "holdout_macro": m["macro_signal_acc"],
+                       "holdout_longtail": m.get("longtail_acc")}
             ck = config.ARTIFACTS / "reports" / f"bc_{enc}{suffix}.pt"
-            torch.save({"model": {k: v.cpu() for k, v in model.state_dict().items()},
-                        "encoder": enc, "dims": list(dims), "hidden": args.hidden,
-                        "use_prior": bool(use_prior), "epochs": epochs,
-                        "holdout_macro": m["macro_signal_acc"],
-                        "holdout_longtail": m.get("longtail_acc")}, ck)
-            print(f"[{enc}] saved checkpoint -> {ck}")
+            history_ck = config.ARTIFACTS / "reports" / f"bc_{enc}{suffix}_{stamp}.pt"
+            torch.save(payload, history_ck)
+            torch.save(payload, ck)
+            print(f"[{enc}] saved checkpoint -> {ck} (archived {history_ck.name})")
         print(f"[{enc}] **holdout(未参与早停)** macro={m['macro_signal_acc']:.3f} "
               f"overall={m['overall_acc']:.3f} longtail={m.get('longtail_acc')} | "
               f"val macro={va_m['macro_signal_acc']:.3f}(早停用) | "

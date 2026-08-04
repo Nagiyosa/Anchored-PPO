@@ -7,6 +7,7 @@ timestamped report so every audit remains reproducible and no run is overwritten
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -45,7 +46,11 @@ def main() -> None:
         train_counts.append(len(day_trains))
         print(f"  [{i:02d}/{len(days)}] {str(day['start'])[:10]} trains={len(trains)}", flush=True)
 
-    dataset = config.ARTIFACTS / "dataset" / "bc_dataset_all_d31.parquet"
+    dataset_name = os.environ.get("BC_DATASET")
+    if dataset_name is None:
+        d35 = config.ARTIFACTS / "dataset" / "bc_dataset_all_d35.parquet"
+        dataset_name = d35.name if d35.exists() else "bc_dataset_all_d31.parquet"
+    dataset = config.ARTIFACTS / "dataset" / dataset_name
     frame = pd.read_parquet(dataset)
     td = _td_events()
     raw_coverage = audit_operating_day_coverage(
