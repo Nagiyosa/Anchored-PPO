@@ -44,11 +44,11 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
     """
     trains = list(engine.trains.values())
     able = [t for t in trains if can_complete(t)]        # 有可观测目标的车(分母, 含终到车 D29)
-    reached = [t for t in trains if has_reached_goal(t)]  # 出区 或 终到车服务了站台
+    reached = [t for t in trains if has_reached_goal(t)]  # 出区 或 终到目标台 dwell 完成
     stops = [t for t in trains if (t.stop_pids or t.booked_platform is not None)]
     booked_ok = 0
     for t in stops:
-        served = {plat_tc_to_pid[tc] for tc in t.path if tc in plat_tc_to_pid}
+        served = set(getattr(t, "served_platforms", ()))
         want = set(t.stop_pids) | ({t.booked_platform} if t.booked_platform is not None else set())
         booked_ok += bool(served & want)
     return {

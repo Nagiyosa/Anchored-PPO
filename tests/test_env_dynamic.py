@@ -13,7 +13,9 @@ from derbysim import config
 from derbysim.infra import InfrastructureNetwork
 from derbysim.sim.occupation import load_params
 from derbysim.sim.env import build_env_trains_for_window
-from derbysim.sim.env_dynamic import DynamicEngine, DynTrain, PanelAction
+from derbysim.sim.env_dynamic import (TOTAL_ACTUAL_ROUTE_CAP, DynamicEngine,
+                                      DynTrain, PanelAction)
+from derbysim.sim.goal import Goal, train_goal
 
 WIN = ("2023-11-06 07:00:00", "2023-11-06 10:00:00")
 
@@ -97,6 +99,23 @@ def test_cancel_returns_train_to_awaiting():
     assert not any(rid == P.route_id and tr == "B" for rid, tr in eng.res.queue)
 
 
+def test_cancel_cannot_erase_a_request_already_promoted_to_lock():
+    net, params, _, _, _ = _load()
+    eng = DynamicEngine(net, params)
+    route, _ = _disjoint_pair(net, eng.res)
+    eng.res.request(route, "A")
+    t = DynTrain("B", [route.route_id], 0.0)
+    eng.trains = {t.train_id: t}
+    assert not eng._request(t, route.route_id)
+
+    eng.res.release_route(route.route_id, "A")          # pump locks B; engine has not woken yet
+    assert eng.res.is_locked(route.route_id, "B") and t.pending_request == route.route_id
+    eng._apply(PanelAction("cancel", "B"))
+    assert t.pending_request is None
+    assert t.actual_chain == [route.route_id]            # physical lock is committed, not cancelled
+    assert eng.res.is_locked(route.route_id, "B")
+
+
 def test_reference_pending_actual_and_physical_state_are_separate():
     """D33 step 2: an alternate lock must not rewrite or advance the logged reference chain."""
     net, params, _, _, _ = _load()
@@ -160,6 +179,66 @@ def test_entering_next_actual_route_releases_previous_overlap_lifecycle():
         key: frozenset(tc for tc, owner in eng.res.reserved.items() if owner == key)
         for key in set(eng.res.reserved.values())
     }
+
+
+def test_terminal_train_finishes_only_after_target_platform_dwell():
+    net, params, dwell, ptc, _ = _load()
+    eng = DynamicEngine(net, params, ptc, dwell)
+    route = net.routes["RDC5076C(M)"]                   # observed terminal platform 6
+    t = DynTrain("TERM", [route.route_id], 0.0, stop_pids={6}, booked_platform=6)
+    t.goal = train_goal(t.route_chain, net, t.stop_pids, ptc)
+    eng.trains = {t.train_id: t}
+    assert t.goal.terminal_platforms == frozenset({6})
+    assert eng._request(t, route.route_id)
+
+    idx = t.dwell_idx
+    assert idx is not None
+    eng._on_enter({"tr": t.train_id, "idx": idx})
+    assert t.served_platforms == {6} and not t.done      # arrival alone is not completion
+    assert t.completed_dwell_platforms == set()
+    eng.now += t.dwell_s
+    eng._on_try_advance({"tr": t.train_id, "idx": idx})
+    assert t.done and t.reached_terminal and not t.reached_exit
+    assert t.termination_reason == "terminal_platform"
+    assert not eng.res.reserved and not eng.res.holder_fp
+
+
+def test_goal_success_precedes_route_cap_and_cap_is_failure_only():
+    net, params, _, _, _ = _load()
+    exit_route = next(r for r in net.routes.values() if r.end_signal == 5093)
+
+    eng_ok = DynamicEngine(net, params)
+    ok = DynTrain("OK", [exit_route.route_id], 0.0)
+    ok.goal = Goal(frozenset({5093}), must_serve_platform=False)
+    ok.actual_chain = [exit_route.route_id] * TOTAL_ACTUAL_ROUTE_CAP
+    ok.path = list(exit_route.tc_sequence); ok.pos = len(ok.path) - 1
+    eng_ok.trains = {ok.train_id: ok}
+    eng_ok._on_try_advance({"tr": ok.train_id, "idx": ok.pos})
+    assert ok.done and ok.reached_exit and ok.termination_reason == "exit"
+
+    eng_bad = DynamicEngine(net, params)
+    bad = DynTrain("LOOP", [exit_route.route_id], 0.0)
+    bad.goal = Goal(frozenset({9999}), must_serve_platform=False)
+    bad.actual_chain = [exit_route.route_id] * TOTAL_ACTUAL_ROUTE_CAP
+    bad.path = list(exit_route.tc_sequence); bad.pos = len(bad.path) - 1
+    eng_bad.trains = {bad.train_id: bad}
+    eng_bad._on_try_advance({"tr": bad.train_id, "idx": bad.pos})
+    assert bad.done and not bad.reached_exit and not bad.reached_terminal
+    assert bad.termination_reason == "route_cap"
+
+
+def test_unresolved_train_ends_at_observed_boundary_without_counting_as_success():
+    net, params, _, _, _ = _load()
+    eng = DynamicEngine(net, params)
+    route = net.routes["RDC5061A(M)"]
+    t = DynTrain("BOUNDARY", [route.route_id], 0.0)
+    t.goal = train_goal(t.route_chain, net, set(), {})
+    t.actual_chain = [route.route_id]
+    t.path = list(route.tc_sequence); t.pos = len(t.path) - 1
+    eng.trains = {t.train_id: t}
+    eng._on_try_advance({"tr": t.train_id, "idx": t.pos})
+    assert t.done and t.termination_reason == "unresolved_boundary"
+    assert not t.reached_exit and not t.reached_terminal
 
 
 def test_deadlock_flags_terminal():
@@ -226,7 +305,17 @@ def test_consistency_regression_vs_m8():
     m8p = {t.train_id: list(t.path) for t in m8}
     m9p = {t.train_id: list(t.path) for t in dyn}
     common = set(m8p) & set(m9p)
-    assert common and all(m8p[k] == m9p[k] for k in common), "M9 路径应与 M8 逐车一致"
+    assert common
+    mismatched = [k for k in common if m8p[k] != m9p[k]]
+    # Step 4 now stops at an actually reached goal. A historical Panel_Request
+    # can be logged out of traversal order (1M00 presets 5040→5038 before
+    # 5044→5040), so the old M8 request-order path may retain a suffix after the
+    # goal. Step 5 replaces replay with position matching; until then only this
+    # goal-truncated prefix is allowed to differ.
+    assert set(mismatched) == {"1M00"}
+    assert all(m8p[k][:len(m9p[k])] == m9p[k] for k in mismatched)
+    assert all(next(t for t in dyn if t.train_id == k).termination_reason in
+               {"exit", "terminal_platform"} for k in mismatched)
     # 物理 sanity
     assert len(eng.collisions) == 0 and not eng.deadlocked and all(t.done for t in dyn)
     assert all(t.wait_time >= 0 for t in dyn)                 # 延误守恒

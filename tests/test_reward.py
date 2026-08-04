@@ -15,8 +15,8 @@ from derbysim.sim.occupation import load_params
 from derbysim.sim.env import build_env_trains_for_window
 from derbysim.sim.env_dynamic import DynTrain, PanelAction
 from derbysim.sim.reward import (RewardConfig, RewardedDynamicEnv, can_complete,
-                                 realized_weighted_delay, to_dyn_trains, platform_tier_reward,
-                                 on_time_bonus)
+                                 has_reached_goal, realized_weighted_delay,
+                                 to_dyn_trains, platform_tier_reward, on_time_bonus)
 
 WIN = ("2023-11-06 07:00:00", "2023-11-06 10:00:00")
 
@@ -139,11 +139,11 @@ def test_platform_tier_levels():
     # enable_nostop=True 时三档全测; 默认(R4 暂缓)时 nostop→0(不误罚边界碎片车)
     cfg = RewardConfig(eps_replatform=2.0, p_nostop=10.0, enable_nostop=True)
     ptc = {"P4": 4, "P3": 3}
-    t0 = DynTrain("T0", [], 0.0, stop_pids={4}); t0.path = ["a", "P4", "b"]
+    t0 = DynTrain("T0", [], 0.0, stop_pids={4}); t0.served_platforms = {4}
     assert platform_tier_reward(t0, ptc, cfg) == 0.0            # booked=0
-    t1 = DynTrain("T1", [], 0.0, stop_pids={4}); t1.path = ["a", "P3", "b"]
+    t1 = DynTrain("T1", [], 0.0, stop_pids={4}); t1.served_platforms = {3}
     assert platform_tier_reward(t1, ptc, cfg) == -2.0          # 改台=−ε
-    t2 = DynTrain("T2", [], 0.0, stop_pids={4}); t2.path = ["a", "b"]
+    t2 = DynTrain("T2", [], 0.0, stop_pids={4})
     assert platform_tier_reward(t2, ptc, cfg) == -10.0         # 不停(enable)=−P_nostop
     t3 = DynTrain("T3", [], 0.0); t3.path = ["a", "P3", "b"]
     assert platform_tier_reward(t3, ptc, cfg) == 0.0           # 直通=0
@@ -164,6 +164,17 @@ def test_on_time_bonus_window():
     assert on_time_bonus(t, ptc, cfg) == 0.0           # 1000 > 600+300
     t.reached_exit = False; t.planned_ref = 900.0
     assert on_time_bonus(t, ptc, cfg) == 0.0           # 未完成不给
+
+
+def test_terminal_goal_requires_completed_dwell_not_platform_entry_only():
+    t = DynTrain("TERM", [], 0.0)
+    t.goal = SimpleNamespace(exit_group=set(), terminates_at_platform=True,
+                             terminal_platforms=frozenset({6}))
+    t.served_platform = True
+    t.served_platforms = {6}
+    assert not has_reached_goal(t)
+    t.reached_terminal = True
+    assert has_reached_goal(t)
 
 
 def _goal(exit_group):

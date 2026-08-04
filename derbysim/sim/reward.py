@@ -87,9 +87,9 @@ def can_complete(t) -> bool:
     **两点都不对**。全 98 天实测 **1651/18650 = 8.85%** 的车 `exit_group` 为空; 3 天样本里 45 辆
     中只有 **2 辆**贴日界(其余在日中), 而 20 天样本里 **82% 末段落在站台 TC 上**, 车次号以
     1C/2A/1K/1F/1V/1D 为主 = **在德比终到的客运列车**(车次号在此消亡, 之后以 ECS 新号入库)。
-    它们**有**目标, 就是"到达站台并停稳"; 排除的后果是 agent 把终到车晾在咽喉区不受任何惩罚,
+    它们**有**目标, 就是"在观测目标站台完成必要 dwell"; 排除的后果是 agent 把终到车晾在咽喉区不受任何惩罚,
     而现实里它正堵着站台。故: **终到车(`goal.terminates_at_platform`)回到分母**, 完成判据 =
-    `served_platform`。仍排除的只剩"无出区口目标且末段不在站台"的车(20 天样本 18%, 多为进入
+    `reached_terminal`。仍排除的只剩"无出区口目标且末段不在站台"的车(20 天样本 18%, 多为进入
     未建模的 Etches Park 库内区段), 那类我们确实没有可观测目标。
     """
     g = getattr(t, "goal", None)
@@ -99,12 +99,12 @@ def can_complete(t) -> bool:
 
 
 def has_reached_goal(t) -> bool:
-    """达成目标: 出区车 = 到达出区口组; **终到车 = 服务了站台**(D29)。"""
+    """达成目标: 出区车到方向组；终到车在目标站台完成必要 dwell。"""
     if getattr(t, "reached_exit", False):
         return True
     g = getattr(t, "goal", None)
     return bool(g and getattr(g, "terminates_at_platform", False)
-                and getattr(t, "served_platform", False))
+                and getattr(t, "reached_terminal", False))
 
 
 def _expects_stop(t) -> bool:
@@ -112,7 +112,9 @@ def _expects_stop(t) -> bool:
 
 
 def _served_platforms(t, plat_tc_to_pid: dict) -> set:
-    return {plat_tc_to_pid[tc] for tc in t.path if tc in plat_tc_to_pid}
+    if hasattr(t, "served_platforms"):
+        return set(t.served_platforms)
+    return {plat_tc_to_pid[tc] for tc in getattr(t, "sim_occ", {}) if tc in plat_tc_to_pid}
 
 
 def platform_tier_reward(t, plat_tc_to_pid: dict, cfg: RewardConfig) -> float:
@@ -229,7 +231,8 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
             for t in self.engine.trains.values():
                 if t.train_id in self._finalized:
                     continue
-                # 终到车按"是否服务了站台"结算(D29); 无可观测目标的车仍不误罚
+                # 终到车须在观测目标台完成 dwell 才结算成功(D29/D33 step 4)；
+                # 仅进入任意站台或计划路径经过站台都不算。无可观测目标的车仍不误罚。
                 if not has_reached_goal(t) and can_complete(t):
                     r -= self.cfg.p_incomplete
                     self._finalized.add(t.train_id)

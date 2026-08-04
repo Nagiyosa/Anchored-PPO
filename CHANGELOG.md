@@ -14,6 +14,20 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
+### D33 step 4 — goal termination, loop guard and queued cancel (2026-08-04)
+- Completion now follows actual state: through trains must physically reach their exit group, while
+  terminating trains must complete dwell at the specific platform inferred as their observed target.
+  Platform tiers and booked-service metrics now use actual served platforms, not planned paths.
+- The train-only total actual-route cap of 12 is a failure guard only and goal success takes precedence.
+  Cancel removes only a request that is still queued and unlocked; queue promotion cannot be rewound.
+- Red-team looping exposed a second-order lock bug: a partial holder from an earlier occurrence of the
+  same route could masquerade as a complete new lock. Lock confirmation now requires full-footprint
+  ownership, and overlap release retains TCs still needed by the future physical path. All seven
+  exploit-policy regressions are collision-free; 101 relevant regressions pass.
+- `1M00` proves logged request order can be downstream-before-upstream and therefore differ from
+  traversal order. This is retained as a hard input to step 5's position-matched signaller replay;
+  the 11-day baseline has not yet been rerun and training remains disabled.
+
 ### D33 step 3 — actual-route reservation lifecycle (2026-08-04)
 - Same-train route extension now transfers each shared boundary TC from the old route holder to the
   new holder atomically. `reserved` and `holder_fp` remain exact reverse indices, empty holders are
@@ -380,12 +394,12 @@ Two definitional decisions, both frozen; they change what the headline number me
   boundary fragments; diagnosis shows otherwise — only 2 of 45 in a three-day sample sit near the
   boundary, while 82% of a twenty-day sample end on a platform track circuit with headcodes 1C, 2A,
   1K, 1F, 1V, 1D. They are terminating passenger services whose headcode dies at the platform. They
-  do have a goal: reach the platform and stop. Excluding them meant an agent could leave a
-  terminating train standing in the throat at no cost while it blocked a platform. Completion is now
-  judged by `has_reached_goal`, which checks the exit group for through trains and `served_platform`
-  for terminating ones. The completable denominator goes from 477 to 513 over three validation days,
-  the excluded set from 45 to 9, and the signaller still scores 1.000 (513/513) — which is itself
-  evidence the goal definition is right.
+  do have a goal: complete dwell at their observed target platform. Excluding them meant an agent
+  could leave a terminating train standing in the throat at no cost while it blocked a platform.
+  D33 step 4 tightened `has_reached_goal`: through trains require actual exit, while terminating
+  trains require `reached_terminal` after target-platform dwell; visiting an arbitrary platform or a
+  planned path is insufficient. The old three-day denominator change (477 to 513, excluded 45 to 9)
+  and signaller score 1.000 are retained as pre-D33 evidence, not the final step-7 baseline.
 - Reference lines on three validation operating days, real history: signaller 1.000 / 6,544 s /
   +166; oscillate-set-cancel 0.575; dispatch-when-possible 0.561; loop-the-train 0.183; random
   0.113; always-wait 0.014; zero collisions and zero deadlocks throughout. Open: oscillate now edges

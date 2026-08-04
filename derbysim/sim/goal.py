@@ -92,6 +92,8 @@ class Goal:
     # 客运列车**(车次号在此消亡, 之后以 ECS 新车次号入库/折返)。此前把这批车整体**排除出完成率
     # 分母**, 后果是: agent 把终到车晾在咽喉区**不受任何惩罚**, 而现实里它正堵着站台。
     terminates_at_platform: bool = False
+    terminal_platforms: frozenset[int] = frozenset()  # 终到车的观测目标台；到任意台不算完成
+    unresolved_end_signal: int | None = None           # 未纳入指标车辆的观测建模边界
 
 
 def train_goal(route_chain, net, stops, plat_tc_to_pid=None) -> Goal:
@@ -106,13 +108,23 @@ def train_goal(route_chain, net, stops, plat_tc_to_pid=None) -> Goal:
         if r and r.end_signal in groups:
             exit_grp = groups[r.end_signal]
             break
-    term = False
-    if not exit_grp and plat_tc_to_pid and route_chain:
+    terminal_platforms: frozenset[int] = frozenset()
+    unresolved_end_signal = None
+    if not exit_grp and route_chain:
         last = net.routes.get(route_chain[-1])
         if last and last.tc_sequence:
-            term = plat_tc_to_pid.get(last.tc_sequence[-1]) is not None
+            terminal_pid = (plat_tc_to_pid or {}).get(last.tc_sequence[-1])
+            if terminal_pid is not None:
+                terminal_platforms = frozenset({terminal_pid})
+            else:
+                # Still excluded from completion metrics, but the observed end
+                # signal is a lifecycle boundary matched by actual position.
+                unresolved_end_signal = last.end_signal
+    term = bool(terminal_platforms)
     return Goal(exit_group=exit_grp, must_serve_platform=bool(stops) or term,
-                terminates_at_platform=term)
+                terminates_at_platform=term,
+                terminal_platforms=terminal_platforms,
+                unresolved_end_signal=unresolved_end_signal)
 
 
 class Reachability:

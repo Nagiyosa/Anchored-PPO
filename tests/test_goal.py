@@ -67,6 +67,23 @@ def test_train_goal_derivation(net):
     assert not goal2.must_serve_platform                  # 无停站 → 不须服务站台
 
 
+def test_terminal_goal_pins_the_observed_platform(net):
+    route = net.routes["RDC5076C(M)"]
+    target_tc = route.tc_sequence[-1]
+    goal = train_goal([route.route_id], net, stops={6},
+                      plat_tc_to_pid={target_tc: 6})
+    assert goal.terminates_at_platform
+    assert goal.terminal_platforms == frozenset({6})
+    assert goal.unresolved_end_signal is None
+
+
+def test_unresolved_train_keeps_a_position_based_lifecycle_boundary(net):
+    route = net.routes["RDC5061A(M)"]
+    goal = train_goal([route.route_id], net, stops=set(), plat_tc_to_pid={})
+    assert not goal.exit_group and not goal.terminates_at_platform
+    assert goal.unresolved_end_signal == route.end_signal
+
+
 def test_platform_service_is_soft_not_hard_filter(net):
     """M9_DESIGN §10 修: 站台服务=软目标, 不作硬性动作过滤(否则致 22.4% false-negative).
     一条通向出区口但暂离站台的进路, 对**停站车**仍应保留(方向可达即可; 站台服务交 M10 奖励)."""

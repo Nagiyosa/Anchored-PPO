@@ -97,6 +97,14 @@ class RouteReservation:
         self.queue.append((route.route_id, train))
         return QUEUED
 
+    def cancel_queued(self, route_id: str, train: str) -> bool:
+        """Cancel exactly one request only while it remains queued and unlocked."""
+        key = (route_id, train)
+        if self.is_locked(route_id, train) or key not in self.queue:
+            return False
+        self.queue.remove(key)
+        return True
+
     # ---- 分段释放 ----
     def release_tc(self, tc: str, key) -> None:
         """车尾清出 tc → 释放该 TC 的预留(**仅当由该 (进路,车) 持有**), 再尝试放行排队。"""
@@ -106,7 +114,7 @@ class RouteReservation:
             self._drop_holder_tc(key, tc)
         self._pump_queue()
 
-    def release_overlap(self, route_id: str, train: str) -> None:
+    def release_overlap(self, route_id: str, train: str, retain_tcs=()) -> None:
         """Release the previous route's remaining overlap after its signal is passed.
 
         Body TCs are released sectionally by the engine.  Any shared TC already
@@ -116,8 +124,9 @@ class RouteReservation:
         if route is None:
             return
         key = (route_id, train)
+        retain = set(retain_tcs)
         for tc in self.overlap(route):
-            if self.reserved.get(tc) == key:
+            if tc not in retain and self.reserved.get(tc) == key:
                 del self.reserved[tc]
                 self._drop_holder_tc(key, tc)
         self._pump_queue()
@@ -147,8 +156,18 @@ class RouteReservation:
 
     # ---- 查询 ----
     def is_locked(self, route_id: str, train: str) -> bool:
-        """**该车**的这条进路是否已落锁(不是"这条进路被任何车锁着")。"""
-        return (route_id, train) in self.holder_fp
+        """Whether this request's complete footprint is currently locked for the train.
+
+        Merely finding ``(route_id, train)`` in ``holder_fp`` is insufficient:
+        a looping train may retain part of an earlier occurrence while a new
+        occurrence of the same route is still queued on another train.
+        """
+        route = self.net.routes.get(route_id)
+        if route is None:
+            return False
+        key = (route_id, train)
+        fp = self.footprint(route)
+        return bool(fp) and all(self.reserved.get(tc) == key for tc in fp)
 
     def holder_of(self, tc: str):
         """tc 当前的持有者 (route_id, train); 无则 None。"""

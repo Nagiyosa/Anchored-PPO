@@ -114,6 +114,48 @@ def test_sectional_release_removes_empty_holder_record(net):
     _assert_exact_reverse_index(R)
 
 
+def test_cancel_only_removes_an_unlocked_queued_request(net):
+    R = RouteReservation(net)
+    route = net.routes["RDC5061A(M)"]
+    assert R.request(route, "A") == LOCKED
+    assert R.request(route, "B") == QUEUED
+    assert R.cancel_queued(route.route_id, "B")
+    assert (route.route_id, "B") not in R.queue
+
+    assert R.request(route, "B") == QUEUED
+    R.release_route(route.route_id, "A")              # queue pump physically locks B
+    assert R.is_locked(route.route_id, "B")
+    assert not R.cancel_queued(route.route_id, "B")   # locked state cannot be cancelled as queued
+    assert R.is_locked(route.route_id, "B")
+
+
+def test_partial_old_occurrence_cannot_wake_a_repeated_route_request(net):
+    """A repeated (route, train) needs its whole footprint, not a stale partial holder."""
+    R = RouteReservation(net)
+    route = net.routes["RDC5061A(M)"]                 # overlap TDAE
+    blocker = net.routes["RDC5075A(M)"]               # body starts TDAE
+    key = (route.route_id, "LOOP")
+    assert R.request(route, "LOOP") == LOCKED
+    R.release_tc("TDAE", key)                         # old occurrence still owns its body only
+    assert key in R.holder_fp and not R.is_locked(route.route_id, "LOOP")
+
+    assert R.request(blocker, "OTHER") == LOCKED
+    assert R.request(route, "LOOP") == QUEUED
+    assert not R.is_locked(route.route_id, "LOOP")    # stale body must not masquerade as new lock
+    R.release_route(blocker.route_id, "OTHER")
+    assert R.is_locked(route.route_id, "LOOP")        # queue pump now acquires full footprint
+
+
+def test_overlap_release_retains_track_needed_by_future_loop(net):
+    R = RouteReservation(net)
+    route = net.routes["RDC5061A(M)"]
+    key = (route.route_id, "LOOP")
+    assert R.request(route, "LOOP") == LOCKED
+    R.release_overlap(route.route_id, "LOOP", retain_tcs={"TDAE"})
+    assert R.reserved["TDAE"] == key
+    _assert_exact_reverse_index(R)
+
+
 def test_same_route_used_by_two_trains_is_not_released_by_the_wrong_one(net):
     """**2026-07-31 修的结构性 bug**: 预留身份原先只用 `route_id`。
 

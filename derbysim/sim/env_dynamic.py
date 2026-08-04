@@ -22,6 +22,11 @@ from derbysim.sim.goal import Reachability, train_goal
 from derbysim.sim.deadlock import has_deadlock, would_create_deadlock
 
 
+# D34: complete train split p99=4 routes including entry; 3*ceil(p99)=12.
+# This is only an infinite-cycle failure guard, never a success condition.
+TOTAL_ACTUAL_ROUTE_CAP = 12
+
+
 @dataclass
 class PanelAction:
     kind: str                       # 'set' | 'cancel' | 'wait'
@@ -58,6 +63,8 @@ class DynTrain:
     dwell_idx: int | None = None
     dwell_s: float = 0.0
     served_platform: bool = False
+    served_platforms: set[int] = field(default_factory=set)
+    completed_dwell_platforms: set[int] = field(default_factory=set)
     done: bool = False
     wait_time: float = 0.0
     blocked_since: float | None = None
@@ -69,6 +76,8 @@ class DynTrain:
     cancel_sig: tuple | None = None      # 上次为该车提供 cancel 时, 挡住其待办进路的持有者签名
     sim_occ: dict = field(default_factory=dict)
     reached_exit: bool = False
+    reached_terminal: bool = False
+    termination_reason: str | None = None
     goal: object = None
 
     def __post_init__(self):
@@ -153,10 +162,15 @@ class DynamicEngine:
                 t.path.append(tc)
                 t.path_route_ids.append(route_id)
                 t.path_commit_indices.append(commit_idx)
-                if (t.dwell_idx is None and tc in self.plat_tc_to_pid
-                        and self.plat_tc_to_pid[tc] in t.stop_pids):
+                pid = self.plat_tc_to_pid.get(tc)
+                dwell_targets = set(t.stop_pids)
+                if t.booked_platform is not None:
+                    dwell_targets.add(t.booked_platform)
+                if t.goal and getattr(t.goal, "terminates_at_platform", False):
+                    dwell_targets.update(getattr(t.goal, "terminal_platforms", ()))
+                if t.dwell_idx is None and pid is not None and pid in dwell_targets:
                     t.dwell_idx = len(t.path) - 1
-                    t.dwell_s = self.dwell_by_platform.get(self.plat_tc_to_pid[tc], 0.0)
+                    t.dwell_s = self.dwell_by_platform.get(pid, 0.0)
 
     def _request(self, t, route_id):
         r = self.net.routes.get(route_id)
@@ -203,6 +217,10 @@ class DynamicEngine:
         for t in self.trains.values():
             if t.pending_request is None or t.done:
                 continue
+            if (t.pending_request, t.train_id) not in self.res.queue:
+                continue
+            if self.res.is_locked(t.pending_request, t.train_id):
+                continue
             if t.blocked_since is None or t.blocked_since >= self.now:
                 continue
             if self._blocker_sig(t) != t.cancel_sig:
@@ -237,9 +255,7 @@ class DynamicEngine:
                 self._flag_deadlock()
         elif a.kind == "cancel" and t is not None:
             rid = t.pending_request
-            if rid is not None:
-                self.res.queue = [(q, tr) for q, tr in self.res.queue
-                                  if not (q == rid and tr == t.train_id)]
+            if rid is not None and self.res.cancel_queued(rid, t.train_id):
                 # queued request 从未进入 actual_chain；撤销只清 pending，不回退任何实际进度。
                 t.pending_request = None
                 if t.blocked_since is not None:          # 排队等锁的那段**必须结清**, 不能丢
@@ -247,6 +263,10 @@ class DynamicEngine:
                     t.blocked_since = None
                 t.awaiting_decision = True               # hold_start **不清**: 车自始至终没动
                 t.cancel_sig = None
+            elif rid is not None and self.res.is_locked(rid, t.train_id):
+                # Queue pumping may have promoted it since the panel snapshot.
+                # Queued cancel cannot undo a physical lock; observe/commit it.
+                self._wake()
 
     def _flag_deadlock(self):
         from derbysim.sim.deadlock import deadlock_cycle
@@ -298,6 +318,7 @@ class DynamicEngine:
         t = self.trains[d["tr"]]
         if not t.route_chain:
             t.done = True
+            t.termination_reason = "no_route"
             return
         if self._request(t, t.route_chain[0]):
             t.entered = True
@@ -324,15 +345,20 @@ class DynamicEngine:
             # old route's remaining overlap.  Route body release stays sectional.
             for old_idx in range(t.entered_commit_idx + 1, commit_idx):
                 if old_idx >= 0:
-                    self.res.release_overlap(t.actual_chain[old_idx], t.train_id)
+                    self.res.release_overlap(
+                        t.actual_chain[old_idx], t.train_id,
+                        retain_tcs=t.path[t.pos:],
+                    )
             t.entered_commit_idx = commit_idx
             self._wake()
         if t.hold_start is not None:                 # **只有真的动了**才结清"走不动"计时
             t.held_time += self.now - t.hold_start
             t.hold_start = None
         t.sim_occ[tc] = self.now
-        if self.plat_tc_to_pid.get(tc) is not None:
+        pid = self.plat_tc_to_pid.get(tc)
+        if pid is not None:
             t.served_platform = True
+            t.served_platforms.add(pid)
         if idx >= 2:
             self._release_behind(t, idx - 2)
         hold = t.dwell_s if (t.dwell_idx == idx and t.dwell_s > 0) else self._adv(tc)
@@ -380,21 +406,62 @@ class DynamicEngine:
         idx = d["idx"]
         if t.pos != idx or t.done or t.pending_request is not None or t.awaiting_decision:
             return
+        if t.dwell_idx == idx:
+            pid = self.plat_tc_to_pid.get(t.path[idx])
+            if pid is not None:
+                # This event fires after the dwell interval scheduled on entry.
+                t.completed_dwell_platforms.add(pid)
+        reason = self._goal_termination_reason(t)
+        if reason is not None:
+            self._finish_train(t, reason)
+            return
         if idx + 1 < len(t.path):
             self.q.push(self.now, "enter", {"tr": t.train_id, "idx": idx + 1})
             return
-        # Transitional stop rule only: Step 4 replaces historical length with goal+route-cap.
-        if len(t.actual_chain) < len(t.route_chain):
-            t.awaiting_decision = True
-            if t.hold_start is None:
-                t.hold_start = self.now              # 开始"走不动": 站着等面板给路
-            self.n_decisions += 1
+        if len(t.actual_chain) >= TOTAL_ACTUAL_ROUTE_CAP:
+            self._finish_train(t, "route_cap")        # failure guard, never success
             return
-        t.done = True                                # 无更多进路 → 终局 + 释放
+        t.awaiting_decision = True
+        if t.hold_start is None:
+            t.hold_start = self.now                  # 开始"走不动": 站着等面板给路
+        self.n_decisions += 1
+
+    def _goal_termination_reason(self, t):
+        goal = t.goal
+        if goal is None:
+            return None
+        if getattr(goal, "terminates_at_platform", False):
+            targets = set(getattr(goal, "terminal_platforms", ()))
+            if targets & t.completed_dwell_platforms:
+                return "terminal_platform"
+            return None
+        at_path_end = bool(t.path) and t.pos == len(t.path) - 1
+        if at_path_end and getattr(goal, "exit_group", None) and self._at_goal_exit(t):
+            return "exit"
+        unresolved = getattr(goal, "unresolved_end_signal", None)
+        last = self.net.routes.get(t.actual_chain[-1]) if t.actual_chain else None
+        if at_path_end and not getattr(goal, "exit_group", None) and unresolved is not None:
+            if last is not None and last.end_signal == unresolved:
+                return "unresolved_boundary"
+        return None
+
+    def _finish_train(self, t, reason: str):
+        """Settle one train and release only its actual physical state."""
+        t.done = True
+        t.termination_reason = reason
+        t.reached_exit = reason == "exit"
+        t.reached_terminal = reason == "terminal_platform"
         if t.hold_start is not None:
             t.held_time += self.now - t.hold_start
             t.hold_start = None
-        t.reached_exit = self._at_goal_exit(t)
+        if t.pending_request is not None:
+            rid = t.pending_request
+            if self.res.is_locked(rid, t.train_id):
+                self.res.release_route(rid, t.train_id)
+            else:
+                self.res.cancel_queued(rid, t.train_id)
+            t.pending_request = None
+            t.blocked_since = None
         for route_id in t.actual_chain:
             self.res.release_route(route_id, t.train_id)   # 释放实际锁过的键，不碰历史参考链
         self._wake()
