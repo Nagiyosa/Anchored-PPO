@@ -27,6 +27,9 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   in `full_d35`, and BC training now accepts an explicit dataset, versions D35 outputs, and archives every
   checkpoint. Reordering merges false fragments to 16,631 train vehicles while leaving p99 route length
   at 4, so the cap of 12 remains supported.
+- Dataset generation now defaults explicitly to `full_d35` and announces its per-day and combined targets.
+  This closes a discovered CLI footgun where omitting `BC_FULL_DIR` silently reused the legacy `full/`
+  shards and reproduced the obsolete 48,021-row dataset.
 - Relevant data, simulation, rollout, reward, reservation, compatibility and red-team regressions pass:
   **118 passed**. A three-day signaller smoke remains 1.000 completion with zero collision/deadlock; this
   is not the formal 11-day baseline. Training stays disabled until steps 6–7 pass.

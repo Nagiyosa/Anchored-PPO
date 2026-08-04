@@ -5,9 +5,9 @@
     python scripts/11_build_full_dataset.py combine          # 合并全部 per-day → 划分 + 报告
 
 产出:
-    artifacts/dataset/full/decisions_<date>.parquet          # 逐日(链清洗后)
-    artifacts/dataset/bc_dataset_all.parquet                 # 合并 + split 列(train=9-10 / holdout=11-12)
-    artifacts/dataset/bc_dataset_report.json                 # 分布/长尾/优先级/delay 报告
+    artifacts/dataset/full_d35/decisions_<date>.parquet      # 逐日(D35 位置复序 + 链清洗)
+    artifacts/dataset/bc_dataset_all_d35.parquet             # 合并 + split 列(train=9-10 / holdout=11-12)
+    artifacts/dataset/bc_dataset_report_d35.json              # 分布/长尾/优先级/delay/指纹
 数据来源全 98 天(2023-09-01→12-07); 决策=M8 回放物理触发点。
 **2026-08-04 口径变更(D35: 位置复序) —— 须用新目录重建，不能覆盖 D31 版**:
   · Panel_Request 可先办下游后办上游；先以独占 Track 占用保守复序，再做 D31 断链切分；
@@ -32,11 +32,15 @@ from derbysim.sim.dataset import build_cif_index, generate_decisions
 from derbysim.learn.route_audit import bc_dataset_fingerprint
 
 # 逐日产出目录。**每一版都留下来**(用户 2026-07-31 要求): 口径变更时用新目录, 不覆盖旧版。
-# 例: BC_FULL_DIR=full_d35 python scripts/11_build_full_dataset.py gen
+# D35 是当前唯一默认口径。旧版只有显式设置 BC_FULL_DIR=full 时才会读取，避免静默复用旧文件。
 import os
-_TAG = os.environ.get("BC_FULL_DIR", "full")
+_TAG = os.environ.get("BC_FULL_DIR", "full_d35")
 FULL = config.ARTIFACTS / "dataset" / _TAG
 SUF = "" if _TAG == "full" else "_" + _TAG.replace("full_", "")
+
+
+def _announce():
+    print(f"[dataset-version] tag={_TAG} per-day={FULL} combined=bc_dataset_all{SUF}.parquet")
 
 
 def _load_common():
@@ -67,6 +71,7 @@ def _augment(recs, date):
 
 
 def gen(i0, i1):
+    _announce()
     FULL.mkdir(parents=True, exist_ok=True)
     net, params, dwell, ptc = _load_common()
     td = pd.read_parquet(config.ARTIFACTS_SUBSET / "td_events.parquet")
@@ -95,7 +100,10 @@ def gen(i0, i1):
 
 
 def combine():
+    _announce()
     files = sorted(FULL.glob("decisions_*.parquet"))
+    if not files:
+        raise FileNotFoundError(f"no decisions_*.parquet under {FULL}; run gen first")
     df = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
     mon = pd.to_datetime(df["date"]).dt.month
     df["split"] = mon.map(lambda m: "train" if m in (9, 10) else "holdout")
