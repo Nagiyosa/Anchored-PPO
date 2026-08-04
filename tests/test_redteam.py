@@ -40,6 +40,9 @@ def _audit():
                             horizon=episode_horizon(w)).metrics
             c += m["completion_rate"]; d += m["weighted_secondary_delay_s"]; r += m["episode_reward"]
             col += m["n_collisions"]
+            assert m["n_state_invariant_violations"] == 0, (
+                f"{name} violated counterfactual state invariants: "
+                f"{m['state_invariant_violations']}")
         n = len(specs)
         out[name] = {"completion": c / n, "delay": d / n, "reward": r / n, "collisions": col}
     return out

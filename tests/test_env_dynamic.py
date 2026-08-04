@@ -86,6 +86,29 @@ def test_reservation_released_at_end():
     net, params, dwell, ptc, dyn = _load()
     eng = _run_replay(net, params, ptc, dwell, dyn)
     assert not eng.res.reserved and not eng.res.holder_fp and not eng.res.queue
+    assert eng.state_invariant_violations() == []
+
+
+def test_step6_audit_detects_done_lock_orphan_and_path_divergence():
+    """D33 Step 6: the audit must catch the whole 'only correct on logged path' failure class."""
+    net, params, _, _, _ = _load()
+    eng = DynamicEngine(net, params)
+    route = net.routes["RDC5061A(M)"]
+    t = DynTrain("BAD", [route.route_id], 0.0)
+    t.done = True
+    t.actual_chain = [route.route_id]
+    t.path = ["NOT_A_REAL_PATH"]
+    t.path_route_ids = [route.route_id]
+    t.path_commit_indices = [0]
+    eng.trains = {t.train_id: t}
+    eng.res.reserved = {"GHOST_TC": (route.route_id, t.train_id),
+                        "ORPHAN_TC": (route.route_id, "MISSING")}
+    eng.res.holder_fp = {(route.route_id, t.train_id): frozenset({"GHOST_TC"}),
+                         (route.route_id, "MISSING"): frozenset({"ORPHAN_TC"})}
+    bad = eng.state_invariant_violations()
+    assert any("done train BAD still reserves" in x for x in bad)
+    assert any("unknown train MISSING" in x for x in bad)
+    assert any("path is inconsistent with actual_chain" in x for x in bad)
 
 
 def test_cancel_returns_train_to_awaiting():

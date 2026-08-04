@@ -51,6 +51,8 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
         served = set(getattr(t, "served_platforms", ()))
         want = set(t.stop_pids) | ({t.booked_platform} if t.booked_platform is not None else set())
         booked_ok += bool(served & want)
+    invariant_bad = (engine.state_invariant_violations()
+                     if hasattr(engine, "state_invariant_violations") else [])
     return {
         "n_trains": len(trains),
         "n_completable": len(able),                       # 分母: 只排除"无可观测目标"的车(D29)
@@ -59,6 +61,8 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
         "completion_rate": (len(reached) / len(able)) if able else 1.0,
         "deadlocked": bool(engine.deadlocked),
         "n_collisions": len(engine.collisions),          # 结构性应恒为 0
+        "n_state_invariant_violations": len(invariant_bad),
+        "state_invariant_violations": invariant_bad[:20],
         "weighted_secondary_delay_s": float(realized_weighted_delay(engine, cfg, horizon)),
         "raw_wait_s": float(sum(t.wait_time for t in trains)),
         "n_stop_trains": len(stops),
@@ -235,6 +239,8 @@ def evaluate_policy(env_factory, adapter, policy_factory, episodes,
         "eval_n_reached_exit": reach,
         "eval_n_impossible": tot("n_impossible"),
         "eval_n_collisions": tot("n_collisions"),                         # **总量**: 安全项不许被平均稀释
+        "eval_n_state_invariant_violations": float(sum(
+            r.get("n_state_invariant_violations", 0) for r in rows)),
         "eval_n_steps": steps,
     }
     for k in ("frac_wait", "frac_set", "frac_cancel"):

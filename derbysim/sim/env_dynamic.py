@@ -491,6 +491,71 @@ class DynamicEngine:
             self.res.release_route(route_id, t.train_id)   # 释放实际锁过的键，不碰历史参考链
         self._wake()
 
+    def state_invariant_violations(self) -> list[str]:
+        """Return structural counterfactual-state violations (D33 step 6).
+
+        This is an audit, not a repair: callers must see the original bad state.
+        It is safe at natural termination, deadlock, or a fixed-horizon snapshot;
+        unfinished trains may legitimately retain locks, done trains may not.
+        """
+        bad: list[str] = []
+        trains = self.trains
+
+        # Reservation ownership must point to one live train, and the reverse
+        # index must describe exactly the same TC set.
+        by_holder: dict[tuple[str, str], set[str]] = defaultdict(set)
+        for tc, key in self.res.reserved.items():
+            by_holder[key].add(tc)
+            owner = trains.get(key[1])
+            if owner is None:
+                bad.append(f"reserved[{tc}] has unknown train {key[1]}")
+            elif owner.done:
+                bad.append(f"done train {key[1]} still reserves {tc} via {key[0]}")
+        actual_fp = {key: frozenset(tcs) for key, tcs in by_holder.items()}
+        if self.res.holder_fp != actual_fp:
+            bad.append("reserved and holder_fp are not exact reverse indices")
+        for rid, train_id in self.res.holder_fp:
+            owner = trains.get(train_id)
+            if owner is None:
+                bad.append(f"holder_fp {(rid, train_id)} has unknown train")
+            elif owner.done:
+                bad.append(f"done train {train_id} still has holder_fp entry {rid}")
+
+        for rid, train_id in self.res.queue:
+            owner = trains.get(train_id)
+            if owner is None:
+                bad.append(f"queue {(rid, train_id)} has unknown train")
+            elif owner.done:
+                bad.append(f"done train {train_id} still has queued route {rid}")
+
+        # Reconstruct the only path that actual_chain is allowed to imply.
+        # This mirrors _append_locked, including adjacent shared-boundary TCs.
+        for t in trains.values():
+            exp_path: list[str] = []
+            exp_routes: list[str] = []
+            exp_commits: list[int] = []
+            for commit_idx, rid in enumerate(t.actual_chain):
+                route = self.net.routes.get(rid)
+                if route is None:
+                    bad.append(f"train {t.train_id} actual_chain has unknown route {rid}")
+                    continue
+                for tc in route.tc_sequence:
+                    if not exp_path or exp_path[-1] != tc:
+                        exp_path.append(tc)
+                        exp_routes.append(rid)
+                        exp_commits.append(commit_idx)
+            if t.path != exp_path:
+                bad.append(f"train {t.train_id} path is inconsistent with actual_chain")
+            if t.path_route_ids != exp_routes:
+                bad.append(f"train {t.train_id} path_route_ids are inconsistent with actual_chain")
+            if t.path_commit_indices != exp_commits:
+                bad.append(f"train {t.train_id} path_commit_indices are inconsistent with actual_chain")
+            if t.path and not (0 <= t.pos < len(t.path)):
+                bad.append(f"train {t.train_id} pos {t.pos} is outside path length {len(t.path)}")
+            if t.done and t.pending_request is not None:
+                bad.append(f"done train {t.train_id} still has pending route {t.pending_request}")
+        return bad
+
     def _delay_min(self, t):
         pr = getattr(t, "planned_ref", None)
         if pr is None:

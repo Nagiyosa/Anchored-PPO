@@ -14,6 +14,18 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
+### D33 step 6 — counterfactual terminal-state invariants (2026-08-04)
+- D35 is now materialised as 53,750 decisions (train 33,280 / holdout 20,470), including 25,077
+  multi-choice decisions. Its combined SHA-256 is
+  `0b86c129a06bf9bee3762559edc001ae0251d7063178c3816eb22b550f9f23e9`.
+- Every episode now audits that done trains own no lock/request state, every reservation belongs to a
+  known unfinished train with an exact reverse index, and `actual_chain` reconstructs `path`, route IDs
+  and commit indices exactly. Violations are reported, never silently repaired, and enter episode and
+  fixed-evaluation metrics.
+- Injected residual-lock, orphan-owner and divergent-path states are detected; all reference and red-team
+  policies report zero violations. The directly affected suites pass: dynamic environment 22, red team 7,
+  rollout 25 (**54 passed**). Training remains disabled pending the full 11-day step-7 baseline.
+
 ### D33 step 5 — position-ordered replay and D35 dataset contract (2026-08-04)
 - A full-data audit proved that `Panel_Request` order is not always physical traversal order: signallers
   can pre-request a downstream route before its feeder. Position reordering is accepted only when route
@@ -23,8 +35,8 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   across 96 complete RL days, the corresponding figures are 751 of 21,963 and 1,562. Online replay now
   matches an unconsumed historical route among the current physical options and consumes it only after
   the route is fully locked; queued/cancelled requests do not advance the reference.
-- The D31 52,294-row dataset, fingerprint, checkpoints and match rates are superseded. D35 must be built
-  in `full_d35`, and BC training now accepts an explicit dataset, versions D35 outputs, and archives every
+- The D31 52,294-row dataset, fingerprint, checkpoints and match rates are superseded. D35 has been built
+  in `full_d35`; BC training accepts an explicit dataset, versions D35 outputs, and archives every
   checkpoint. Reordering merges false fragments to 16,631 train vehicles while leaving p99 route length
   at 4, so the cap of 12 remains supported.
 - Dataset generation now defaults explicitly to `full_d35` and announces its per-day and combined targets.
