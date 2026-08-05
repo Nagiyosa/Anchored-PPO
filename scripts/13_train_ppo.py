@@ -3,7 +3,9 @@
 
 用法(本地 GPU):
     python scripts/13_train_ppo.py --iters 40 --steps-per-iter 2048 --kl-beta 0.1 \
-        --bc-ckpt artifacts/reports/bc_deepsets_noprior.pt --seed 0
+        --bc-ckpt artifacts/reports/bc_deepsets_noprior_nw_d35.pt --seed 0
+    # ↑ 当前正确的 no-prior 热启动权重(D35 + M11 §18 修好配置 --no-route-weight)。
+    #   旧名 bc_deepsets_noprior.pt / _noprior_nw.pt / _noprior_d35.pt 均已过时, 勿用(F2, 2026-08-05)。
 
 关键旋钮(与 docs/M12_DESIGN §10 对应):
     --kl-beta      KL-to-BC 固定档位(§10-F 手动扫描: 0 / 0.01 / 0.1 / 1 / 10)

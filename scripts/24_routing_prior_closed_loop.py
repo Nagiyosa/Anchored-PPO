@@ -127,8 +127,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="val", help="val(默认) | trainval | train")
     ap.add_argument("--limit-days", type=int, default=0)
-    ap.add_argument("--bc-noprior", default=None, help="no-prior BC 权重 .pt(如 artifacts/reports/bc_deepsets_noprior.pt)")
-    ap.add_argument("--bc-prior", default=None, help="含先验 BC 权重 .pt(如 artifacts/reports/bc_deepsets.pt)")
+    ap.add_argument("--bc-noprior", default=None, help="no-prior BC 权重(当前正确: artifacts/reports/bc_deepsets_noprior_nw_d35.pt, M11 §18)")
+    ap.add_argument("--bc-prior", default=None, help="含先验 BC 权重(当前正确: artifacts/reports/bc_deepsets_nw_d35.pt)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 

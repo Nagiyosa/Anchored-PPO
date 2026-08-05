@@ -12,8 +12,11 @@
   signaller(上界) · lookup(每信号最频, 无学习) · bc_noprior · bc_prior · random(下界)
 输出可直接支撑"用哪个先验热启动"的决定, 以及 M12d 基线阶梯(**查表必须进阶梯** —— 打不过它的方法没价值)。
 
-用法: python scripts/16_compare_routing_priors.py --bc-noprior artifacts/reports/bc_deepsets_noprior.pt \
-          --bc-prior artifacts/reports/bc_deepsets.pt --split val
+⚠️ 已被 scripts/24 取代(2026-08-05, F2/F3): 本脚本跑在旧 3h 拥堵窗口(D27 前)上。修正引擎(D41)+
+   运营日(D27)+ D35 的闭环对照请用 `scripts/24_routing_prior_closed_loop.py`。此处仅保留历史;
+   如仍要跑, 数据集已改 D35, checkpoint 现为 `bc_<enc>[_noprior]_nw_d35.pt`(M11 §18: 必带 --no-route-weight)。
+用法: python scripts/16_compare_routing_priors.py --bc-noprior artifacts/reports/bc_deepsets_noprior_nw_d35.pt \
+          --bc-prior artifacts/reports/bc_deepsets_nw_d35.pt --split val
 """
 from __future__ import annotations
 
@@ -40,7 +43,7 @@ from derbysim.sim.reward import RewardedDynamicEnv
 
 def lookup_table(split: str = "train") -> dict:
     """每信号最频进路 —— 只用 BC **训练**段拟合(无泄露)。M11 实测该基线 macro≈0.80。"""
-    bc = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all.parquet")
+    bc = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all_d35.parquet")
     tr = bc[bc["split"] == split]
     cnt: dict = {}
     for sig, rid in zip(tr["signal"], tr["chosen_route"]):
@@ -140,7 +143,7 @@ def main() -> None:
                 continue
             # 含先验版的候选特征需要 live prior → 用**训练段**拟合的 prior 建专用特征器/适配层
             if tag == "bc_prior":
-                bcdf = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all.parquet")
+                bcdf = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all_d35.parquet")
                 trdf = bcdf[bcdf["split"] == "train"]
                 prior = fit_route_prior([{"signal": r["signal"],
                                           "legal_route_ids": r["legal_route_ids"],
