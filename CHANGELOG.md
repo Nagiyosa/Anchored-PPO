@@ -1,7 +1,7 @@
 # Changelog
 
 Microscopic blocking-time simulator + signaller route-decision learning for the Derby station throat.
-Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D39),
+Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D41),
 `docs/IMPLEMENTATION_PLAN.md`, `docs/M9_DESIGN.md`–`docs/M12_DESIGN.md`.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
@@ -13,6 +13,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm start) on the M9
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
+
+### D41 — decision space confined to in-scope routes; terminate at region boundary (2026-08-05)
+- Step 9 ③ found greedy had 54.8% awaiting rows with "no option". The cause was not funnel
+  over-filtering (goal/deadlock filters = 0) but the engine offering **out-of-scope routes** at the
+  region edge, stranding policies at boundary dead-ends (all no-geometry was one out-of-scope TC, TDBN).
+- Clarified: `in_scope` is a per-route start-signal property; long routes carry out-of-scope track, so a
+  route-level cut isn't clean. Reachability (`_reach`) already expands in-region only and treats the edge
+  as an exit, and real trains use 0/2809 out-of-scope routes — so the decision problem is closed within
+  in-scope routes + boundary termination.
+- Fix (reachability untouched): (1) `_legal` offers only in-scope routes; (2) a train that reaches its
+  path end with no in-scope continuation terminates — success if at its goal exit, else `left_region`
+  (incomplete, locks released) instead of stranding and holding locks. Audit geometry helpers synced.
+- Verified on full data: signaller **bit-identical** (completion 1.000, n_decisions 371/557/514, delay
+  100,273.5s, n_done=n_trains, all safety/invariant/mismatch 0, deterministic); greedy
+  `awaiting_no_geometry` 4987→0, no-set 33,920→0, 0 collisions/deadlocks/invariants; Step 7/8 gates pass;
+  regression green.
+- Reframing finding: on the corrected in-scope engine completion is near-saturated — trivial greedy hits
+  0.9916 — because `route_keeps_goal` guarantees completability. The differentiator is delay: greedy
+  139,796s vs signaller 100,274s (+39%), reward −705 vs +101. Completion is a safety floor; the learning
+  signal is reducing secondary delay via timing (D23/D24). Step 9 redirected: ③ closed, ① measures delay
+  cascade, ② (timing/WAIT) becomes central.
 
 ### D33 step 8 — timing-contract gate passed; events batched per common time-cut (2026-08-04, D39)
 - Reworked the event loop so each timestamp forms exactly one panel: `DynamicEngine.run` +
