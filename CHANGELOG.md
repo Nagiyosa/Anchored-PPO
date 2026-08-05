@@ -1,7 +1,7 @@
 # Changelog
 
 Microscopic blocking-time simulator + signaller route-decision learning for the Derby station throat.
-Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D41),
+Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D44),
 `docs/IMPLEMENTATION_PLAN.md`, `docs/M9_DESIGN.md`–`docs/M12_DESIGN.md`.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
@@ -13,6 +13,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm start) on the M9
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
+
+### D42–D44 — Step 9 done, routing-prior closed-loop adjudicated, Step 10 fixed as B (2026-08-05)
+- Step 9 full scan (train+val): (1) single-point route deviation is heavy-tailed — median Δdelay 0 but
+  26% catastrophic cascades, and catastrophe is almost entirely from being forced onto atypical routes
+  (common-route 3% vs rare-route 57%); (2) a single forced WAIT is smooth (97.75% small delay rise, 0.2%
+  completion drop). So routing is high-stakes/heavy-tailed, timing is a smooth delay dial.
+- M11 re-run correctly on D35 per §18 (`--no-route-weight --epochs 30`): no-prior BC macro 0.68–0.76 >
+  lookup 0.65 (the earlier `--epochs 15` without `--no-route-weight`, macro 0.53, is void).
+- Routing-prior closed-loop on the corrected engine (held-out val): signaller 1.0000/100,274; lookup
+  0.9972/+8.7% (strongest safe baseline); greedy +39%; BC 0.90/+101–131%. Decision A adjudicated: match
+  rate is disconnected from closed-loop — BC beats the lookup on match yet loses badly closed-loop
+  ("the more it imitates, the worse"), because its deviations land on rare-route landmines (Step 9 ①).
+- Methodology fix (corrects D40): fitted models (lookup/BC/RL) must be evaluated held-out, not on
+  train+val; lookup's honest baseline is the held-out val +8.7% (trainval +2.9% is in-sample).
+- Step 10 fixed as option B: keep the full action space (routing freedom), warm-start + KL-anchor to the
+  fixed no-prior BC (bc_deepsets_noprior_nw_d35.pt), sweep β from tight to loose (B sits tight), RL mainly
+  learns timing plus when a BC route deviation pays off; must beat the held-out lookup; safe passage is
+  guaranteed structurally (mask + reachability + in-scope). Data basis: 46.7% of decisions are multi-choice,
+  where the signaller deviates from the most-frequent route 9.21% of the time — concentrated in ECS 27% /
+  freight 20% / light-engine 45% (passenger only 1–5%), 67% to the 2nd-most-frequent — context-dependent
+  deviations that lookup cannot express but BC can.
 
 ### D41 — decision space confined to in-scope routes; terminate at region boundary (2026-08-05)
 - Step 9 ③ found greedy had 54.8% awaiting rows with "no option". The cause was not funnel

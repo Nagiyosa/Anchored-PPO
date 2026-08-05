@@ -43,6 +43,8 @@ from derbysim.learn.ppo import (PPOConfig, RunningMoments, TorchPanelDriver, fro
 from derbysim.learn.rollout import (as_factory, collect_rollout, evaluate_policy,
                                     make_greedy_set_policy, make_random_policy,
                                     signaller_replay_factory)
+from derbysim.learn.baselines import (lookup_table, make_ars_proxy_policy, make_fcfs_policy,
+                                      make_fsfs_policy, make_lookup_policy)
 from derbysim.learn.scenarios import (build_day_trains, day_horizon, load_assets,
                                       operating_days)
 from derbysim.sim.reward import RewardConfig, RewardedDynamicEnv
@@ -194,7 +196,12 @@ def main() -> None:
               "真实撤销率 10.44%。这一类'热启动静默失效'不会有任何其它指标报警, 先查再跑。")
 
     baselines = {}
+    _top = lookup_table()          # D42/D44: lookup 最频路是 held-out 最强安全基线, PPO 必须打败它
     for tag, fac in (("signaller_replay", signaller_replay_factory),
+                     ("lookup_most_frequent", make_lookup_policy(_top)),
+                     ("ars_proxy", make_ars_proxy_policy(_top)),
+                     ("fcfs", make_fcfs_policy(_top)),
+                     ("fsfs", make_fsfs_policy(_top)),
                      ("greedy_set", as_factory(make_greedy_set_policy())),
                      ("random_legal", as_factory(make_random_policy(np.random.default_rng(0))))):
         b = evaluate_policy(env_factory, adapter, fac, eval_eps)
@@ -244,12 +251,14 @@ def main() -> None:
         row = {"iter": it, "steps": len(transitions), "episodes": len(ep_metrics), **stats,
                "train_reward_mean": float(np.mean([m["episode_reward"] for m in ep_metrics])),
                "train_completion_mean": float(np.mean([m["completion_rate"] for m in ep_metrics])),
+               "train_delay_mean": float(np.mean([m["weighted_secondary_delay_s"] for m in ep_metrics])),
                "rollout_s": roll_s, "update_s": upd_s,
                "steps_per_s": len(transitions) / max(roll_s, 1e-9),
                "ret_mean": (ret_norm.mean if ret_norm else 0.0),
                "ret_std": (ret_norm.std if ret_norm else 1.0)}
         print(f"it {it:>3}{'*' if warming else ' '}| steps {row['steps']:>5} ({row['episodes']} eps) "
-              f"| **完成率 {row['train_completion_mean']:.3f}** | EV {row['explained_variance']:>5.3f} | KL {row['kl_to_bc']:.4f} "
+              f"| **完成率 {row['train_completion_mean']:.3f} 延误 {row['train_delay_mean']:>9.0f} "
+              f"reward {row['train_reward_mean']:>8.1f}** | EV {row['explained_variance']:>5.3f} | KL {row['kl_to_bc']:.4f} "
               f"| 锚 {row.get('kind_anchor_kl', 0):.3f} "
               f"| ent {row['entropy']:.3f} | aKL {row.get('approx_kl', 0):.3f} "
               f"| 早停 {row.get('kl_stop_rate', 0):.0%}"
@@ -292,6 +301,9 @@ def main() -> None:
                   f"| reward {ev['eval_episode_reward']:>9.1f} "
                   f"| WAIT {ev['eval_frac_wait']:.0%}/set {ev['eval_frac_set']:.0%}"
                   f"/cancel {ev['eval_frac_cancel']:.0%} | 死锁 {ev['eval_deadlocks']} "
+                  f"|| 靶子 lookup: delay {baselines['lookup_most_frequent']['eval_weighted_secondary_delay_s']:>9.0f} "
+                  f"reward {baselines['lookup_most_frequent']['eval_episode_reward']:.1f}  "
+                  f"{'✅压过' if ev['eval_weighted_secondary_delay_s'] < baselines['lookup_most_frequent']['eval_weighted_secondary_delay_s'] else '❌未过'} "
                   f"| (人类 {baselines['signaller_replay']['eval_episode_reward']:.1f} / "
                   f"有路就办 {baselines['greedy_set']['eval_episode_reward']:.1f} / "
                   f"随机 {baselines['random_legal']['eval_episode_reward']:.1f})")
