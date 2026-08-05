@@ -21,5 +21,7 @@
 venv/
 env/
 __pycache__/
+.tmp_pyc*/
+.tmp_*/
 .idea/
 .vscode/
