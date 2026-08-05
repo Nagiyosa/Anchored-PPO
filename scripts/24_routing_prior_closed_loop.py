@@ -28,7 +28,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from derbysim import config
-from derbysim.learn.features import Featurizer
+from derbysim.learn.features import Featurizer, fit_route_prior
 from derbysim.learn.panel import PanelAdapter
 from derbysim.learn.rollout import (evaluate_policy, make_greedy_set_policy,
                                     make_random_policy, make_signaller_replay_policy)
@@ -66,6 +66,57 @@ def make_lookup_factory(top: dict):
     return factory
 
 
+def make_bc_factory(model, device):
+    """用 BC 网络选路, 时机=有得办就办(与查表基线同规则, 保证只比选路)。(移植自 scripts/16)"""
+    import torch
+
+    def factory(_env):
+        def act(enc):
+            rows = enc["train_rows"]
+            if not rows:
+                return 0, 0.0, 0.0
+            with torch.no_grad():
+                logits = model(torch.as_tensor(enc["x_dec"]).float().to(device),
+                               torch.as_tensor(enc["x_conf"]).float().to(device),
+                               torch.as_tensor(enc["conf_mask"]).float().to(device),
+                               torch.as_tensor(enc["x_cand"]).float().to(device),
+                               torch.as_tensor(enc["cand_mask"]).float().to(device))
+                pick = logits.argmax(dim=-1).to("cpu").numpy()
+            first = None
+            for i, s in enumerate(enc["slots"]):
+                if s.kind != "set":
+                    continue
+                if first is None:
+                    first = i
+                if s.col == int(pick[s.row]):
+                    return i, 0.0, 0.0
+            return (first, 0.0, 0.0) if first is not None else (0, 0.0, 0.0)
+        return act
+    return factory
+
+
+def load_bc(ckpt, adapter, device):
+    import torch
+    from derbysim.learn.models import PointerBC
+    d = torch.load(ckpt, map_location=device, weights_only=False)
+    st, enc = (d["model"], d.get("encoder", "deepsets")) if "model" in d else (d, "deepsets")
+    hid = d.get("hidden", 64) if isinstance(d, dict) else 64
+    m = PointerBC(enc, adapter.dec_dim, adapter.conf_dim, adapter.cand_dim, hidden=hid)
+    m.load_state_dict(st)
+    m.to(device).eval()
+    return m
+
+
+def _prior_adapter(net, ptc):
+    """含先验 BC 需要 live route_prior 特征 → 用 D35 train 段拟合的 prior 建专用适配层。"""
+    bc = pd.read_parquet(config.ARTIFACTS / "dataset" / "bc_dataset_all_d35.parquet")
+    tr = bc[bc["split"] == "train"]
+    prior = fit_route_prior([{"signal": r["signal"], "legal_route_ids": r["legal_route_ids"],
+                              "chosen_route": r["chosen_route"], "n_legal": r["n_legal"]}
+                             for r in tr.to_dict("records")])
+    return PanelAdapter(net, Featurizer(net, ptc, route_prior=prior), require_no_prior=False)
+
+
 def _days(split: str):
     if split == "trainval":
         return list(operating_days("train")) + list(operating_days("val"))
@@ -76,6 +127,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--split", default="val", help="val(默认) | trainval | train")
     ap.add_argument("--limit-days", type=int, default=0)
+    ap.add_argument("--bc-noprior", default=None, help="no-prior BC 权重 .pt(如 artifacts/reports/bc_deepsets_noprior.pt)")
+    ap.add_argument("--bc-prior", default=None, help="含先验 BC 权重 .pt(如 artifacts/reports/bc_deepsets.pt)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -93,17 +146,33 @@ def main() -> None:
     def env_factory():
         return RewardedDynamicEnv(net, params, ptc, dwell)
 
+    # (标签, 策略工厂, 该策略专用适配层 or None=默认)
     policies = [
-        ("signaller_replay(选路100%,上界)", make_signaller_replay_policy),
-        ("lookup_most_frequent(BC代理,典型路)", make_lookup_factory(top)),
-        ("greedy_first_legal(无先验)", lambda _e: make_greedy_set_policy()),
-        ("random_legal(下界)", lambda _e: make_random_policy(np.random.default_rng(0))),
+        ("signaller_replay(选路100%,上界)", make_signaller_replay_policy, None),
+        ("lookup_most_frequent(BC代理,典型路)", make_lookup_factory(top), None),
+        ("greedy_first_legal(无先验)", lambda _e: make_greedy_set_policy(), None),
+        ("random_legal(下界)", lambda _e: make_random_policy(np.random.default_rng(0)), None),
     ]
+    if args.bc_noprior or args.bc_prior:
+        from derbysim.learn.panel_models import pick_device
+        dev = pick_device()
+        for tag, ck, prior in (("bc_noprior", args.bc_noprior, False),
+                               ("bc_prior", args.bc_prior, True)):
+            if not ck:
+                continue
+            if not Path(ck).exists():
+                print(f"  [skip] {tag}: 找不到 {ck}(先跑 scripts/12 生成)", flush=True)
+                continue
+            ad_bc = _prior_adapter(net, ptc) if prior else adapter
+            model = load_bc(ck, ad_bc, dev)
+            print(f"  [{tag}] loaded {ck} (device={dev})", flush=True)
+            policies.append((f"{tag}({'含先验' if prior else 'no-prior'})",
+                             make_bc_factory(model, dev), ad_bc))
 
-    print(f"\n{'策略':<34}{'完成率(微)':>11}{'加权次生延误':>15}{'回报':>12}{'死锁':>6}{'不变式':>7}", flush=True)
+    print(f"\n{'策略':<40}{'完成率(微)':>11}{'加权次生延误':>15}{'回报':>12}{'死锁':>6}{'不变式':>7}", flush=True)
     rows = {}
-    for tag, fac in policies:
-        r = evaluate_policy(env_factory, adapter, fac, episodes, max_decisions=200000)
+    for tag, fac, ad_use in policies:
+        r = evaluate_policy(env_factory, ad_use or adapter, fac, episodes, max_decisions=200000)
         rows[tag] = {"completion": r["eval_completion_rate"],
                      "delay_s": r["eval_weighted_secondary_delay_s"],
                      "reward": r["eval_episode_reward"],
@@ -111,7 +180,7 @@ def main() -> None:
                      "deadlocks": r["eval_deadlocks"],
                      "invariants": r["eval_n_state_invariant_violations"],
                      "frac_wait": r["eval_frac_wait"], "frac_set": r["eval_frac_set"]}
-        print(f"{tag:<34}{r['eval_completion_rate']:>11.4f}"
+        print(f"{tag:<40}{r['eval_completion_rate']:>11.4f}"
               f"{r['eval_weighted_secondary_delay_s']:>15.0f}{r['eval_episode_reward']:>12.0f}"
               f"{r['eval_deadlocks']:>6}{int(r['eval_n_state_invariant_violations']):>7}", flush=True)
 
