@@ -1,7 +1,7 @@
 # Changelog
 
 Microscopic blocking-time simulator + signaller route-decision learning for the Derby station throat.
-Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D46),
+Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D48),
 `docs/IMPLEMENTATION_PLAN.md`, `docs/M9_DESIGN.md`–`docs/M12_DESIGN.md`.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
@@ -13,6 +13,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm start) on the M9
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
+
+### D48 — The environment's decision model is fundamentally wrong: reality is proactive, the env is reactive (2026-08-06, verified against data)
+- Data (TD, 92,534 route settings): the signaller issues each Panel_Request a median of 147s before the
+  train occupies the route's first TC (p10 67 / p90 254); 99.9% are set >2s ahead, 91.7% >60s ahead, only
+  0.1% at-arrival. Setting routes ~2.5 min in advance is the norm.
+- But the current environment only lets you set a route for a train that is ALREADY awaiting (out of
+  locked track, stopped at its signal) — there is no advance-reservation action. So the environment never
+  exposes the core timing lever (when to reserve each train's next route). This explains almost everything:
+  heuristics gridlock (they can only react at arrival, can't sequence ahead), and the RL can't learn timing
+  (it's a missing mechanism, not a warm-start or reward problem). WAIT's true meaning: don't reserve yet;
+  the train keeps running on its locked track and only stops if the next route comes too late.
+- Analogy (user): this is essentially Rail Route — you see the schedule and freely decide when to set which
+  route. The environment should be a mini Rail Route; the RL is an AI script maximising the score.
+- Redesign direction: the decision is "when to reserve each in-region / approaching train's next route"
+  (the lead time is chosen by the policy from train type / signal state / conflicts — NOT a fixed window);
+  the state exposes approaching trains; signaller replay must still reach 1.0 under the new model. This is
+  the deepest rework, touching env/data/BC/RL/eval end to end; discuss the design piece by piece first.
 
 ### D46 — Revert D41's strand-termination: a stranded train is a real gridlock (2026-08-06, user)
 - Engine-level root error: D41 terminated + released the locks of a train that reaches an in-scope
