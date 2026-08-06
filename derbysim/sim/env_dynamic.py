@@ -475,16 +475,15 @@ class DynamicEngine:
         if len(t.actual_chain) >= TOTAL_ACTUAL_ROUTE_CAP:
             self._finish_train(t, "route_cap")        # failure guard, never success
             return
-        # D41 到区边界即终止: 车到路径末端若无任何 in-scope 几何延续, 说明它已抵达区域边界出口
-        # (或到了无法再向目标推进的死点)。到**目标**出口在上面 _goal_termination_reason 已判为
-        # 成功; 走到这里说明不是目标出口 → 已离开可控区且未达标 → 记未完成并释放锁, 而非挂着占锁
-        # 卡死。占用/预留导致的暂时受阻不会走到这: 被占的进路仍在 _legal 里(请求会排队)。
-        if not self._legal(t, self._decision_signal(t)):
-            self._finish_train(t, "left_region")      # 离区未达目标: reached_exit/terminal 均 False
-            return
+        # D46(撤销 D41 的 left_region 终止): 车到路径末端无 in-scope 延续且非目标出口 = **搁浅**。
+        # **不再终止+释放锁** —— 旧做法让"把难车丢进死点"零后果、且物理不真实(现实里搁浅车停在
+        # 轨道上、一直占着锁、堵住后车 = gridlock)。改为**保持 awaiting、继续占锁、延误计到地平线**
+        # (realized_weighted_delay 对 not-done 车本就计到地平线): 坏选路自食其果, 才是对的自然惩罚。
+        # 信号员从不搁浅(完成 1.0), 故回放逐位不变。无 in-scope set 选项时面板对它只有 WAIT →
+        # _time_slice 静默返回, 不空转; 阻塞若成环则由死锁检测判负(亦是真实后果)。
         t.awaiting_decision = True
         if t.hold_start is None:
-            t.hold_start = self.now                  # 开始"走不动": 站着等面板给路
+            t.hold_start = self.now                  # 开始"走不动": 站着等面板给路(占着锁)
         self.n_decisions += 1
 
     def _goal_termination_reason(self, t):

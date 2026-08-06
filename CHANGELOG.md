@@ -1,7 +1,7 @@
 # Changelog
 
 Microscopic blocking-time simulator + signaller route-decision learning for the Derby station throat.
-Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D44),
+Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decision log D1–D46),
 `docs/IMPLEMENTATION_PLAN.md`, `docs/M9_DESIGN.md`–`docs/M12_DESIGN.md`.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
@@ -13,6 +13,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm start) on the M9
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
+
+### D46 — Revert D41's strand-termination: a stranded train is a real gridlock (2026-08-06, user)
+- Engine-level root error: D41 terminated + released the locks of a train that reaches an in-scope
+  boundary with no continuation. But a real stranded train sits on the track holding its locks and
+  blocks everything behind it (gridlock). D41 made "dump a hard train into a dead-end" consequence-free
+  and also let it escape the delay charge (`realized_weighted_delay` only charges not-done trains to the
+  horizon; a terminated stranded train is done and escapes). The PPO bring-up exploited exactly this:
+  complete the easy trains, strand ~10% of the hard ones cheaply.
+- Fix: remove the left_region termination. A stranded train stays awaiting, keeps holding its locks, and
+  accrues delay to the horizon — bad routing self-penalises. Signaller replay is bit-identical (it never
+  strands, completion 1.0); greedy completion drops realistically to 0.55–0.70 with delay in the millions
+  (locks block others), 0 collisions/deadlocks/invariants, no hang; 40+ regression tests pass.
+  "Don't drop trains" is now enforced by the environment's physics.
+- Residual of the same class: route_cap (needs a policy to actively loop a train 12 times to trigger —
+  not a cheap dump); flagged, watch.
 
 ### D45 — PPO bring-up fails to learn: credit-assignment / reward-variance problem (2026-08-06)
 - β0.1 warm-started from the fixed no-prior BC, 100 iters (early-stopped at 24): held-out eval is stuck
