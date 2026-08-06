@@ -14,6 +14,20 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
+### D45 — PPO bring-up fails to learn: credit-assignment / reward-variance problem (2026-08-06)
+- β0.1 warm-started from the fixed no-prior BC, 100 iters (early-stopped at 24): held-out eval is stuck
+  at the BC start (0.90 / 232k) from iter 1, no convergence, ~2× worse than lookup (109k). Root cause:
+  EV is negative/wildly swinging throughout — the critic cannot fit the returns, so advantages are noise
+  and PPO has no useful gradient (lesson 11 realized). Why: delay is a whole-day global quantity and, with
+  γ=1, the return is dominated by exogenous which-day variance (train delay swings 16× across iters), which
+  the state cannot distinguish. No reward hacking / no cancel drift. More steps won't help (not undertrained).
+- "RL can't beat lookup" is rejected as a conclusion: lookup is imperfect (most-frequent route only, never
+  waits strategically) and beatable; the earlier "timing headroom ≈ 0" inference is void (ARS-proxy only
+  equalled the signaller because it peeks at the logged route).
+- Fix direction: (1) free probe `--half-life 900` (localise returns → lower variance → does EV recover?);
+  (2) if confirmed, an objective-preserving per-day difference reward (reward = how much better than a
+  reference policy on the same day) to cancel the exogenous day variance while keeping γ=1's objective.
+
 ### D42–D44 — Step 9 done, routing-prior closed-loop adjudicated, Step 10 fixed as B (2026-08-05)
 - Step 9 full scan (train+val): (1) single-point route deviation is heavy-tailed — median Δdelay 0 but
   26% catastrophic cascades, and catastrophe is almost entirely from being forced onto atypical routes

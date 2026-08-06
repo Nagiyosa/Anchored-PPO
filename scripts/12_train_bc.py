@@ -59,7 +59,8 @@ def main(argv):
     net = InfrastructureNetwork.load(); ptc = _ptc()
     # D35 是当前默认；旧 D31 只能显式选择。输出自动加 _d35，避免覆盖历史权重。
     _ds = args.dataset
-    dataset_tag = "_d35" if Path(_ds).stem.endswith("_d35") else ""
+    dataset_tag = (("_lookup" if "lookup" in Path(_ds).stem else "")   # 蒸馏版另起名, 不覆盖真 BC
+                   + ("_d35" if Path(_ds).stem.endswith("_d35") else ""))
     print(f"[data] {_ds}")
     df = pd.read_parquet(config.ARTIFACTS / "dataset" / _ds)
     # **三段划分(2026-08-01 修, 方法学硬伤)**: 早停/选最佳 checkpoint 此前用的就是 `holdout`,
