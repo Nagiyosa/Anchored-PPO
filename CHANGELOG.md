@@ -56,6 +56,15 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   reserve-ahead + train-keyed locking (④ core), policy-reservation advancement gate (⑤), leak-safe delay (③
   fix), entry-as-decision (a), narrow/wide window (D57). Remaining are RL/BC-facing and belong with ⑦: richer ③
   featurizer wiring, ④ cancel_locked, then BC full-panel (⑦) + baselines/eval/Step9 redo (⑧).
+- **⑥ sealed — full Step-7 gate on the proactive engine (committed script + timestamped artifact)**:
+  `scripts/20` gains `--proactive` / `--reserve-window`; in proactive mode it deliberately does **not** compare
+  against `HISTORICAL_REPORT` (that is old reactive/D48-voided data — comparing would point at wrong content),
+  only self-certifying invariants. Proactive-narrow gate (`d33_step7_proactive_20260807-130744.json`):
+  **gate_pass True**, full protocol (11 days × 2 passes), deterministic, completion 1.000 every day, 2809/2809
+  done, **0 collisions / 0 deadlocks / 0 truncations / 0 D36 invariant violations / 0 reference-chain
+  mismatches**, delay 54,652.5s. Reactive gate still passes unchanged (100,273.5s, chain-miss 0) — the script
+  edit didn't disturb the reactive path. The proactive environment is now a sealed, reproducible foundation for
+  ⑦/⑧.
 
 ### D56 — Block ⑤ WAIT/delay/gridlock settlement settled + overlap sensitivity measured (take depth-1 consistent + report sensitivity) (2026-08-06, user)
 - **Delay/gridlock accounting reused unchanged**: `held_time` weighted by service-class λ, incomplete trains

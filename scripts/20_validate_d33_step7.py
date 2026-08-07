@@ -45,8 +45,10 @@ def _git_head() -> str | None:
         return None
 
 
-def _run_day(day, net, params, dwell, ptc, adapter, max_decisions: int) -> dict:
-    env = RewardedDynamicEnv(net, params, ptc, dwell)
+def _run_day(day, net, params, dwell, ptc, adapter, max_decisions: int,
+             proactive: bool = False, reserve_window: str = "narrow") -> dict:
+    env = RewardedDynamicEnv(net, params, ptc, dwell,
+                             proactive=proactive, reserve_window=reserve_window)
     result = run_episode(
         env, adapter, make_signaller_replay_policy(env), build_day_trains(day, inject=False),
         max_decisions=max_decisions, horizon=day_horizon(day))
@@ -150,6 +152,10 @@ def main() -> None:
     parser.add_argument("--passes", type=int, default=2,
                         help="fresh deterministic repetitions; Step 7 requires 2")
     parser.add_argument("--max-decisions", type=int, default=200000)
+    parser.add_argument("--proactive", action="store_true",
+                        help="D50/D57: 用提前触发的 proactive 引擎(默认 reactive)")
+    parser.add_argument("--reserve-window", default="narrow", choices=["narrow", "wide"],
+                        help="D57: 回放/BC 恒 narrow(复现真人时机); wide 仅 RL 消融, 不作人类锚")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
 
@@ -161,7 +167,8 @@ def main() -> None:
     for pass_idx in range(args.passes):
         rows = []
         for day_idx, day in enumerate(days, 1):
-            row = _run_day(day, net, params, dwell, ptc, adapter, args.max_decisions)
+            row = _run_day(day, net, params, dwell, ptc, adapter, args.max_decisions,
+                           proactive=args.proactive, reserve_window=args.reserve_window)
             rows.append(row)
             m = row["metrics"]
             print(f"pass {pass_idx + 1}/{args.passes} day {day_idx:02d}/{len(days)} "
@@ -194,7 +201,9 @@ def main() -> None:
                      and summary["n_reference_chain_mismatches"] == 0
                      and summary["n_done"] == summary["n_trains"])
 
-    historical = _historical()
+    # ⚠️ proactive 门**不**与旧对照比: HISTORICAL_REPORT 是旧 reactive 引擎数据(D48 作废),
+    # 拿它做 delta 会"指向错误内容"。proactive 只自证不变式(确定/完成/D36/参考链/指纹)。
+    historical = None if args.proactive else _historical()
     delta = None
     if historical and summary:
         delta = {
@@ -208,6 +217,8 @@ def main() -> None:
 
     report = {
         "audit": "D33 step 7 full validation replay and determinism gate",
+        "engine_mode": ("proactive" if args.proactive else "reactive"),
+        "reserve_window": args.reserve_window,
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "source_git_head": _git_head(),
         "elapsed_s": time.time() - started,
@@ -222,8 +233,9 @@ def main() -> None:
         "delta_vs_historical": delta,
         "runs": runs,
     }
+    _tag = "proactive" if args.proactive else "reactive"
     out = args.out or (config.ARTIFACTS_REPORTS /
-                       f"d33_step7_{time.strftime('%Y%m%d-%H%M%S')}.json")
+                       f"d33_step7_{_tag}_{time.strftime('%Y%m%d-%H%M%S')}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     print(json.dumps({"gate_pass": gate_pass, "deterministic": deterministic,
