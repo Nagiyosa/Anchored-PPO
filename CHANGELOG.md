@@ -14,7 +14,34 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
-### ⚠️ KEY BRANCH POINT — wide+req_time faithful-anchor attempt failed; TD occupation validation pending (2026-08-07)
+### D58 — Evaluation metric suite + reward redesigned to mirror Rail Route (per-train terminal); branch point resolved (2026-08-07, user)
+- **Branch point resolved**: the TD-occupation validation (`scripts/28`, `occupation_vs_td_20260807-184618.json`)
+  showed all three modes drift 40–78s median from TD (reactive most centered at bias 0 — but that is a
+  tautology: reactive just replays the per-TC calibration, meaningless). The user's key correction: **we should
+  NOT chase matching TD/the signaller** — the signaller is a *reference baseline, not a target* (an optimal
+  policy reacting immediately is naturally faster than the imperfect signaller); we compare policies on
+  delay-type dispatching metrics. So the "wide + req_time faithful anchor" premise is **dropped as unnecessary**.
+  Anchor = **narrow** (relative trigger, no stalls, a clean approximation — approximate is fine for a
+  reference); **wide = the RL freedom / ablation** (RR-style, lets RL reserve earlier to beat the signaller) —
+  i.e. back to the original D57 split (narrow reference/BC, wide RL ablation).
+- **Evaluation metric suite (⑧)** — floor = safety (completion, 0 collisions, 0 deadlocks). Headline =
+  **weighted secondary delay (λ-priority, D16/D24) + completion + punctuality (PPM-style: % exiting within ±T
+  of the CIF plan) + number of unscheduled stops**. Strong support = infrastructure occupation ratio (UIC-406
+  flavour, the blocking-time-native selling point) + delay recovery (exit − entry signed) + delay tail
+  (p90/p95/max, D42). Support = platform adherence / throughput / total held time. All stratified by λ class
+  (passenger / ECS / freight / light-engine, D44).
+- **Reward redesigned to mirror Rail Route's scoring** (RR: +10 per train arrived, −2/min late, −1 wrong
+  platform, braking penalty, time bonus): switch from the per-step global Δ-delay (D24) to a **per-train
+  terminal reward** = `base(completion) − w_d·(weighted secondary delay) − w_s·(unscheduled stops)`;
+  gridlock / incomplete use the D46 large penalty + charge-to-horizon; the time bonus is skipped (entry times
+  are fixed, already captured by delay). **Platform is NOT in the reward** (goal-mask forces it to 100% for
+  terminating trains → meaningless; a D44 second-order effect for through trains; another knob / variance —
+  eval only). The per-train terminal structure also **addresses D45** (the per-step global Δ was dominated by
+  exogenous day-variance with muddy credit assignment → the critic couldn't fit it; per-train settlement gives
+  clean credit and aligns reward with the eval metrics). Other metrics (PPM / occupation / recovery / tail /
+  platform) are eval-only, not reward terms — as in RR (only the dominant, smooth terms are scored).
+
+### ⚠️ KEY BRANCH POINT — wide+req_time faithful-anchor attempt (superseded by D58 above) (2026-08-07)
 - **What was tried (D57.1)**: after the user's critique that the calibrated 141s trigger is a median/detour, we
   attempted a Rail-Route-faithful anchor: wide window (reserve from frontier-known) + a req_time-aware replay
   (`make_signaller_replay_policy` defers a logged SET until `now >= its logged req_time`) + a `reserve_due`
