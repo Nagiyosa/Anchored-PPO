@@ -14,6 +14,27 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
+### ⚠️ KEY BRANCH POINT — wide+req_time faithful-anchor attempt failed; TD occupation validation pending (2026-08-07)
+- **What was tried (D57.1)**: after the user's critique that the calibrated 141s trigger is a median/detour, we
+  attempted a Rail-Route-faithful anchor: wide window (reserve from frontier-known) + a req_time-aware replay
+  (`make_signaller_replay_policy` defers a logged SET until `now >= its logged req_time`) + a `reserve_due`
+  event scheduled at each route's `req_time` (opens a panel + clears the de-dup signature). `req_times` is now
+  threaded EnvTrain → DynTrain (`to_dyn_trains`); all of this is **gated to `reserve_window="wide"`**.
+- **Result — not faithful**: proactive-wide replay completes but trains **stall at frontiers**: day-0
+  `held_time` 23,674s vs narrow 698s (34×), delay 42,525 vs 1,674; over 4 days a train strands (completion
+  0.9988, not all done). **Root cause**: ⑤ removed the req_time advancement pacing, so under free advancement
+  the train races ahead on its current route, reaches the frontier early, then waits for the **absolute**
+  req_time to lock the next route. Free advancement (⑤) and absolute-req_time locking fight each other.
+  Narrow's **relative** trigger (N berths back from the frontier) is robust to pace — that is a feature, not a
+  detour.
+- **Open question (to be arbitrated by data)**: is wide's extra 23k held_time the **real** secondary delay
+  (signallers' trains do wait at signals; narrow/reactive lock ahead and may **under-count** it) or **artificial**
+  (free advancement racing ahead)? **The only arbiter is validating sim occupation times against raw TD.**
+- **State at this branch point**: reactive (100,273.5s, sha 398b5dbd5844) and proactive-narrow (54,652.5s, sha
+  8319330458ad) are **bit-identical and ⑥-sealed**; the wide+req_time code is flag-isolated and does not touch
+  them. The anchor stays **narrow** until the TD-occupation validation decides. If a later problem traces here,
+  this is the checkpoint to return to.
+
 ### Proactive Stage 1 — advance-trigger implemented behind a flag + signaller-replay gate passed (2026-08-06)
 - `DynamicEngine(proactive=True)` restores M8's advance-triggering (reuses `decision_advance.json`): candidates
   are generated at the frontier window (M8 `_schedule_next_decision` ported: dwell start / N berths upstream)

@@ -158,6 +158,7 @@ def to_dyn_trains(built) -> list[DynTrain]:
             et.train_id, list(et.route_chain), et.entry_time,
             set(et.stop_pids), et.booked_platform,
             planned_ref=et.planned_ref, service_class=et.service_class,
+            req_times=tuple(getattr(et, "req_times", ()) or ()),
         ))
     return out
 

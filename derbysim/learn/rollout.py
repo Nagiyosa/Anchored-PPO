@@ -134,11 +134,13 @@ def make_random_policy(rng):
 
 
 def make_signaller_replay_policy(env):
-    """人类参照: 按实际位置匹配尚未消费的历史请求；无对应动作则 WAIT。
+    """人类参照: 匹配尚未消费的历史请求; **到其真实 req_time 才 SET, 之前 WAIT**(D57.1)。
 
     `PanelDecision.logged` 不按数组深度取值：信号员可先预办下游、后办上游，请求顺序不等于
     通过顺序。历史进路只有 LOCKED 并进入 actual_chain 后才消费，QUEUED/cancel 不消费。
-    这是历史**选路**在同一环境中的对照，不声称复刻原始请求时刻。
+    **D57.1 时机 faithful**: 若 `dec.logged_time` 给出该请求的真实 req_time 且 `now < req_time`,
+    则本刻**不**选它(延后=WAIT), 由 req_time 的 `reserve_due` 事件在到点时再提供 → 复现信号员逐条
+    上下文时机(非 141s 中位数)。无 `logged_time`(narrow / 无 req_times)则退化为"有匹配就办"(旧行为)。
     """
     def act(enc):
         dec = env.decision()
@@ -146,6 +148,9 @@ def make_signaller_replay_policy(env):
             for i, (slot, opt) in enumerate(zip(enc["slots"], dec.options)):
                 if (slot.kind == "set"
                         and dec.logged.get(slot.train_id) == slot.route_id):
+                    lt = dec.logged_time.get(slot.train_id)
+                    if lt is not None and dec.now < lt:   # 还没到 req_time → 延后
+                        continue
                     return i, 0.0, 0.0
         return 0, 0.0, 0.0                                # options[0] 恒为 WAIT
     return act

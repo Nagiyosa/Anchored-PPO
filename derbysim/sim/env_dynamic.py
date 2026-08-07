@@ -39,6 +39,7 @@ class PanelDecision:
     now: float
     options: list[PanelAction]      # 可选动作(含 WAIT); set 已过 几何∩可达∩死锁前瞻
     logged: dict = field(default_factory=dict)   # train_id -> 与当前实际位置兼容的未消费历史请求
+    logged_time: dict = field(default_factory=dict)  # D57.1: train_id -> 该历史请求的真实 req_time(回放据此延后到点才办)
 
 
 @dataclass
@@ -50,6 +51,7 @@ class DynTrain:
     booked_platform: int | None = None
     planned_ref: float | None = None       # CIF 计划参考时刻(供 signed 延误)
     service_class: str = ""                 # headcode 首位 = TOPS 优先级
+    req_times: tuple = ()                   # D57.1: 与 route_chain 对齐的日志办理时刻(仅回放/BC 时机真值; 绝不进 state, D54)
     matched_reference_indices: set[int] = field(default_factory=set)  # 仅回放标签匹配；不表示实际进度
     # 四轨状态(D33 step 2): 历史参考 / 待锁请求 / 已锁实际链 / 物理位置必须互不代用。
     actual_chain: list[str] = field(default_factory=list)  # 仅 LOCKED 后追加，含入口进路
@@ -204,6 +206,19 @@ class DynamicEngine:
             t.next_trigger_idx = max(0, seg_end - n)
             t.next_trigger_kind = "upstream_n"
 
+    def _schedule_reserve_due(self, t):
+        """D57.1(仅回放/BC, 有 req_times 时): 在**下一条未消费历史进路**的真实 `req_time` 排一个
+        `reserve_due` 事件——保证到点开面板并清去重签名, 使回放能在真实 req_time SET(之前 WAIT=延后),
+        复现信号员逐条上下文时机。RL 无 req_times 则不排, 纯宽窗事件驱动(=RR 自由)。"""
+        if self.reserve_window != "wide" or not t.req_times or t.done:
+            return                                       # 仅 wide 用 req_time 时机; narrow/reactive 保旧行为
+        for i in range(len(t.route_chain)):
+            if i not in t.matched_reference_indices:
+                if i < len(t.req_times):
+                    self.q.push(max(self.now, float(t.req_times[i])), "reserve_due",
+                                {"tr": t.train_id})
+                return
+
     @staticmethod
     def _match_reference_index(t, route_ids) -> int | None:
         """Earliest unused historical request compatible with current position.
@@ -247,6 +262,7 @@ class DynamicEngine:
                     t.dwell_s = self.dwell_by_platform.get(pid, 0.0)
         if self.proactive:
             self._schedule_next_decision(t)          # 提交后重算下一决策的提前触发点
+            self._schedule_reserve_due(t)            # D57.1: 下一条路的 req_time 排 reserve_due(回放到点办)
 
     def _request(self, t, route_id):
         r = self.net.routes.get(route_id)
@@ -349,6 +365,13 @@ class DynamicEngine:
     def _build_options(self, awaiting, cancellable):
         opts = [PanelAction("wait")]
         logged = {}
+        logged_time = {}
+        wide = self.reserve_window == "wide"
+        def _record_logged(t, ref_idx):
+            logged[t.train_id] = t.route_chain[ref_idx]
+            # D57.1: 时机延后**仅 wide**(有 reserve_due 到点重开面板); narrow/reactive 不填 → 旧"到点即办"。
+            if wide and ref_idx < len(t.req_times):
+                logged_time[t.train_id] = t.req_times[ref_idx]
         for t in awaiting:
             if t.awaiting_entry:
                 # D57 entry (a): 只提供**日志入区路**(选路固定), 决策 = 何时放行 / WAIT。
@@ -358,7 +381,7 @@ class DynamicEngine:
                     opts.append(PanelAction("set", t.train_id, rid))
                     ref_idx = self._match_reference_index(t, {rid})
                     if ref_idx is not None:
-                        logged[t.train_id] = t.route_chain[ref_idx]
+                        _record_logged(t, ref_idx)
                 continue
             dsig = self._decision_signal(t)
             offered = []
@@ -369,10 +392,10 @@ class DynamicEngine:
                     offered.append(rid)
             ref_idx = self._match_reference_index(t, offered)
             if ref_idx is not None:
-                logged[t.train_id] = t.route_chain[ref_idx]
+                _record_logged(t, ref_idx)
         for t in cancellable:
             opts.append(PanelAction("cancel", t.train_id))
-        return opts, logged
+        return opts, logged, logged_time
 
     def _apply(self, a: PanelAction):
         self.n_actions += 1
@@ -418,6 +441,11 @@ class DynamicEngine:
             self._on_enter(ev.data)
         elif ev.kind == "try_advance":
             self._on_try_advance(ev.data)
+        elif ev.kind == "reserve_due":
+            # D57.1: 到达某车下一条历史进路的 req_time —— 清去重签名, 使本刻面板重新提供其 SET 决策。
+            t = self.trains.get(ev.data["tr"])
+            if t is not None and not t.done:
+                t.set_offer_sig = None
 
     def _drain_slice(self, t_cut):
         """D38 契约①: 弹尽并处理时间戳 == t_cut 的**全部**队列事件后才开面板。
@@ -450,7 +478,7 @@ class DynamicEngine:
             cancellable = self._cancellable()
             if not awaiting and not cancellable:
                 return
-            opts, logged = self._build_options(awaiting, cancellable)
+            opts, logged, logged_time = self._build_options(awaiting, cancellable)
             for t in cancellable:                    # 已经问过了; 阻塞来源再变才会重新问
                 t.cancel_sig = self._blocker_sig(t)
             if self.proactive:                       # D50: 记下本次 SET 决策的上下文签名; 未变不重问
@@ -458,7 +486,7 @@ class DynamicEngine:
                     t.set_offer_sig = self._set_offer_sig(t)
             if all(o.kind == "wait" for o in opts):   # 无可办可撤 → 只能等
                 return
-            action = yield PanelDecision(self.now, opts, logged)
+            action = yield PanelDecision(self.now, opts, logged, logged_time)
             if action is None or action.kind == "wait":
                 return
             self._apply(action)
