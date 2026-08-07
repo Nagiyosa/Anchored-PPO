@@ -114,14 +114,42 @@ def eval_policy(name, make_policy, days, net, params, dwell, ptc, adapter):
     return _summarise(trains_by_day, horizons)
 
 
+def make_bc_policy_from_ckpt(ckpt_path):
+    """加载 full-panel BC(PanelOptionPolicy)→ 策略工厂 + 训练时的 route_prior(评估须用同一份, 否则特征错位)。
+    仅在给 --bc 时导入 torch(其余基线不依赖 torch)。act: forward → argmax 选项下标。"""
+    import torch
+    from derbysim.learn.panel import collate_panels
+    from derbysim.learn.panel_models import PanelOptionPolicy, pick_device, to_tensors
+    ck = torch.load(ckpt_path, map_location="cpu")
+    device = pick_device()
+    model = PanelOptionPolicy(ck["encoder"], *ck["dims"]).to(device)
+    model.load_state_dict(ck["state_dict"]); model.eval()
+
+    def factory(env):
+        def act(enc):
+            bt = to_tensors(collate_panels([enc]), device)
+            with torch.no_grad():
+                logits, _v, _ = model(bt)
+            return int(logits[0].argmax().item()), 0.0, 0.0
+        return act
+    return factory, ck.get("route_prior", {})
+
+
 def main(argv):
-    split = argv[1] if len(argv) > 1 else "val"
-    n_days = int(argv[2]) if len(argv) > 2 else 999
+    pos = [a for a in argv[1:] if not a.startswith("--")]
+    split = pos[0] if pos else "val"
+    n_days = int(pos[1]) if len(pos) > 1 else 999
+    bc_ckpt = argv[argv.index("--bc") + 1] if "--bc" in argv else None
     days = operating_days(split)[:n_days]
     net, params, dwell, ptc = load_assets()
-    adapter = PanelAdapter(net, Featurizer(net, ptc))
     policies = {"signaller": make_signaller_replay_policy,
                 "greedy": lambda e: make_greedy_set_policy()}
+    route_prior = {}
+    if bc_ckpt:                                    # 三方对比: BC 闭环 vs 信号员参照 vs greedy
+        bc_factory, route_prior = make_bc_policy_from_ckpt(bc_ckpt)
+        policies["bc"] = bc_factory
+    # **评估 featurizer 用 BC 训练时的同一份 route_prior**(无 BC 时为空, 对信号员/greedy 无影响)。
+    adapter = PanelAdapter(net, Featurizer(net, ptc, route_prior=route_prior))
     t0 = time.time()
     out = {}
     for name, mk in policies.items():

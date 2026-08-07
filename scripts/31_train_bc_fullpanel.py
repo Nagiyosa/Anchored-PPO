@@ -128,7 +128,9 @@ def main(argv):
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
     ckpt = config.ARTIFACTS / "dataset" / f"bc_fullpanel_{encoder}.pt"
-    torch.save({"state_dict": model.state_dict(), "encoder": encoder, "dims": dims}, ckpt)
+    # 存 route_prior: 评估(scripts/29)必须用**同一份** route_prior 建 featurizer, 否则特征对不上、闭环虚低。
+    torch.save({"state_dict": model.state_dict(), "encoder": encoder, "dims": dims,
+                "route_prior": route_prior}, ckpt)
     (config.ARTIFACTS_REPORTS / f"bc_fullpanel_train_{stamp}.json").write_text(json.dumps(
         {"encoder": encoder, "epochs": epochs, "n_train": len(tr), "n_val": len(va),
          "smoke": smoke, "history": hist}, indent=2, ensure_ascii=False))
