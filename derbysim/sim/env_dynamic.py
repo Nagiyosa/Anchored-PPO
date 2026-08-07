@@ -59,6 +59,9 @@ class DynTrain:
     path_commit_indices: list[int] = field(default_factory=list)  # 与 path 对齐的 actual_chain 实例序号
     entered_commit_idx: int = -1                        # 物理上已进入的最后一个实际进路实例
     awaiting_decision: bool = False
+    # M8 提前触发(仅 proactive): 下一决策的物理触发点(沿已锁 path 的 idx)与类型。
+    next_trigger_idx: int | None = None
+    next_trigger_kind: str = ""
     entered: bool = False
     pos: int = 0
     dwell_idx: int | None = None
@@ -88,11 +91,19 @@ class DynTrain:
 
 class DynamicEngine:
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
-                 overlap_depth: int = 1) -> None:
+                 overlap_depth: int = 1, proactive: bool = False, advance_cfg=None) -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
         self.dwell_by_platform = dwell_by_platform or {}
+        # D50/D48: proactive=True 恢复 M8 的**提前触发**(决策候选在前沿时间窗内产生, 非只在跑光锁定
+        # 轨道时). 默认 False = 原 reactive 行为逐位不变(现有信号员回放 1.0/所有下游不受影响)。
+        # advance_cfg 复用 M8 的 artifacts/calib/decision_advance.json(逐信号标定, 141s/N 格)。
+        self.proactive = bool(proactive)
+        if self.proactive and advance_cfg is None:
+            from derbysim.sim.env import load_advance_cfg
+            advance_cfg = load_advance_cfg()
+        self.advance_cfg = advance_cfg or {}
         self.res = RouteReservation(net, overlap_depth=overlap_depth)
         self.reach = Reachability(net)
         self.q = EventQueue()
@@ -155,6 +166,31 @@ class DynamicEngine:
         prev = self.net.routes.get(t.actual_chain[-1]) if t.actual_chain else None
         return prev.end_signal if prev else None
 
+    def _schedule_next_decision(self, t):
+        """proactive(D50/D48): 已提交一条进路后, 为**下一决策**算 M8 式提前触发点(沿已锁 path 的 idx)。
+
+        决策信号 S = 前沿信号(上一已锁进路的 end_signal); 触发 = 站台出站 dwell 起点 / 上游 N 格
+        (N 来自 decision_advance.json[S]); 前沿已到目标出口或无 in-scope 合法续路 → 无下一触发。
+        当 pos 到达该 idx 时, `_actionable`(proactive) 把该车纳入候选(提前, 非等跑光轨道)。
+        """
+        t.next_trigger_idx = None
+        t.next_trigger_kind = ""
+        if not t.actual_chain or t.done or self._at_goal_exit(t):
+            return
+        S = self._decision_signal(t)
+        if S is None or not self._legal(t, S):
+            return
+        seg_end = len(t.path) - 1
+        cfg = self.advance_cfg.get(str(S), {})
+        is_pex = bool(cfg.get("is_platform_exit")) or cfg.get("trigger") == "dwell"
+        if is_pex and t.dwell_idx is not None and t.dwell_idx <= seg_end:
+            t.next_trigger_idx = t.dwell_idx
+            t.next_trigger_kind = "dwell"
+        else:
+            n = int(cfg.get("n_berths", 0) or 0)
+            t.next_trigger_idx = max(0, seg_end - n)
+            t.next_trigger_kind = "upstream_n"
+
     @staticmethod
     def _match_reference_index(t, route_ids) -> int | None:
         """Earliest unused historical request compatible with current position.
@@ -196,6 +232,8 @@ class DynamicEngine:
                 if t.dwell_idx is None and pid is not None and pid in dwell_targets:
                     t.dwell_idx = len(t.path) - 1
                     t.dwell_s = self.dwell_by_platform.get(pid, 0.0)
+        if self.proactive:
+            self._schedule_next_decision(t)          # 提交后重算下一决策的提前触发点
 
     def _request(self, t, route_id):
         r = self.net.routes.get(route_id)
@@ -215,7 +253,22 @@ class DynamicEngine:
 
     # ---- Path A 面板动作 ----
     def _actionable(self):
-        return [t for t in self.trains.values() if t.awaiting_decision and not t.done]
+        if not self.proactive:
+            return [t for t in self.trains.values() if t.awaiting_decision and not t.done]
+        # proactive(D50): 候选 = ①跑光锁定轨道的 deadline 车(awaiting) ∪ ②到达提前触发点、
+        # 前沿有待决进路、且当前无排队请求在途的车。前沿窗口 = [提前触发点 … deadline]。
+        out = []
+        for t in self.trains.values():
+            if t.done:
+                continue
+            if t.awaiting_decision:
+                out.append(t)
+                continue
+            if t.pending_request is not None:
+                continue
+            if t.next_trigger_idx is not None and t.pos >= t.next_trigger_idx:
+                out.append(t)
+        return out
 
     def _blocker_sig(self, t):
         """挡住车 t 待办进路的持有者集合 (route_id, 车) —— 引擎原生量, 非自造指标。"""
@@ -648,19 +701,21 @@ class DynamicDerbyEnv:
     """
 
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
-                 overlap_depth: int = 1) -> None:
+                 overlap_depth: int = 1, proactive: bool = False) -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
         self.dwell_by_platform = dwell_by_platform or {}
         self.overlap_depth = int(overlap_depth)    # M10 F6: M13 overlap 鲁棒性扫描用; 默认 1 不改原行为
+        self.proactive = bool(proactive)           # D50: 提前触发(默认 False = 原 reactive)
         self.engine: DynamicEngine | None = None
         self._gen = None
         self._pending: PanelDecision | None = None
 
     def reset(self, trains):
         self.engine = DynamicEngine(self.net, self.params, self.plat_tc_to_pid,
-                                    self.dwell_by_platform, overlap_depth=self.overlap_depth)
+                                    self.dwell_by_platform, overlap_depth=self.overlap_depth,
+                                    proactive=self.proactive)
         self._gen = self.engine.run(trains)
         self._pending = next(self._gen, None)
         return self._obs(), self._info()

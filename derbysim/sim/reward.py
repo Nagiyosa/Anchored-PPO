@@ -173,9 +173,10 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
     """
 
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
-                 reward_config: RewardConfig | None = None, overlap_depth: int = 1) -> None:
+                 reward_config: RewardConfig | None = None, overlap_depth: int = 1,
+                 proactive: bool = False) -> None:
         super().__init__(net, params, plat_tc_to_pid, dwell_by_platform,
-                         overlap_depth=overlap_depth)
+                         overlap_depth=overlap_depth, proactive=proactive)
         self.cfg = reward_config or RewardConfig()
         self.horizon: float | None = None          # 由 reset(trains, horizon=...) 设定
         self._last_realized = 0.0

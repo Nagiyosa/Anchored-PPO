@@ -14,6 +14,149 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
+### Proactive Stage 1 — advance-trigger implemented behind a flag + signaller-replay gate passed (2026-08-06)
+- `DynamicEngine(proactive=True)` restores M8's advance-triggering (reuses `decision_advance.json`): candidates
+  are generated at the frontier window (M8 `_schedule_next_decision` ported: dwell start / N berths upstream)
+  rather than only when a train runs out of locked track. Flag defaults to **False** (reactive unchanged);
+  propagated through `DynamicDerbyEnv` / `RewardedDynamicEnv`. New DynTrain fields `next_trigger_idx/kind`;
+  `_actionable` proactive branch = deadline (awaiting) ∪ trains past their advance trigger with no queued
+  request. `_append_locked` reschedules the next trigger after each commit.
+- **Gate (full 11 val days, signaller replay)**: reactive default **bit-identical** (completion 1.000,
+  weighted delay **100,273.5s**, 6042 sets — matches D37/D39). Proactive: completion **1.000**, 2809/2809 done,
+  **0 collisions / 0 deadlocks / 0 truncations / 0 D36 invariant violations / 0 ghost locks**, deterministic
+  (double-pass identical action SHA), same **6042** routes committed.
+- **Finding**: proactive replay cuts weighted secondary delay **100,273.5 → 54,374s (−46%)** — routes locked
+  ahead ⇒ fewer forced stops. First quantitative sign that the timing lever reduces delay for the signaller
+  anchor (Stage-1 figure, not final).
+- **Caveat**: episode length rose 6159 → 10,327 steps because the D50 de-dup (don't re-ask an unchanged
+  candidate) is not in yet — benign for replay (completion 1.0, deterministic) but must be added in Stage 2
+  before RL (episode-length / GAE concern). Remaining stages: ② full action set + string + de-dup, ③ state +
+  entry-as-decision, ④ per-train reservation string + cancel_locked, then the full Step-7 gate.
+
+### D56 — Block ⑤ WAIT/delay/gridlock settlement settled + overlap sensitivity measured (take depth-1 consistent + report sensitivity) (2026-08-06, user)
+- **Delay/gridlock accounting reused unchanged**: `held_time` weighted by service-class λ, incomplete trains
+  charged to the common horizon (D46 gridlock = game-over), deadlock −50 + terminal settlement (D6). The shape
+  matches RR (on-time / gridlock = failure) and reality; weighted-secondary-delay + per-operating-day episodes
+  are our declared evaluation conventions (D23/D24).
+- **Advancement gate: log req_time → the policy's locked reservation**: a train advances into the next segment
+  iff (a) the policy has locked that segment and (b) the next TC is physically free; late reservation = the
+  train stops = delay accrues — the **mechanical seat of the timing lever**. This gate matches RR/reality
+  (wait at red until the route is set + clear); the old log-req_time gate was a replay artifact. Signaller
+  replay reproduces the logged timing → still completion 1.0 (the ⑥ anchor).
+- **WAIT is free** (no hold_start; the train keeps running); **entry-wait accrues delay** (with entry now a
+  decision, a late admission makes the train wait at the boundary and accrue planned-vs-actual delay;
+  generalises the `env_dynamic:209` fix).
+- **Overlap settled as (a)**: **depth-1 (~180m colour-light standard) as the default, always consistent
+  between the signaller anchor and the RL policy, with the 0/1/2 sensitivity reported as a first-class
+  robustness result.** Measured now (`scripts/27_overlap_sensitivity_replay.py`, val 11 days, signaller replay,
+  artifact `reports/overlap_sensitivity_replay_val_20260807-005042.json`): **completion is 1.000 / 0 collisions
+  / 0 deadlocks at depth 0/1/2 (primary metric D23 robust); but weighted delay is first-order sensitive —
+  depth-0 −14.3%, depth-2 +548.8%.** So overlap moves delay but not completion; hence depth-1 (grounded),
+  consistent comparison (the D23/D24 relative anchor stays fair), sensitivity reported. **Correction**: the
+  earlier "overlap is probably second-order" guess was overturned by the data (the user's push to measure now
+  was right). **Swinging overlap (c) is declared a limitation / future work** (a fixed depth-1 over-charges
+  absolute delay vs real swinging overlaps, but the relative comparison is unaffected; (c) adds engine dynamics
+  + lesson-#1 risk, not built now).
+
+### D55 — Block ④ reservation/overlap semantics settled: reuse train-keyed reservation (RR queue) + per-train reservation string + cancel_locked guard + keep deadlock mask (stricter than RR) (2026-08-06, user)
+- **Reservation layer (`reservation.py`) reused as-is**: train-keyed footprint locking (route TCs + overlap),
+  FIFO queueing on conflict, `_pump_queue` auto-locks when track clears = RR's queue-until-clear, native.
+- **Engine-layer core change**: `env_dynamic.py`'s single `pending_request` per train → a **per-train string
+  of reservations (locked run + queued tail)**; `_wake`/`_pump_queue` promote queued→locked as track clears.
+- **cancel_locked (the ② deferred semantics)**: release that route's footprint (`release_route` exists) +
+  roll back the `actual_chain` tail + restore matchability; **guard = the train has not yet entered that
+  segment (commit_idx not yet entered)**; once occupied it can't be cancelled (interlocking invariant).
+  Consistent with RR (unlock any not-yet-reached segment).
+- **overlap**: depth-1 declared approximation; **spatially = the first TC of the next hop, but semantically
+  ≠ the route body** (overlap = an uncommitted safety margin; route = the committed travel path). Same-train
+  consecutive locks don't self-conflict; `release_overlap` releases sectionally past the exit signal; the C4
+  sensitivity scan stays in M13.
+- **Deadlock mask kept (option i, stricter than RR)**: `would_create_deadlock` masks only a one-step provable
+  never-clearing cycle; rationale = the D23/D41 safety-by-construction pillar + lower RL trial-and-error cost.
+  **Dynamic gridlock still exists and is game-over (D46)** and is unaffected by the one-step mask. RR itself
+  does NOT prevent deadlock; being stricter here is deliberate.
+- **Cancel-rate measurement**: a rigorous reproducible classifier (region-edge + run-split + cancel-vs-
+  consume-vs-reroute) is built alongside the implementation to measure the locked-not-occupied vs queued split.
+
+### D54 — Block ③ state settled: full CIF timetable (Rail-Route-style) + conflicts from physical/own-reservations/schedule + proactive features (2026-08-06, user)
+- **Conflict/approach derivation**: from **current physical occupancy + the policy's own committed/locked
+  reservations + the CIF timetable** — **never from other trains' logged-future paths** (M8 `_build_state`
+  `env.py:213` uses `tr.path[tr.pos:]`, fine for offline replay but must change online: those are other
+  trains' answers and are unavailable online). Occupancy exposes **physical** position only (rebuilt from
+  cur_tc, D22 §11), never reservation intent.
+- **Schedule exposure = the full CIF plan (like Rail Route shows the whole timetable)**: the plan is known
+  ahead of the day and is not a consequence of any decision ⇒ **leak-free and RR-consistent**. **Guardrail**:
+  expose the **plan (CIF) + realized state up to `now`** only; **never the realized future** (actual future
+  occupancy / actual arrival / actual route taken = outcomes = leakage). Approaching trains carry planned
+  arrival + class + goal + signed delay-so-far; actual arrival/delay becomes visible only once it happens
+  (≤ now). How far the encoder actually attends is an M12 modelling choice, not a semantics/fidelity one — no
+  hard window.
+- **New proactive features**: time-to-deadline (how long until the train runs out of locked track),
+  reserved-frontier depth (how many routes already stacked), approaching-train ETAs.
+- **Entry (D52)**: the entry train's before-state = CIF planned arrival + class + goal + current physical
+  freeness of candidate entry platforms + approaching conflicts; the logged entry route is never exposed.
+- **Anti-leakage audit (D22 ⑥)**: re-run the blind-policy / ablation audit on the new state; every new
+  feature must pass "can't reconstruct the answer from it."
+
+### D53 — Block ② action space settled: single-route SET (string via consecutive SETs) / WAIT / CANCEL (2026-08-06, user)
+- **SET**: one route at a time, appended from the **reservation frontier**; "pre-stack a string" = **consecutive
+  SETs within one time-cut** (reuse the D39 cut loop), depth 0..5 decided by how many SETs the policy issues
+  before a WAIT — **no compound "k-at-once" action, no fixed depth** (D51 anchor: median 0 / p95 2).
+- **WAIT**: the global epoch-terminator (per D39, ends the cut and advances to > now); the train keeps running
+  on locked track; "don't reserve this one yet" = just don't SET it and WAIT — it stays a candidate and
+  resurfaces per the de-dup rule.
+- **CANCEL**: scope = any reserved route the train has **not yet occupied** (queued-not-locked **or**
+  locked-but-not-yet-passed); **once occupied it cannot be cancelled = an interlocking invariant, enforced by
+  construction** (cancel is only offered for not-yet-occupied reservations); mirrors Rail Route (CTRL-unlock,
+  hard once the train passes). M9 `_cancellable` (`env_dynamic.py:228`) today cancels only queued-not-locked;
+  the **unlock + footprint-release + chain-tail rollback semantics for cancelling a locked route are deferred
+  to ④**. A rigorous reproducible cancel-rate/state measurement (region-edge + run-split + cancel-vs-consume-
+  vs-reroute) is deferred to ④; the existing 10.44% has no committed source and quick proxies (67–74%) are
+  region-edge artifacts, so not cited.
+- **Action set** = `{WAIT} ∪ {SET(train, route)} ∪ {CANCEL(train)}`, reusing the `_build_options` (`:259`) shape
+  with candidates now drawn from the ① frontier window. **Mask** = geometry ∩ reachability ∩ in-scope ∩
+  not-true-deadlock; **occupancy does not mask (request layer)**, a true deadlock does. Multi-train joint panel
+  inherited from D39.
+
+### D50–D52 — Proactive refactor pinned block by block: candidate-①, depth, entry, order (2026-08-06, user)
+- **D50 (candidate generation ① settled).** A train is a decision candidate at its **reservation frontier**
+  (end of its locked route chain), not its physical position. The reservable **window** = [earliest: the
+  previous route is committed and the next decision signal S is known → latest: the train runs out of locked
+  track = the old reactive point, now demoted to a deadline / the "lead = 0" degenerate case]. M8's calibrated
+  trigger (`env.py:145 _schedule_next_decision`, 141s / N berths upstream) becomes the **signaller reference /
+  BC target**, no longer a hard trigger. **De-dup**: an unchanged candidate is not re-asked every event (reuse
+  the `env_dynamic.py:228 _cancellable` blocker_sig/cancel_sig discipline), else we reproduce "asked 614×
+  in 3h" and 6× longer episodes that break GAE. **Accurate framing**: restore M8's advance trigger + request-layer
+  semantics (`env.py:176`) into `DynamicEngine` (which today only sets awaiting at `:484`), then extend from
+  "fixed calibrated lead, one route" to Rail-Route-style free choice (when + how many). Don't reinvent.
+- **D51 (concurrent reservation depth measured reproducibly — replaces the void D49 figure).**
+  `scripts/26_measure_reservation_depth.py` (reusing `build_env_trains_for_window` + `split_broken_chains`,
+  same D31/D35 train set), full 98 days / 25,812 trains / **79,562 Panel_Requests**; artifact
+  `artifacts/reports/reservation_depth_full_20260806-222715.json`. Definition: at each request for route k,
+  the count of the train's routes with `req_time ≤ t_k and first-TC occ > t_k` (booked-not-yet-occupied).
+  **Result (excl-self): median 0, p75 1, p90 2, p95 2, p99 3, max 5**; ≥1 40.5%, **≥2 16.2%, ≥3 only 1.1%**;
+  strict variant near-identical (edge truncation negligible). **By class: freight (6) deepest (median 1, ≥2 32%),
+  ECS (2) 22%, passenger (1) 16%, light-engine (0) 11%** — same populations as the route-deviation cluster (D44).
+  **Conclusion: signallers do pre-stack a string, but shallow.** The void "median 2 / max 74" (D48/D49) is
+  disproved (max 74 is structurally impossible: per-train chain p99=4/max=6, D34). **Action design: allow a
+  string, depth 0..5 chosen by the policy, no fixed window/depth.**
+- **D52 (entry becomes a decision, reverting D14.8; reserve-onto-occupied via a Rail Route queue).**
+  Decision 1: D14.8 (§14.8) excluded the entry route as "decided out-of-region." Data disproves this — over
+  10 days / 2,316 entry segments the first route's start signal is **100% in-scope (48-whitelist), 99% a
+  multi-option decision point (of 35), 99% with >1 geometric exit** ⇒ it is our panel's real Panel_Request
+  (which platform to admit to). So entry becomes a decision (like Rail Route accept-to-platform); **landing
+  depends on ③** (the train isn't in-region yet, so ③ must expose approaching trains / schedule to give entry
+  a leak-free "before" state). Decision 2: pre-booking onto still-occupied-but-will-clear track is a real
+  action (D22: 2.2% of requests; `env.py:176` request-layer mask is already occupancy-agnostic) — adopt the
+  Rail Route **queue** semantics: REQUEST clears on geometry+reachability, LOCK is deferred until the section
+  clears (auto-locks), and the deadlock look-ahead blocks only a **true deadlock (a never-clearing cycle)**,
+  not "occupied now, will clear." Detailed reservation/overlap semantics deferred to ④.
+- **Order**: discuss/implement ② (action space) → ③ (state, incl. entry) → ④ (reservation semantics). Hard
+  dependency ②→③ (D22's leak-free "strip this decision's consequences" needs the action shape first);
+  soft dependency ③→② (state makes "when to reserve" learnable but doesn't change the action shape).
+- **Process discipline (lesson #15 correction, applied)**: the depth number is now a committed reproducible
+  script + timestamped artifact, not a sandbox inline computation, and it reused existing pipeline machinery.
+
 ### D48 — The environment's decision model is fundamentally wrong: reality is proactive, the env is reactive (2026-08-06, verified against data)
 - Data (TD, 92,534 route settings): the signaller issues each Panel_Request a median of 147s before the
   train occupies the route's first TC (p10 67 / p90 254); 99.9% are set >2s ahead, 91.7% >60s ahead, only
