@@ -25,7 +25,13 @@ DEFAULT_TOPS_FALLBACK = 2.0
 
 @dataclass
 class RewardConfig:
-    # 稠密延误(小)
+    # D58: reward 结构 —— "per_train"=照 RR 逐车终局(默认); "per_step"=旧逐步全局 Δ(留作消融对照)。
+    reward_mode: str = "per_train"
+    # D58 逐车终局项(照 RR:到站+10 / 每晚 −2·min / 刹车扣分); 数值是灵敏度扫描旋钮, 不押。
+    base_completion: float = 10.0              # RR: 车到站 +10
+    w_delay: float = 0.01                      # 每单位加权次生延误(秒)扣; 1000 加权s ≈ 一次完成
+    w_stops: float = 1.0                       # 每次区内非计划停车扣(RR 刹车罚代理, 小)
+    # 稠密延误(小) —— 仅 per_step 旧模式用
     c_delay: float = 0.01                      # 100s 加权延误 ≈ 1
     tops_weights: dict = field(default_factory=lambda: dict(DEFAULT_TOPS_WEIGHTS))
     tops_fallback: float = DEFAULT_TOPS_FALLBACK
@@ -206,7 +212,43 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
         """
         return self._compute_reward(done=True)
 
+    def _train_weighted_delay(self, t, horizon) -> float:
+        """单车加权次生延误 = λ · held_time(未 done 且在停 → 计到地平线, 同 realized_weighted_delay)。"""
+        w = getattr(t, "held_time", 0.0)
+        if not t.done and getattr(t, "hold_start", None) is not None:
+            end = self.engine.now if horizon is None else max(self.engine.now, horizon)
+            w += end - t.hold_start
+        return self.cfg.lam(t.service_class) * w
+
+    def _reward_per_train(self, done: bool) -> float:
+        """D58: 照 RR 逐车终局。车到站结账 base − w_d·加权延误 − w_s·停车; 死锁大罚; 终局对未完成
+        车按到地平线的加权延误 + p_incomplete 结账(D46 不丢车)。站台/on-time 不入 reward(只评估)。"""
+        r = 0.0
+        newly_deadlocked = self.engine.deadlocked and not self._was_deadlocked
+        if newly_deadlocked:
+            self._was_deadlocked = True
+            r -= self.cfg.p_deadlock
+        for t in self.engine.trains.values():                # 新完成的车逐车结账
+            if t.train_id in self._finalized:
+                continue
+            if t.done and has_reached_goal(t):
+                r += (self.cfg.base_completion
+                      - self.cfg.w_delay * self._train_weighted_delay(t, horizon=None)
+                      - self.cfg.w_stops * float(getattr(t, "n_stops", 0)))
+                self._finalized.add(t.train_id)
+        if done or newly_deadlocked:                         # 终局: 未完成车结账(不丢车, D46)
+            for t in self.engine.trains.values():
+                if t.train_id in self._finalized:
+                    continue
+                if can_complete(t) and not has_reached_goal(t):
+                    r += (- self.cfg.w_delay * self._train_weighted_delay(t, horizon=self.horizon)
+                          - self.cfg.p_incomplete)
+                    self._finalized.add(t.train_id)
+        return r
+
     def _compute_reward(self, done: bool) -> float:
+        if getattr(self.cfg, "reward_mode", "per_train") == "per_train":
+            return self._reward_per_train(done)
         cur = realized_weighted_delay(self.engine, self.cfg)
         r = -self.cfg.c_delay * (cur - self._last_realized)
         self._last_realized = cur

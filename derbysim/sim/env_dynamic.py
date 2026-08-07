@@ -83,6 +83,7 @@ class DynTrain:
     # 车停着就是在耗时间, 与"排队等锁"对旅客无区别 → 单列累计, 与 blocked_since **互斥**(见 _apply)。
     held_time: float = 0.0
     hold_start: float | None = None
+    n_stops: int = 0                      # D58: 区内非计划停车次数(每次 hold_start None→值且已入区 +1); RR 刹车罚代理
     cancel_sig: tuple | None = None      # 上次为该车提供 cancel 时, 挡住其待办进路的持有者签名
     sim_occ: dict = field(default_factory=dict)
     reached_exit: bool = False
@@ -278,6 +279,8 @@ class DynamicEngine:
             # `hold_start` 一直是 None、一秒不计(实测随机策略 18 辆车堵在入区、延误 0,
             # 于是完成率 0.39 却比"有路就办"0.71 得分高)。
             t.hold_start = self.now
+            if t.entered:                            # D58: 区内被迫停一次(入区口等待不算区内停车)
+                t.n_stops += 1
         return False
 
     # ---- Path A 面板动作 ----
@@ -631,6 +634,8 @@ class DynamicEngine:
         t.awaiting_decision = True
         if t.hold_start is None:
             t.hold_start = self.now                  # 开始"走不动": 站着等面板给路(占着锁)
+            if t.entered:
+                t.n_stops += 1                       # D58: 跑光锁定轨道、停在信号前 = 区内一次停车
         self.n_decisions += 1
 
     def _goal_termination_reason(self, t):

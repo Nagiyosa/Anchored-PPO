@@ -40,6 +40,12 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   exogenous day-variance with muddy credit assignment → the critic couldn't fit it; per-train settlement gives
   clean credit and aligns reward with the eval metrics). Other metrics (PPM / occupation / recovery / tail /
   platform) are eval-only, not reward terms — as in RR (only the dominant, smooth terms are scored).
+- **Implemented + verified**: `RewardConfig.reward_mode="per_train"` (default; "per_step" kept for ablation),
+  `_reward_per_train` = `base_completion − w_delay·secondary_delay − w_stops·n_stops` per arrival, deadlock /
+  incomplete via D46; new `DynTrain.n_stops` (in-region forced stops; entry-boundary wait excluded);
+  platform/on-time removed from the reward. 2-val-day check: completion 1.0, 0 invariants; per_train and
+  per_step give identical action SHA (replay ignores reward → the ⑥ gate is unaffected); stops 928 (reactive)
+  → 72 (narrow) — proactive stops trains 12.9× less, now reflected directly in the reward.
 
 ### ⚠️ KEY BRANCH POINT — wide+req_time faithful-anchor attempt (superseded by D58 above) (2026-08-07)
 - **What was tried (D57.1)**: after the user's critique that the calibrated 141s trigger is a median/detour, we
