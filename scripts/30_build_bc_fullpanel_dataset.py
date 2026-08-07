@@ -97,8 +97,18 @@ def combine():
     for f in files:
         p = pd.read_parquet(f); p["date"] = f.stem.replace("decisions_", ""); parts.append(p)
     df = pd.concat(parts, ignore_index=True)
-    mon = pd.to_datetime(df["date"]).dt.month
-    df["split"] = mon.map(lambda m: "train" if m in (9, 10) else "holdout")   # D34
+    # D34/D43: 三份划分 train64 / val11 / test21(用 scenarios.operating_days 的规范切分, 非月份启发)。
+    # BC 只在 train 训、val 选型; **test 全程不碰**, 只在终局 headline 评一次。避免 BC(进而热启动的 RL)
+    # 偷看 test → 污染 test 评估。不属任何 split 的残日(operating_days 排除的首尾)→ split=None、剔除。
+    split_of = {}
+    for s in ("train", "val", "test"):
+        for d in operating_days(s):
+            split_of[str(d["start"])[:10]] = s
+    df["split"] = df["date"].map(split_of)
+    n_drop = int(df["split"].isna().sum())
+    df = df[df["split"].notna()].reset_index(drop=True)
+    if n_drop:
+        print(f"[split] dropped {n_drop} samples from partial/excluded days (not in train/val/test)")
     allp = config.ARTIFACTS / "dataset" / "bc_fullpanel_all.parquet"
     df.to_parquet(allp, index=False)
     fp = hashlib.sha256(pd.util.hash_pandas_object(

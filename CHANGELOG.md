@@ -64,6 +64,20 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+### D43-fix — BC dataset split to train/val/test (isolate test); full-val baseline ladder (2026-08-07, user)
+- **Held-out leak fixed (user's catch)**: `scripts/30` combine tagged split by **month** (train=Sep-Oct /
+  holdout=Nov-Dec), merging val+test into one "holdout"; `scripts/31` then reported accuracy on all "holdout"
+  each epoch — i.e. it **peeked at test** during training/selection (breaks D43 "test 全程不碰"; and since RL
+  warm-starts from BC, a test-peeking BC would contaminate RL's test eval too). Fix: split by
+  `scenarios.operating_days` into **train / val / test** (exactly D34: 64 / 11 / 21 days); `scripts/31` trains
+  on train, selects/reports on **val**, and **does not load test**. Verified sample counts: **train 57,139**
+  (SET 52,217 / WAIT 4,922) · val 9,666 · **test 24,160 (isolated, untouched)**; 0 partial-day samples.
+- **Full-val baseline ladder (11 days, the real non-learning reference)**: signaller 1.0000 completion /
+  13,909s weighted delay / PPM≤300s 0.558 / 139 stops; lookup=fcfs=fsfs 0.4392 / PPM 0.222; greedy 0.3424 /
+  0.188; random 0.294 / 0.063. Same pattern as the 3-day smoke, sharper: all zero-learning gridlock
+  (0.29–0.44), only the signaller's timing reaches 1.0; on punctuality the signaller (0.56) clears the
+  baselines (0.06–0.22). This is the target BC/RL must beat.
+
 - **Baseline ladder (`scripts/32`) rebuilt on the new proactive env — a decisive result**: every zero-learning
   baseline gridlocks (lookup / fcfs / fsfs **0.49**, greedy 0.35, random 0.32 completion; weighted delay
   explodes to 38–51M as ~half the trains strand and charge to horizon), while the **signaller's timing alone

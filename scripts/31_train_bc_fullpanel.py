@@ -65,10 +65,12 @@ def main(argv):
     if smoke:
         df = df.sample(min(smoke, len(df)), random_state=0).reset_index(drop=True)
     tr = df[df["split"] == "train"].reset_index(drop=True)
-    ho = df[df["split"] == "holdout"].reset_index(drop=True)
-    if len(tr) == 0:                                       # smoke 数据全 holdout → 行切分凑合
-        n = int(len(df) * 0.8); tr, ho = df.iloc[:n].reset_index(drop=True), df.iloc[n:].reset_index(drop=True)
-    print(f"[data] train={len(tr)} holdout={len(ho)} encoder={encoder} epochs={epochs}")
+    va = df[df["split"] == "val"].reset_index(drop=True)   # D43: 选型/早停**只用 val**
+    # **test 段不加载、不碰**(D43: test 全程不碰); 终局评估用 scripts/29/32 在 test 上另跑一次。
+    if len(tr) == 0 or len(va) == 0:                       # smoke(仅部分天)兜底: 行切分, 明确非正式协议
+        n = int(len(df) * 0.8); tr, va = df.iloc[:n].reset_index(drop=True), df.iloc[n:].reset_index(drop=True)
+        print("[smoke] this partial dataset lacks train/val split; row-split fallback (NOT the D34 protocol)")
+    print(f"[data] train={len(tr)} val={len(va)} (test isolated) encoder={encoder} epochs={epochs}")
 
     net = InfrastructureNetwork.load()
     ptc = {}
@@ -113,22 +115,22 @@ def main(argv):
             nll, _ = _acc_loss(model, batch_t, y, device)
             opt.zero_grad(); nll.backward(); opt.step()
             tot += float(nll) * len(rows)
-        # holdout 评估
+        # val 评估(选型/早停口径; test 不碰)
         model.eval()
         with torch.no_grad():
             accs = []
-            for i in range(0, len(ho), 256):
-                rows = ho.iloc[i:i + 256]
+            for i in range(0, len(va), 256):
+                rows = va.iloc[i:i + 256]
                 b, y = _batch(adapter, rows); accs.append(_acc_loss(model, to_tensors(b, device), y, device)[1] * len(rows))
-            ho_acc = sum(accs) / max(len(ho), 1)
-        hist.append({"epoch": ep + 1, "train_nll": round(tot / len(tr), 4), "holdout_acc": round(ho_acc, 4)})
-        print(f"  ep{ep+1}: train_nll={hist[-1]['train_nll']} holdout_acc={hist[-1]['holdout_acc']}")
+            val_acc = sum(accs) / max(len(va), 1)
+        hist.append({"epoch": ep + 1, "train_nll": round(tot / len(tr), 4), "val_acc": round(val_acc, 4)})
+        print(f"  ep{ep+1}: train_nll={hist[-1]['train_nll']} val_acc={hist[-1]['val_acc']}")
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
     ckpt = config.ARTIFACTS / "dataset" / f"bc_fullpanel_{encoder}.pt"
     torch.save({"state_dict": model.state_dict(), "encoder": encoder, "dims": dims}, ckpt)
     (config.ARTIFACTS_REPORTS / f"bc_fullpanel_train_{stamp}.json").write_text(json.dumps(
-        {"encoder": encoder, "epochs": epochs, "n_train": len(tr), "n_holdout": len(ho),
+        {"encoder": encoder, "epochs": epochs, "n_train": len(tr), "n_val": len(va),
          "smoke": smoke, "history": hist}, indent=2, ensure_ascii=False))
     print(f"-> {ckpt}")
     return 0
