@@ -57,6 +57,13 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   3-val-day smoke ≈ 90% SET / 10% WAIT / **0 CANCEL** (the replay doesn't reproduce logged cancels — a known
   limitation; BC won't learn cancel, RL explores it). Remaining ⑦/⑧ (mostly server): full 96-day dataset, train
   `PanelOptionPolicy` on `chosen_idx` (= full-panel BC), warm-start RL (per_train reward), redo baselines + Step 9.
+- **BC full-panel training script (`scripts/31`) implemented**: clones `chosen_idx` (the full panel action)
+  by NLL on `PanelOptionPolicy.forward` option log-probs (the set branch = the M11 PointerBC, so the whole
+  thing warm-starts RL). The data path (reconstruct dec → `PanelAdapter.encode` → `collate_panels` → dims →
+  label validity) is verified without torch (dims = dec117/conf8/cand21/cancel40/train19/global7; all
+  `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
+  installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
+  HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
 
 ### ⚠️ KEY BRANCH POINT — wide+req_time faithful-anchor attempt (superseded by D58 above) (2026-08-07)
 - **What was tried (D57.1)**: after the user's critique that the calibrated 141s trigger is a median/detour, we

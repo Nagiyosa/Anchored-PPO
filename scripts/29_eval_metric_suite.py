@@ -121,10 +121,7 @@ def main(argv):
               f"platadh={o['platform_adherence']}")
     rep = {"_meta": {"script": "scripts/29_eval_metric_suite.py",
                      "generated": time.strftime("%Y-%m-%dT%H:%M:%S"), "split": split,
-                     "n_days": len(days), "env": "proactive narrow", "elapsed_s": round(time.time() - t0, 1),
-                     "occupation_ratio_uic406": "NOT computed by design (2026-08-07, 用户+我定): 咽喉排序问题"
-                     "非线路容量研究; 车固定 → 占用率各策略近似不变; 容量极限已由完成率(gridlock)覆盖;"
-                     "加它需按 TC 记预留区间+定义关键区段, 投入不小、区分度小、非 headline。故不做。"},
+                     "n_days": len(days), "env": "proactive narrow", "elapsed_s": round(time.time() - t0, 1)},
            "by_policy": out}
     config.ARTIFACTS_REPORTS.mkdir(parents=True, exist_ok=True)
     outp = config.ARTIFACTS_REPORTS / f"eval_metric_suite_{split}_{time.strftime('%Y%m%d-%H%M%S')}.json"
