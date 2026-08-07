@@ -46,6 +46,17 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   platform/on-time removed from the reward. 2-val-day check: completion 1.0, 0 invariants; per_train and
   per_step give identical action SHA (replay ignores reward → the ⑥ gate is unaffected); stops 928 (reactive)
   → 72 (narrow) — proactive stops trains 12.9× less, now reflected directly in the reward.
+- **Eval suite (`scripts/29`) + BC full-panel dataset gen (`scripts/30`) implemented + smoked**. Eval suite
+  (λ-stratified: weighted secondary delay / completion / PPM / stops headline + tail / platform / throughput):
+  val signaller comp 1.0, PPM≤300s 99.9%, stops 137; **greedy gridlocks at 0.34 completion** (no timing ⇒
+  gridlock — a further quantitative confirmation of the timing thesis). **Occupation ratio (UIC-406) decided
+  NOT to build** (throat sequencing ≠ line-capacity study; trains fixed ⇒ ratio ~constant across policies;
+  the capacity limit is already captured by completion/gridlock; not worth the per-TC interval instrumentation).
+  BC full-panel dataset (`scripts/30`): narrow-proactive signaller replay → per-epoch `(obs, options,
+  chosen_idx)` samples cloning the full panel {WAIT/SET/CANCEL}, D34 split + fingerprint + per-class report;
+  3-val-day smoke ≈ 90% SET / 10% WAIT / **0 CANCEL** (the replay doesn't reproduce logged cancels — a known
+  limitation; BC won't learn cancel, RL explores it). Remaining ⑦/⑧ (mostly server): full 96-day dataset, train
+  `PanelOptionPolicy` on `chosen_idx` (= full-panel BC), warm-start RL (per_train reward), redo baselines + Step 9.
 
 ### ⚠️ KEY BRANCH POINT — wide+req_time faithful-anchor attempt (superseded by D58 above) (2026-08-07)
 - **What was tried (D57.1)**: after the user's critique that the calibrated 141s trigger is a median/detour, we
