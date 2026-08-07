@@ -28,7 +28,7 @@ from derbysim.learn.scenarios import build_day_trains, day_horizon, load_assets,
 
 def eval_policy(make_policy, days, net, params, dwell, ptc, adapter):
     from derbysim.sim.reward import RewardedDynamicEnv
-    able = reach = wd = stops = col = dead = 0
+    able = reach = wd = stops = col = dead = ppm_denom = 0
     ppm_ok = {60: 0, 180: 0, 300: 0}
     for day in days:
         env = RewardedDynamicEnv(net, params, ptc, dwell, proactive=True, reserve_window="narrow")
@@ -36,15 +36,18 @@ def eval_policy(make_policy, days, net, params, dwell, ptc, adapter):
                     max_decisions=300000, horizon=day_horizon(day))
         m = run_metrics(env)
         able += m["able"]; reach += m["reach"]; wd += m["wd"]; stops += m["stops"]
-        col += m["col"]; dead += m["dead"]
+        col += m["col"]; dead += m["dead"]; ppm_denom += m["ppm_denom"]
         for T in ppm_ok:
             ppm_ok[T] += m["ppm"][T]
     return {
         "completion_rate": round(reach / able, 4) if able else 1.0,
         "weighted_secondary_delay_s": round(wd, 1),
         "unscheduled_stops": int(stops),
-        "ppm_le_60s": round(ppm_ok[60] / able, 4) if able else None,
-        "ppm_le_300s": round(ppm_ok[300] / able, 4) if able else None,
+        # PPM = **对 CIF 计划的绝对准点**(D58): 完成车中"实际到达/通过 − planned_ref ≤ T"占比。
+        # planned_ref 已 coalesce(arr→dep→pass); 实际取 max(sim_occ)=区内末占用≈到站/通过点。
+        # **非以信号员为标准**; 分母=有 planned_ref 的完成车。信号员因外生 primary 晚点, PPM<1。
+        "ppm_le_60s": round(ppm_ok[60] / ppm_denom, 4) if ppm_denom else None,
+        "ppm_le_300s": round(ppm_ok[300] / ppm_denom, 4) if ppm_denom else None,
         "n_collisions": int(col), "n_deadlocks": int(dead),
     }
 
@@ -54,8 +57,13 @@ def run_metrics(env):
     eng = env.engine
     able = [t for t in eng.trains.values() if can_complete(t)]
     reach = [t for t in able if t.done and has_reached_goal(t)]
-    ppm = {T: sum(1 for t in reach if getattr(t, "held_time", 0.0) <= T) for T in (60, 180, 300)}
-    return {"able": len(able), "reach": len(reach),
+    # PPM 分母 = **所有应完成车**(有 planned_ref); 搁浅/没到站 = 不准点(RR: 没到站没分)。
+    able_pr = [t for t in able if getattr(t, "planned_ref", None) is not None]
+    def arrival_delay(t):                             # 实际到达/通过 − 计划(RR 式绝对晚点)
+        return max(t.sim_occ.values()) - t.planned_ref
+    ppm = {T: sum(1 for t in reach if getattr(t, "planned_ref", None) is not None
+                  and t.sim_occ and arrival_delay(t) <= T) for T in (60, 180, 300)}
+    return {"able": len(able), "reach": len(reach), "ppm_denom": len(able_pr),
             "wd": realized_weighted_delay(eng, env.cfg, horizon=env.horizon),
             "stops": sum(getattr(t, "n_stops", 0) for t in eng.trains.values()),
             "col": len(eng.collisions), "dead": int(bool(eng.deadlocked)), "ppm": ppm}

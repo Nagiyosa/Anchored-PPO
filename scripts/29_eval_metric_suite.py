@@ -44,10 +44,16 @@ def _summarise(trains_by_day, horizons):
             if not can_complete(t):
                 continue
             done_ok = bool(t.done and has_reached_goal(t))
+            pr = getattr(t, "planned_ref", None)
+            # RR 式绝对到达晚点(D58): 实际到达/通过(max sim_occ) − 计划(planned_ref, 已 coalesce arr/dep/pass)。
+            arr_delay = ((max(t.sim_occ.values()) - pr) if (done_ok and pr is not None and t.sim_occ)
+                         else None)
             rows.append({
                 "cls": (t.service_class or "?")[:1],
                 "done": done_ok,
-                "sec_delay": float(getattr(t, "held_time", 0.0)),   # 区内次生延误(秒)
+                "has_plan": pr is not None,             # PPM 分母 = 有计划的应完成车(搁浅计不准点)
+                "arr_delay": arr_delay,                 # 绝对晚点(vs 计划); None=未到站/无计划
+                "sec_delay": float(getattr(t, "held_time", 0.0)),   # 区内次生延误(秒, D23/D24 价值锚)
                 "stops": int(getattr(t, "n_stops", 0)),
                 "booked": getattr(t, "booked_platform", None),
                 "served": set(getattr(t, "served_platforms", set()) or set()),
@@ -78,9 +84,14 @@ def _summarise(trains_by_day, horizons):
             "total_held_time_s": round(float(sd.sum()), 1),
             "platform_adherence": (round(plat_ok / len(plat), 4) if plat else None),
         }
-        for T in PPM_THRESH_S:                      # PPM 式准点: 完成且次生延误 ≤ T
-            ok = sum(1 for r in rs if r["done"] and r["sec_delay"] <= T)
-            out[f"ppm_le_{int(T)}s"] = round(ok / len(rs), 4)
+        # PPM(D58, RR 式绝对): 准点到达 / **所有有计划的应完成车**(搁浅=不准点); 非以信号员为标准。
+        ppm_denom = sum(1 for r in rs if r["has_plan"])
+        arr = [r["arr_delay"] for r in rs if r["arr_delay"] is not None]
+        for T in PPM_THRESH_S:
+            ok = sum(1 for r in rs if r["arr_delay"] is not None and r["arr_delay"] <= T)
+            out[f"ppm_le_{int(T)}s"] = round(ok / ppm_denom, 4) if ppm_denom else None
+        out["arr_delay_p50_s"] = _pctl(arr, 50); out["arr_delay_p90_s"] = _pctl(arr, 90)
+        out["arr_delay_p95_s"] = _pctl(arr, 95)
         return out
 
     res = {"overall": block(rows)}

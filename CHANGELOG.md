@@ -76,6 +76,18 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   (54,652.5s) both still gate_pass True, deterministic, 0 chain-mismatch / 0 invariants — the many changes
   since sealing (per-train reward, n_stops, req_times threading, wide-gated reserve_due, leak fix, entry-as-
   decision, window switch) did not disturb the sealed foundation.
+- **Code audit since the new engine (2026-08-07, user-requested) + fixes**: (1) featurizer (`panel.py`/
+  `features.py`) audited — it never touches `decision.logged`/`logged_time` (no answer-leak), obs carries no
+  `req_time`/logged route, `rem_path` in M9 is locked-only (D54-compliant), and it encodes entry decisions
+  (cur_tc=None) without error (200/200). (2) Fixed `scripts/30`: added the decision `signal` column (in-region
+  SETs populated, entry/WAIT null — correct) needed for route_prior/lookup. (3) Fixed `scripts/31`: fit
+  route_prior from the train split (was a constant 0.5 = dead feature; now 112 (sig,route) keys on a smoke).
+  (4) **PPM corrected to the D58 spec** — it was implemented as secondary-delay-relative (making the signaller
+  a trivial 1.0, i.e. signaller-as-standard, wrong); D58 already specified PPM = on-time vs the CIF **plan**.
+  Now: delay = actual arrival/pass (`max(sim_occ)`) − `planned_ref` (already coalesced arr→dep→pass); PPM =
+  on-time / **all scheduled trains** (stranded = not on-time). `scripts/29`+`32` consistent; signaller
+  PPM≤300s 1.0 → **0.57** (limited by exogenous primary delays), lookup/fcfs/fsfs 0.245, greedy 0.19,
+  random 0.075. (5) D45 voided (ran on the D41-contaminated engine; retest on the new engine+reward).
 
 ### ⚠️ KEY BRANCH POINT — wide+req_time faithful-anchor attempt (superseded by D58 above) (2026-08-07)
 - **What was tried (D57.1)**: after the user's critique that the calibrated 141s trigger is a median/detour, we
