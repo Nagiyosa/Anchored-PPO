@@ -64,6 +64,18 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+- **Baseline ladder (`scripts/32`) rebuilt on the new proactive env — a decisive result**: every zero-learning
+  baseline gridlocks (lookup / fcfs / fsfs **0.49**, greedy 0.35, random 0.32 completion; weighted delay
+  explodes to 38–51M as ~half the trains strand and charge to horizon), while the **signaller's timing alone
+  reaches 1.000** (delay 9,165s). Crucially **lookup collapses to 0.49** — in the old reactive/D41-contaminated
+  env it was the "strongest safe baseline ≈ signaller +8.7%" (D42); this **confirms D47** that the old figure
+  was a free-drop artifact. lookup=fcfs=fsfs coincide because none does strategic WAIT (no timing ⇒ same
+  gridlock; routing/order can't save it). Timing is the lever from ~0.3 to 1.0 — BC/RL approaching the
+  signaller = solving the problem. (`baseline_ladder_val_20260807-220658.json`.)
+- **⑥ gate re-verified after all reward/eval/BC changes**: reactive (100,273.5s) and proactive-narrow
+  (54,652.5s) both still gate_pass True, deterministic, 0 chain-mismatch / 0 invariants — the many changes
+  since sealing (per-train reward, n_stops, req_times threading, wide-gated reserve_due, leak fix, entry-as-
+  decision, window switch) did not disturb the sealed foundation.
 
 ### ⚠️ KEY BRANCH POINT — wide+req_time faithful-anchor attempt (superseded by D58 above) (2026-08-07)
 - **What was tried (D57.1)**: after the user's critique that the calibrated 141s trigger is a median/detour, we

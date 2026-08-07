@@ -21,7 +21,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from derbysim import config
-from derbysim.learn.features import Featurizer
+from derbysim.learn.features import Featurizer, fit_route_prior
 from derbysim.learn.panel import PanelAdapter, collate_panels
 from derbysim.learn.panel_models import PanelOptionPolicy, pick_device, to_tensors
 from derbysim.sim.env_dynamic import PanelAction, PanelDecision
@@ -77,7 +77,20 @@ def main(argv):
         for r in csv.DictReader(f):
             if (r.get("platform_id") or "").strip().isdigit():
                 ptc[r["tc_id"].strip()] = int(r["platform_id"])
-    adapter = PanelAdapter(net, Featurizer(net, ptc))
+    # route_prior 特征只从 **train 段**拟合(held-out 纪律 D40; 不碰 holdout/test)。用新数据集的
+    # signal + 该决策车的合法 set 路(从 options 取)。缺 signal 的行(entry/WAIT)不进先验。
+    prior_recs = []
+    for _, r in tr[tr["chosen_kind"] == "set"].iterrows():
+        if r.get("signal") is None or (isinstance(r.get("signal"), float) and r["signal"] != r["signal"]):
+            continue
+        legal = [rid for k, tid, rid in json.loads(r["options"])
+                 if k == "set" and tid == r["chosen_train"]]
+        if len(legal) > 1:
+            prior_recs.append({"signal": r["signal"], "legal_route_ids": legal,
+                               "chosen_route": r["chosen_route"], "n_legal": len(legal)})
+    route_prior = fit_route_prior(prior_recs) if prior_recs else {}
+    print(f"[route_prior] fitted on {len(prior_recs)} multi-choice SET rows -> {len(route_prior)} (sig,route) keys")
+    adapter = PanelAdapter(net, Featurizer(net, ptc, route_prior=route_prior))
 
     e0 = _encode_row(adapter, tr.iloc[0])
     dims = (e0["x_dec"].shape[1], e0["x_conf"].shape[2], e0["x_cand"].shape[2],

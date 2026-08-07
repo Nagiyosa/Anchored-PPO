@@ -43,12 +43,15 @@ def _record_day(day, net, params, dwell, ptc, adapter, cap=300000):
         idx, _lp, _v = act(enc)
         opts = dec.options
         chosen = opts[idx]
-        # 决策车 = 被选动作的车(WAIT 无车)。service_class 从 obs.trains 查, 供分层/加权。
-        cls = ""
+        # 决策车 = 被选动作的车(WAIT 无车)。service_class + 决策信号从 obs.trains 查,
+        # 供分层/加权 + featurizer route_prior 拟合 + lookup 重建(旧 d35 有 signal 列, 新数据集须补)。
+        cls, sig = "", None
         if chosen.train_id:
             for tr in obs.get("trains", []):
                 if tr.get("train_id") == chosen.train_id:
-                    cls = (tr.get("service_class") or "")[:1]; break
+                    cls = (tr.get("service_class") or "")[:1]
+                    sig = tr.get("dec_signal")
+                    break
         rows.append({
             "obs": json.dumps(obs, default=str, ensure_ascii=False),
             "options": json.dumps([[o.kind, o.train_id, o.route_id] for o in opts], ensure_ascii=False),
@@ -56,6 +59,7 @@ def _record_day(day, net, params, dwell, ptc, adapter, cap=300000):
             "chosen_kind": chosen.kind,
             "chosen_train": chosen.train_id,
             "chosen_route": chosen.route_id,
+            "signal": sig,                          # 决策信号(SET 的选路先验/lookup 键; WAIT/无车为 None)
             "n_options": len(opts),
             "n_set": sum(1 for o in opts if o.kind == "set"),
             "service_class": cls,
