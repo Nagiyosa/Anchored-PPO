@@ -674,6 +674,11 @@ class DynamicEngine:
         pr = getattr(t, "planned_ref", None)
         if pr is None:
             return None
+        # 无泄露(D54/D22): `entry_time` 是**实际**首占时刻。车尚未入区时它落在未来 → 暴露"接近车
+        # 将来几点到/晚多少"= 泄露"已实现的未来"。只在车已入区(entry_time 已实现)后才给 signed 延误;
+        # 接近车的时刻只能来自 CIF 计划(planned_ref), 不能来自 entry_time。回放不用特征, 门不受影响。
+        if not t.entered:
+            return None
         return round((t.entry_time - pr) / 60.0, 1)
 
     def _build_obs(self):

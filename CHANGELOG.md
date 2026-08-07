@@ -34,10 +34,17 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   0 D36 violations, all done, deterministic; **steps 10,327 → 6,866** (vs reactive 6,159 — the ~700 extra are
   genuine advance decision points, not spam); weighted delay 54,652.5s (still −46% vs reactive). The action
   set `{WAIT}∪{SET}∪{CANCEL}` and string-stacking (consecutive SETs in a cut) were already present.
-- Remaining stages: ③ state (conflicts from physical/own-reservations/CIF, full schedule, time-to-deadline /
-  frontier-depth / ETA features) + entry-as-decision (D52, re-verify replay), ④ cancel_locked (D55), then the
-  full Step-7 gate. Note: ③/④ are largely RL/BC-facing; the replay-verified proactive core (trigger + string +
-  de-dup + reserve-ahead) is in place.
+- **Stage 3a (leak audit + fix, D54/D22) done + verified**: `_build_obs` computed `delay_min =
+  (entry_time − planned_ref)/60` for **all** non-done trains, but `entry_time` is the **actual** first-TC
+  occupation — for a not-yet-entered (approaching) train that lies in the future, so exposing its realized
+  arrival delay leaks "the realized future" (D54's guardrail). Fix: `_delay_min` returns None until the train
+  has entered (approaching-train timing may come only from the CIF plan, never actual entry_time). Shared bug
+  on both reactive/proactive paths. Verified: reactive + proactive replay **bit-identical** (action SHA
+  398b5dbd / 35713231 unchanged — replay ignores features), and approaching-train realized-delay leaks 183 → 0.
+- Remaining: entry-as-decision (D52 — the last substantive engine behaviour change; reverts D14.8, needs its
+  own replay re-verify) and the richer ③ features + ④ cancel_locked, which are featurizer/RL-facing and couple
+  to the BC full-panel clone target (⑦). The replay-verified proactive core (trigger + string + de-dup +
+  reserve-ahead + leak fix) is in place.
 
 ### D56 — Block ⑤ WAIT/delay/gridlock settlement settled + overlap sensitivity measured (take depth-1 consistent + report sensitivity) (2026-08-06, user)
 - **Delay/gridlock accounting reused unchanged**: `held_time` weighted by service-class λ, incomplete trains
