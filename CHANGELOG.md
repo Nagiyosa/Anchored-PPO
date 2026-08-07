@@ -41,10 +41,21 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   has entered (approaching-train timing may come only from the CIF plan, never actual entry_time). Shared bug
   on both reactive/proactive paths. Verified: reactive + proactive replay **bit-identical** (action SHA
   398b5dbd / 35713231 unchanged — replay ignores features), and approaching-train realized-delay leaks 183 → 0.
-- Remaining: entry-as-decision (D52 — the last substantive engine behaviour change; reverts D14.8, needs its
-  own replay re-verify) and the richer ③ features + ④ cancel_locked, which are featurizer/RL-facing and couple
-  to the BC full-panel clone target (⑦). The replay-verified proactive core (trigger + string + de-dup +
-  reserve-ahead + leak fix) is in place.
+- **Stage 3b (entry-as-decision (a) + reserve_window switch, D57) done + verified**: proactive `_on_arrive` no
+  longer auto-commits the entry route; the train becomes an `awaiting_entry` candidate whose only SET option is
+  the logged entry route (routing fixed, timing decided; WAIT holds it at the boundary and accrues delay per
+  D56). Reactive keeps D14.8 (auto-entry) untouched. `reserve_window` param: **narrow** (calibrated trigger =
+  141s, faithful human timing — replay/BC use this) vs **wide** (frontier-known ⇒ reserve immediately, = RR's
+  free set-ahead — RL default, narrow as ablation). Full 11 val gate: reactive **bit-identical** (100,273.5s /
+  6042 sets); proactive **narrow** completion **1.000**, all done, 0 col/dead/D36, deterministic, delay
+  **54,652.5s** (unchanged — replay admits at arrival), sets 8851 (= 6042 + 2809 entry decisions). **Wide
+  sanity confirms the by-role split**: wide replay completes 1.000 but delay **balloons to 316,694.8s (+480%)**
+  because it reserves the whole chain up-front and holds all overlaps from entry — i.e. wide would corrupt the
+  human anchor, exactly why replay/BC must stay narrow.
+- **Proactive engine now functionally complete + replay-verified**: advance-trigger (①), string + de-dup (②),
+  reserve-ahead + train-keyed locking (④ core), policy-reservation advancement gate (⑤), leak-safe delay (③
+  fix), entry-as-decision (a), narrow/wide window (D57). Remaining are RL/BC-facing and belong with ⑦: richer ③
+  featurizer wiring, ④ cancel_locked, then BC full-panel (⑦) + baselines/eval/Step9 redo (⑧).
 
 ### D56 — Block ⑤ WAIT/delay/gridlock settlement settled + overlap sensitivity measured (take depth-1 consistent + report sensitivity) (2026-08-06, user)
 - **Delay/gridlock accounting reused unchanged**: `held_time` weighted by service-class λ, incomplete trains

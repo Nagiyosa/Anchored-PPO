@@ -64,6 +64,8 @@ class DynTrain:
     next_trigger_kind: str = ""
     # D50 去重(仅 proactive): 上次为该车提供 SET 决策时的上下文签名; 未变则不重复端上面板。
     set_offer_sig: tuple | None = None
+    # D57 entry (a)(仅 proactive): 车已到区界、等面板决定"何时放行"(SET 入区路)/ WAIT(边界等、计延误)。
+    awaiting_entry: bool = False
     entered: bool = False
     pos: int = 0
     dwell_idx: int | None = None
@@ -93,7 +95,8 @@ class DynTrain:
 
 class DynamicEngine:
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
-                 overlap_depth: int = 1, proactive: bool = False, advance_cfg=None) -> None:
+                 overlap_depth: int = 1, proactive: bool = False, advance_cfg=None,
+                 reserve_window: str = "narrow") -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
@@ -101,6 +104,9 @@ class DynamicEngine:
         # D50/D48: proactive=True 恢复 M8 的**提前触发**(决策候选在前沿时间窗内产生, 非只在跑光锁定
         # 轨道时). 默认 False = 原 reactive 行为逐位不变(现有信号员回放 1.0/所有下游不受影响)。
         # advance_cfg 复用 M8 的 artifacts/calib/decision_advance.json(逐信号标定, 141s/N 格)。
+        # D57 候选窗口: "narrow"=触发点=141s 标定(复现真人时机, 回放/BC 恒用此); "wide"=前沿一提交即可
+        # 预留(=RR 自由, RL 默认)。别限制学习者(RL 宽)、别篡改裁判(回放/BC 窄)。
+        self.reserve_window = reserve_window
         self.proactive = bool(proactive)
         if self.proactive and advance_cfg is None:
             from derbysim.sim.env import load_advance_cfg
@@ -181,6 +187,11 @@ class DynamicEngine:
             return
         S = self._decision_signal(t)
         if S is None or not self._legal(t, S):
+            return
+        if self.reserve_window == "wide":
+            # D57 宽窗(=RR): 前沿一提交、下一决策信号已知即可预留 → 立即合格(pos>=0 恒真)。
+            t.next_trigger_idx = 0
+            t.next_trigger_kind = "wide"
             return
         seg_end = len(t.path) - 1
         cfg = self.advance_cfg.get(str(S), {})
@@ -263,6 +274,9 @@ class DynamicEngine:
         for t in self.trains.values():
             if t.done:
                 continue
+            if t.awaiting_entry:                    # D57 entry (a): 等"何时放行"决策
+                out.append(t)
+                continue
             if t.awaiting_decision:
                 out.append(t)
                 continue
@@ -336,6 +350,16 @@ class DynamicEngine:
         opts = [PanelAction("wait")]
         logged = {}
         for t in awaiting:
+            if t.awaiting_entry:
+                # D57 entry (a): 只提供**日志入区路**(选路固定), 决策 = 何时放行 / WAIT。
+                rid = t.route_chain[0] if t.route_chain else None
+                r = self.net.routes.get(rid) if rid else None
+                if r and not would_create_deadlock(self.res, r, t.train_id):
+                    opts.append(PanelAction("set", t.train_id, rid))
+                    ref_idx = self._match_reference_index(t, {rid})
+                    if ref_idx is not None:
+                        logged[t.train_id] = t.route_chain[ref_idx]
+                continue
             dsig = self._decision_signal(t)
             offered = []
             for rid in self._legal(t, dsig):
@@ -354,9 +378,17 @@ class DynamicEngine:
         self.n_actions += 1
         t = self.trains.get(a.train_id) if a.train_id else None
         if a.kind == "set" and t is not None:
+            was_entry = t.awaiting_entry                  # D57: 这是"放行入区"决策?
             t.awaiting_decision = False                  # hold_start **不清**: 车还没动
-            if self._request(t, a.route_id):
-                self.q.push(self.now, "try_advance", {"tr": t.train_id, "idx": t.pos})
+            t.awaiting_entry = False
+            if self._request(t, a.route_id):             # LOCKED 立即落锁
+                if was_entry and not t.entered:
+                    # 放行入区: 入区路已锁 → 车入区(enter idx 0)。hold_start 由 _on_enter 结清(边界等待计延误)。
+                    t.entered = True
+                    self.q.push(self.now, "enter", {"tr": t.train_id, "idx": 0})
+                else:
+                    self.q.push(self.now, "try_advance", {"tr": t.train_id, "idx": t.pos})
+            # 若入区路 QUEUED(被占), pending_request 已置, 由 _wake 落锁后处理 not-entered → enter(见 _wake)。
             if has_deadlock(self.res):
                 self._flag_deadlock()
         elif a.kind == "cancel" and t is not None:
@@ -453,6 +485,14 @@ class DynamicEngine:
             t.done = True
             t.termination_reason = "no_route"
             return
+        if self.proactive:
+            # D57 entry (a): 到区界不自动办入区路; 变成"何时放行"的面板决策(选路固定为日志入区路)。
+            # 起计 hold_start —— 若被 WAIT 压在边界, 这段等待按 D56 计延误; 立即放行则 _on_enter 结清为 0。
+            t.awaiting_entry = True
+            if t.hold_start is None:
+                t.hold_start = self.now
+            return
+        # reactive(D14.8 不变): 入区路自动办理, 非决策。
         if self._request(t, t.route_chain[0]):
             t.entered = True
             self.q.push(self.now, "enter", {"tr": t.train_id, "idx": 0})
@@ -732,13 +772,15 @@ class DynamicDerbyEnv:
     """
 
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
-                 overlap_depth: int = 1, proactive: bool = False) -> None:
+                 overlap_depth: int = 1, proactive: bool = False,
+                 reserve_window: str = "narrow") -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
         self.dwell_by_platform = dwell_by_platform or {}
         self.overlap_depth = int(overlap_depth)    # M10 F6: M13 overlap 鲁棒性扫描用; 默认 1 不改原行为
         self.proactive = bool(proactive)           # D50: 提前触发(默认 False = 原 reactive)
+        self.reserve_window = reserve_window       # D57: narrow(回放/BC) | wide(RL 默认=RR)
         self.engine: DynamicEngine | None = None
         self._gen = None
         self._pending: PanelDecision | None = None
@@ -746,7 +788,7 @@ class DynamicDerbyEnv:
     def reset(self, trains):
         self.engine = DynamicEngine(self.net, self.params, self.plat_tc_to_pid,
                                     self.dwell_by_platform, overlap_depth=self.overlap_depth,
-                                    proactive=self.proactive)
+                                    proactive=self.proactive, reserve_window=self.reserve_window)
         self._gen = self.engine.run(trains)
         self._pending = next(self._gen, None)
         return self._obs(), self._info()
