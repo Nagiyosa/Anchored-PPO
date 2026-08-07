@@ -62,6 +62,8 @@ class DynTrain:
     # M8 提前触发(仅 proactive): 下一决策的物理触发点(沿已锁 path 的 idx)与类型。
     next_trigger_idx: int | None = None
     next_trigger_kind: str = ""
+    # D50 去重(仅 proactive): 上次为该车提供 SET 决策时的上下文签名; 未变则不重复端上面板。
+    set_offer_sig: tuple | None = None
     entered: bool = False
     pos: int = 0
     dwell_idx: int | None = None
@@ -267,8 +269,29 @@ class DynamicEngine:
             if t.pending_request is not None:
                 continue
             if t.next_trigger_idx is not None and t.pos >= t.next_trigger_idx:
-                out.append(t)
+                # D50 去重: 只在决策上下文(触发点 + 合法续路的占用签名)自上次提供后变化才重新问,
+                # 否则同一未变问题被每个 cut 重复端上(Stage 1 步数 6159→10327 的成因)。
+                if self._set_offer_sig(t) != t.set_offer_sig:
+                    out.append(t)
         return out
+
+    def _set_offer_sig(self, t):
+        """proactive SET 候选的上下文签名 = (触发点 idx, 合法续路 footprint 当前的他车持有者集)。
+
+        前沿一提交(触发点变)或阻塞冲突变化 → 签名变 → 重新提供; 否则压住不重复问(D50)。
+        """
+        S = self._decision_signal(t)
+        legal = self._legal(t, S) if S is not None else []
+        holders = set()
+        for rid in legal:
+            r = self.net.routes.get(rid)
+            if r is None:
+                continue
+            for tc in self.res.footprint(r):
+                h = self.res.reserved.get(tc)
+                if h is not None and h[1] != t.train_id:
+                    holders.add(h)
+        return (t.next_trigger_idx, frozenset(holders))
 
     def _blocker_sig(self, t):
         """挡住车 t 待办进路的持有者集合 (route_id, 车) —— 引擎原生量, 非自造指标。"""
@@ -398,6 +421,9 @@ class DynamicEngine:
             opts, logged = self._build_options(awaiting, cancellable)
             for t in cancellable:                    # 已经问过了; 阻塞来源再变才会重新问
                 t.cancel_sig = self._blocker_sig(t)
+            if self.proactive:                       # D50: 记下本次 SET 决策的上下文签名; 未变不重问
+                for t in awaiting:
+                    t.set_offer_sig = self._set_offer_sig(t)
             if all(o.kind == "wait" for o in opts):   # 无可办可撤 → 只能等
                 return
             action = yield PanelDecision(self.now, opts, logged)

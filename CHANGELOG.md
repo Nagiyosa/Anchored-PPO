@@ -28,10 +28,16 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 - **Finding**: proactive replay cuts weighted secondary delay **100,273.5 → 54,374s (−46%)** — routes locked
   ahead ⇒ fewer forced stops. First quantitative sign that the timing lever reduces delay for the signaller
   anchor (Stage-1 figure, not final).
-- **Caveat**: episode length rose 6159 → 10,327 steps because the D50 de-dup (don't re-ask an unchanged
-  candidate) is not in yet — benign for replay (completion 1.0, deterministic) but must be added in Stage 2
-  before RL (episode-length / GAE concern). Remaining stages: ② full action set + string + de-dup, ③ state +
-  entry-as-decision, ④ per-train reservation string + cancel_locked, then the full Step-7 gate.
+- **Stage 2 (de-dup, D50) done + verified**: a proactive SET candidate is re-offered only when its context
+  signature `(trigger_idx, holders of its legal continuations' footprints)` changes (mirrors the `cancel_sig`
+  discipline); stored in `_time_slice`. Full 11 val gate: completion **1.000**, 6042 sets, 0 col/dead/trunc,
+  0 D36 violations, all done, deterministic; **steps 10,327 → 6,866** (vs reactive 6,159 — the ~700 extra are
+  genuine advance decision points, not spam); weighted delay 54,652.5s (still −46% vs reactive). The action
+  set `{WAIT}∪{SET}∪{CANCEL}` and string-stacking (consecutive SETs in a cut) were already present.
+- Remaining stages: ③ state (conflicts from physical/own-reservations/CIF, full schedule, time-to-deadline /
+  frontier-depth / ETA features) + entry-as-decision (D52, re-verify replay), ④ cancel_locked (D55), then the
+  full Step-7 gate. Note: ③/④ are largely RL/BC-facing; the replay-verified proactive core (trigger + string +
+  de-dup + reserve-ahead) is in place.
 
 ### D56 — Block ⑤ WAIT/delay/gridlock settlement settled + overlap sensitivity measured (take depth-1 consistent + report sensitivity) (2026-08-06, user)
 - **Delay/gridlock accounting reused unchanged**: `held_time` weighted by service-class λ, incomplete trains
