@@ -129,8 +129,9 @@ def main() -> None:
                     help="各档**车数上限**(累加): 默认 ≤185/≤286/≤300/全部 = 9/33/48/64 天")
     ap.add_argument("--promote-at", type=float, default=0.9,
                     help="当前档 train 完成率≥此值就升档")
-    ap.add_argument("--tier-max-iters", type=int, default=12,
-                    help="每档最多训多少'评估周期'没达标也升档(兜底, 免卡死)")
+    ap.add_argument("--tier-max-iters", type=int, default=0,
+                    help="**默认 0 = 不设上限, 只按达标(≥promote-at)升档**。>0 才启用'到点强制升'的兜底; "
+                         "但强制升=把没学会的推去更难档=淤死(smoke 实证), 故默认关。练不到就留在本档接着练")
     ap.add_argument("--train-eval-days", type=int, default=6,
                     help="每次评估时在**当前档**抽几天算 train 完成率(升档判据 + train 曲线)")
     ap.add_argument("--final-test", action="store_true",
@@ -222,9 +223,10 @@ def main() -> None:
         print(f"[热启动体检] (**完整评估集**, 与后续 EVAL 可比) 初始 argmax 动作构成: WAIT {_chk['eval_frac_wait']:.0%} / "
               f"set {_chk['eval_frac_set']:.0%} / cancel {_chk['eval_frac_cancel']:.0%} "
               f"| 初始 completion {_chk['eval_completion_rate']:.3f}")
-        if _chk["eval_frac_cancel"] > 0.20 or not (0.02 <= _chk["eval_frac_wait"] <= 0.60):
-            print("  ⚠️ **动作构成异常** —— 参考: 信号员实测 WAIT 10% / set 90% / cancel 0%, "
-                  "真实撤销率 10.44%。这一类'热启动静默失效'不会有任何其它指标报警, 先查再跑。")
+        # 真正的热启动失效: cancel 刷屏 / set 塌缩(全 WAIT) / WAIT 塌缩(全 set, 扁平 argmax bug §17.2)。
+        # **宽窗里信号员本身 WAIT~68%**, 故高 WAIT 正常, 不再按旧 reactive 的 10% 判"异常"(那是误报)。
+        if _chk["eval_frac_cancel"] > 0.20 or _chk["eval_frac_wait"] < 0.02 or _chk["eval_frac_set"] < 0.05:
+            print("  ⚠️ **热启动动作构成异常**(cancel 刷屏 / 全 WAIT / 全 set 塌缩之一), 先查再跑。")
 
     # ---- baseline 参照线: 策略无关 → 按 (val, eval_days, reserve_window) 缓存, 跨 run 复用(省 ~3min/run) ----
     # 只影响**对照打印/写入的参照值**, 与 policy/optimizer/reward/训练**完全无关**(不碰主模型)。
@@ -427,7 +429,8 @@ def main() -> None:
             at_final_tier = (not args.curriculum) or (cur_tier >= len(tier_thr) - 1)
             if args.curriculum and not at_final_tier:
                 tier_iter += 1
-                if (_tc is not None and _tc >= args.promote_at) or tier_iter >= args.tier_max_iters:
+                cap_hit = args.tier_max_iters > 0 and tier_iter >= args.tier_max_iters   # 默认 0 = 不强制
+                if (_tc is not None and _tc >= args.promote_at) or cap_hit:
                     cur_tier += 1; tier_iter = 0
                     pool = _pool_for(cur_tier); train_eval_eps = _sample_eps(pool, args.train_eval_days)
                     at_final_tier = cur_tier >= len(tier_thr) - 1

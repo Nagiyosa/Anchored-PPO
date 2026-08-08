@@ -85,6 +85,14 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   single-seed curriculum run cell (live progress + resume) + a train/val curve cell; matrix demoted to optional.
 - **Verified (torch-free)**: py_compile; curriculum controller logic (tiering 9/33/48/64, cumulative, promotion →
   full peaks). Torch training on server.
+- **Smoke-driven fixes (server smoke `smoke_cur_gnn.json`)**: (1) `--tier-max-iters` default **12→0 = no cap =
+  mastery-only promotion** — the smoke's `--tier-max-iters 1` force-promoted every eval cycle (档1→4 in 6 iters,
+  none mastered: train 0.585/0.261/0.397/0.238) and just carried the failure to the peak (val ~0.40). Forcing a
+  policy that hasn't mastered a tier into a harder one = silting; so promotion is now mastery-gated by default,
+  the cap is opt-in. If a tier can't be mastered it STAYS (a finding), no game-over. (2) Warm-start census warning
+  was a **false alarm**: its `WAIT≤60%` bound is stale (old reactive signaller WAIT 10%); in wide the signaller
+  WAITs ~68%, so warm-start WAIT 75% is normal. Rewrote the check to flag only real failures (cancel-spam >20% /
+  all-WAIT set<5% / all-set WAIT<2%). Notebooks: real cell drops the cap (mastery-only); smoke uses low promote-at.
 
 ### Finding (2026-08-08, user-directed diagnostic) — low completion = ENTRY-ADMISSION starvation, NOT in-region silting
 - Torch-free diagnostics on the **proactive** engine (2 val days). Of incomplete *completable* trains, **96–98%
