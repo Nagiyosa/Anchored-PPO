@@ -64,6 +64,27 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+### D61 — RL smoke: pipeline validated + warm-start window mismatch (BC-narrow ↔ RL-wide) → run both wide & narrow full sweeps (2026-08-08, user)
+- **Smoke** (`smoke_gnn_schedule.json`, gnn/schedule/β0.1/wide, 6 iters/2 warmup/512 steps/4 days, 79s): pipeline
+  **works end-to-end** — no crashes, **0 deadlocks**, schedule KL active (0.10–0.17), resume/`_best`/`_last` written,
+  baselines sane on wide (signaller comp 1.000 / reward +2448; lookup 0.456, greedy 0.368, random 0.241 all gridlock).
+- **Key finding — warm-start window mismatch**: greedy warm-started policy in **wide** = WAIT 1% / set 99%,
+  **completion 0.298** — *worse than lookup 0.456*. Same gnn BC scored **0.501 greedy on narrow** (D59). Cause is the
+  D57 split: BC is cloned on **narrow** (faithful signaller timing), but RL runs **wide** where options are offered
+  much earlier → BC's timing head ("set when offered") fires immediately → set-99%. RL then collapses further
+  (entropy 0.63→0.15). EV deeply negative but only 2 warmup iters — not judgeable until the full run (8 warmup /
+  2048 steps). So the cheap smoke caught the mismatch before the full matrix.
+- **Bugfix (first server matrix run failed)**: `run_rl_matrix` defaulted `py=sys.executable` = the **Jupyter
+  kernel's** python, which lacks torch → all 21 subprocesses died instantly with `ModuleNotFoundError: torch`
+  (logs 254–520 B; smoke worked because it used `PREFIX`'s venv `PY`). Fix: notebook passes `py=PY` to every
+  `run_rl_matrix`; added a one-shot torch **preflight** in `run_rl_matrix` (fails fast with a clear "pass py=PY"
+  message instead of 21 silent failures). Also `summarize_rl_matrix` now skips pre-D60 runs (args without
+  `kl_anchor`) so old reactive `ppo_deepsets_*.json` don't pollute the ranking.
+- **Decision (user)**: run the gnn main sweep on **both wide and narrow, full length** — test the mismatch
+  hypothesis directly and let EV self-recovery decide (D45 discipline); 72 cores make it ~free. Notebook updated:
+  §1 wide sweep / §2 narrow sweep (tag `_nw`, `reserve_window=narrow`) / §3 joint summary (window column) /
+  §4 encoder ablation on the best window+anchor+β. `summarize_rl_matrix` now reports `window`.
+
 ### D60 — RL code audit + rewrite for proactive engine (Q5): env→proactive, KL anchor→schedule, warm-start→full-panel, kind-anchor dropped (2026-08-08, user)
 - **Audit finding (critical)**: `scripts/13` built `RewardedDynamicEnv(...)` **without `proactive=True`** → RL
   would have trained on the **old reactive engine** (D48's fundamental error). Also: KL anchored to a frozen

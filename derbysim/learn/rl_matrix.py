@@ -110,6 +110,13 @@ def run_rl_matrix(grid: list, n_workers=None, py=None, progress=True, **common) 
     """
     n_workers = int(n_workers or os.cpu_count() or 8)
     py = py or sys.executable
+    # **预检**: 子进程用的 python 必须能 import torch。notebook 内核的 sys.executable 常常没装 torch
+    # (torch 只在 venv 里) → 全部 run 会秒挂在 `ModuleNotFoundError: torch`。这里一次性快速失败并提示。
+    chk = subprocess.run([py, "-c", "import torch"], capture_output=True, text=True)
+    if chk.returncode != 0:
+        raise SystemExit(
+            f"[rl-matrix] 选定的 python 无法 import torch:\n  py = {py}\n  {chk.stderr.strip()}\n"
+            f"→ 传 py=PY(venv 里那个有 torch 的 python), 例如 run_rl_matrix(grid, py=PY, ...)。")
     env = dict(os.environ)
     env.update({"PYTHONPATH": str(REPO), "PYTHONUNBUFFERED": "1", "MPLBACKEND": "Agg",
                 "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1",           # 每 run 单核
@@ -165,10 +172,13 @@ def summarize_rl_matrix(glob="ppo_*.json", write=True) -> dict:
         if "best" not in d or "args" not in d:
             continue
         a, b = d["args"], d["best"]
+        if "kl_anchor" not in a:          # 旧 reactive 时代的 ppo_*.json 无此键 → 排除, 不污染排名(D60+)
+            continue
         baselines = baselines or d.get("baselines")
         rows.append({"tag": d.get("run_id", f.stem),
                      "encoder": a.get("encoder"), "kl_anchor": a.get("kl_anchor"),
                      "kl_beta": a.get("kl_beta"), "seed": a.get("seed"),
+                     "window": a.get("reserve_window"),
                      "best_iter": b.get("iter"), "reward": b.get("reward"),
                      "completion": b.get("completion"), "delay": b.get("delay")})
     rows.sort(key=lambda r: (r["reward"] is None, -(r["reward"] or -1e18)))
@@ -184,10 +194,10 @@ def summarize_rl_matrix(glob="ppo_*.json", write=True) -> dict:
         outp = REPORTS / f"rl_matrix_summary_{time.strftime('%Y%m%d-%H%M%S')}.json"
         outp.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
         print("wrote", outp)
-    for r in rows[:15]:
+    for r in rows[:20]:
         beat = ("✅" if (r["reward"] is not None and lk.get("eval_episode_reward") is not None
                         and r["reward"] > lk["eval_episode_reward"]) else "  ")
-        print(f"{beat} {r['tag']:<34} reward {str(r['reward'])[:9]:>9} "
+        print(f"{beat} [{str(r['window'])[:6]:<6}] {r['tag']:<36} reward {str(r['reward'])[:9]:>9} "
               f"comp {str(r['completion'])[:5]:>5} delay {str(r['delay'])[:9]:>9} "
               f"(it{r['best_iter']})")
     if lk:
