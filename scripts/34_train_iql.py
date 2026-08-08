@@ -67,8 +67,16 @@ def main() -> None:
     adapter = PanelAdapter(net, Featurizer(net, ptc))
 
     # ---- 离线数据 → 扁平转移 (enc, next_enc, action, reward, done) ----
-    with open(args.dataset, "rb") as f:
-        episodes = pickle.load(f)
+    # --dataset 可以是**分片目录**(scripts/33 产出的 offline_shards_*, 每分片一局)或单个 pkl(episodes 列表)。
+    dp = Path(args.dataset)
+    if dp.is_dir():
+        episodes = []
+        for shard in sorted(dp.glob("*.pkl")):
+            with shard.open("rb") as f:
+                episodes.append(pickle.load(f))
+    else:
+        with dp.open("rb") as f:
+            episodes = pickle.load(f)
     trans = []
     for ep in episodes:
         steps = ep["steps"]
