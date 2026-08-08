@@ -64,6 +64,34 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+### D64 — Reward bounded K=50 + loosen KL + offline IQL vs online PPO comparison; neutral verdict: problem is reward+task-structure, not model selection (2026-08-08, user)
+- **Neutral expert re-assessment (user asked for it)**: the main problem is **NOT model selection**. Evidence-ranked
+  roots: (1) **reward unlearnable** (EV blows to −10, target_kl guardrail early-stops 100% → policy barely updates →
+  "best is always the warm-start, only degrades" for weeks); (2) **task structure** (knife-edge + no recovery data +
+  long-horizon credit). Both are algorithm-independent. I **walked back my earlier over-claim** that switching to
+  offline RL is the fix: offline RL (IQL) also needs a learnable reward, AND our data has **no recovery samples**
+  (signaller never enters bad states; rule baselines enter and stay stuck) → IQL can learn to *avoid* bad states
+  (≈ good admission) but not *recover*. So neither PPO nor IQL is a clear winner; decide by experiment.
+- **Timing is discrete** (SMDP: at each event, act-now vs WAIT macro-action; D24). Not continuous.
+- **Reward bounded (K=50, default on, user-approved)** — stranded train = fixed −fail_penalty instead of
+  −(to-horizon delay + p_incomplete). Cuts variance ~150× so the critic can learn, keeps completion strongly
+  incentivized (K=50 > worst completion ≈ −30, so gridlock never pays; preserves D46 intent). **Only training
+  reward; eval metric `realized_weighted_delay` unchanged.** ⚠️ Distinct from **voided D62 (K=30 = cheap)**: this is
+  large-and-bounded, justified by the EV-blowup data. `--no-bounded-fail` restores D46.
+- **KL loosened** (`--kl-beta 0.1→0.03`; routing isn't the bottleneck).
+- **IQL implemented** (`derbysim/learn/iql.py`): actor = PanelOptionPolicy (same eval path as PPO); separate critic
+  encoder + V head + Q(s, a_data) head; V via expectile regression, Q via Bellman(V(s')), policy via
+  advantage-weighted regression — only queries Q on in-data actions (avoids OOD extrapolation).
+  `scripts/33_build_offline_dataset.py` (torch-free; signaller+lookup+greedy+fcfs+fsfs → transitions with bounded
+  reward, 24 days ≈ 74k transitions). `scripts/34_train_iql.py` (offline train, same val eval + baselines as PPO,
+  run-tag/resume). `notebooks/rl_offline_online_server.ipynb`: ① build dataset → ② IQL → ③ PPO (bounded reward,
+  loose KL, curriculum) → ④ compare on val.
+- **AWAC = IQL(offline) + PPO(online) glued** — a destination, not a shortcut. Build IQL + PPO separately first (for
+  attribution; AWAC's online phase inherits PPO's problems), then combine (warm-start PPO from the IQL policy) to
+  add the recovery samples IQL can't get offline. Plan: **fix reward → compare PPO vs IQL → if both fail, change the
+  task structure (strand/entry-backup game-over) → AWAC if IQL promising**. Verified torch-free: py_compile all;
+  reward tests green; offline generator runs (1 day, 13.6 KB/enc). Torch training/IQL on server.
+
 ### D63 — Curriculum (easy→hard by daily traffic) + single-seed first + train/val both recorded (2026-08-08, user)
 - **Response to the entry-admission finding**: the skill to learn = **when/in what order to admit trains** (RR core,
   D47). On busy days the policy jams the entry immediately and never experiences a full successful episode → can't

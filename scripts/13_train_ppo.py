@@ -111,6 +111,10 @@ def main() -> None:
     ap.add_argument("--bc-ckpt", default=None,
                     help="full-panel BC 权重(scripts/31 产出 {state_dict,encoder,dims}); 首选 gnn")
     ap.add_argument("--no-warm-start", action="store_true", help="消融: 不做 BC 热启动")
+    ap.add_argument("--fail-penalty", type=float, default=50.0,
+                    help="D64 有界搁浅罚(每辆固定, 取代 D46 到地平线无界项)。默认 50(大而有界)")
+    ap.add_argument("--no-bounded-fail", action="store_true",
+                    help="消融: 关掉有界搁浅罚, 回退 D46 到地平线(无界)")
     ap.add_argument("--run-tag", default=None,
                     help="稳定 run_id(无时间戳): 断点续训/矩阵幂等续跑用。给了它, checkpoint/输出用该名; "
                          "不给则沿用带时间戳的旧行为(每版留档)")
@@ -196,7 +200,8 @@ def main() -> None:
     roll_dev = dev if args.rollout_device == "same" else torch.device(args.rollout_device)
     roll_gen = gen if roll_dev == dev else torch.Generator(device=roll_dev).manual_seed(args.seed)
     driver = TorchPanelDriver(policy, roll_dev, generator=roll_gen, ret_norm=ret_norm)
-    rcfg = RewardConfig()          # reward_mode 默认 = per_train(D58): 每完成车终局结算, 搁浅到地平线(D46)
+    rcfg = RewardConfig(bounded_fail=not args.no_bounded_fail, fail_penalty=args.fail_penalty)
+    # reward_mode 默认 per_train(D58); D64: 搁浅罚默认 RR 式有界(fail_penalty=50), 砍掉到地平线无界项的方差
 
     # ---- 固定评估集(同窗口/同注入种子, 跨 iteration 与跨策略完全可比) + 基线参照线 ----
     # **D28: 一律真实历史, 不注入合成扰动**(旧代码用注入种子 0/1, 与 M10_DESIGN §4.4 的设计

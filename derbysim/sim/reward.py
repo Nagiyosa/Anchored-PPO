@@ -44,7 +44,15 @@ class RewardConfig:
     on_time_tol_s: float = 300.0               # 5 min 容差(灵敏度旋钮)
     # 安全/完成(大, 结构性)
     p_deadlock: float = 50.0                   # 死锁判负(D6 唯一进 reward 的安全项)
-    p_incomplete: float = 20.0                 # 未完成/搁浅每车判负
+    p_incomplete: float = 20.0                 # 未完成/搁浅每车判负(非有界模式 / per_step 用)
+    # D64: 搁浅罚**照 RR 改成有界固定**(默认开, 用户批准)。旧 D46"计到地平线"=无界、跨天方差极大,
+    # 实测让 reward 被它主导(每辆约 −7500、乱跳)→ critic EV 爆负、护栏疯 break、越训越差。
+    # 有界模式: 搁浅每辆 = −fail_penalty(固定)。K=50 有依据: 完成一辆 +base_completion(10), 完成但很堵的车
+    # 净值约 −30~+10, 故 K>30 才保证"再堵也要放进来完成"; 50 仍远大于完成、gridlock 绝不划算(保 D46 初衷),
+    # 但方差比无界小 ~150 倍、可学。**只改训练 reward; 评估 realized_weighted_delay 仍到地平线, 口径不变可比。**
+    # ⚠️ 区别于已作废 D62(K=30 太小=变便宜、削弱完成激励): 这次 K=50 大而有界、用户批准、数据佐证。
+    bounded_fail: bool = True
+    fail_penalty: float = 50.0
     # M12b 复审(2026-07-30, 用户定): 把"站着等派路"的时长也计入次生延误。
     # 旧度量只算"请求了进路但被排队", 于是**不给车办路 = 零延误** → 实测随机策略(完成 18/30)
     # 回报反而高于"有路就办"(完成 26/30)。留开关供对照, **默认开**。
@@ -241,8 +249,11 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
                 if t.train_id in self._finalized:
                     continue
                 if can_complete(t) and not has_reached_goal(t):
-                    r += (- self.cfg.w_delay * self._train_weighted_delay(t, horizon=self.horizon)
-                          - self.cfg.p_incomplete)
+                    if self.cfg.bounded_fail:                 # D64: RR 式有界固定罚(取代到地平线无界项)
+                        r += - self.cfg.fail_penalty
+                    else:                                     # 旧 D46: 到地平线(无界, 留作消融对照)
+                        r += (- self.cfg.w_delay * self._train_weighted_delay(t, horizon=self.horizon)
+                              - self.cfg.p_incomplete)
                     self._finalized.add(t.train_id)
         return r
 
