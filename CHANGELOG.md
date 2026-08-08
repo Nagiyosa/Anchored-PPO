@@ -64,6 +64,23 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+### Full-panel BC trained (server) — supervised 94%, but closed-loop gridlocks (0.415) = D42 confirmed (2026-08-08)
+- **BC trained, 4 encoders (train 57,139, no-prior)**: val action-match ≈ **0.94** all encoders (deepsets 0.944 /
+  mlp 0.944 / settransformer 0.945 / gnn 0.944) — high supervised fit.
+- **Closed-loop (11 val days, 2487 trains, `eval_metric_suite_val_20260808-051315.json`)**: signaller comp
+  **1.000** (39,271s delay, PPM≤300 0.546); greedy 0.259; **BC comp 0.415** (1032/2487 done, delay 11.7M as
+  the stranded 58% charge to horizon, PPM 0.154). So **94% match but 58% gridlock** — the textbook D42
+  match-rate↔closed-loop decoupling ("越像越差"): BC's few errors (concentrated on rare/long-tail decisions —
+  D42: rare-route 57% catastrophe vs common 3%) compound / covariate-shift into off-distribution states →
+  cascade → gridlock. BC beats greedy (learned something) but is far from the signaller.
+- **This is expected, not a broken pipeline** (D42/D26/D44: BC-alone is a bad closed-loop policy; its value is
+  a warm-start + KL anchor for RL). And it's now **honest**: the old-engine BC closed-loop 0.90 was inflated by
+  the D41 free-drop bug (masked gridlock); the new engine (gridlock=game-over) unmasks the true 0.415.
+- **Fix is RL, not BC reweighting** (route-weighting crushed the head per §18, and can't fix compounding —
+  BC never trained on drifted states). Next: warm-start PPO from this BC + KL-to-BC + per_train reward on the
+  new proactive env; first just try it and watch EV recover (D45 voided — don't presume the day-diff/half-life
+  patches). Minor fix: `scripts/32` default n_days 4 → 999 (the server baseline had run only 4 days).
+
 ### D43-fix — BC dataset split to train/val/test (isolate test); full-val baseline ladder (2026-08-07, user)
 - **Held-out leak fixed (user's catch)**: `scripts/30` combine tagged split by **month** (train=Sep-Oct /
   holdout=Nov-Dec), merging val+test into one "holdout"; `scripts/31` then reported accuracy on all "holdout"

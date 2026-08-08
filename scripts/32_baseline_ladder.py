@@ -71,7 +71,7 @@ def run_metrics(env):
 
 def main(argv):
     split = argv[1] if len(argv) > 1 else "val"
-    n_days = int(argv[2]) if len(argv) > 2 else 4
+    n_days = int(argv[2]) if len(argv) > 2 else 999   # 默认全量该 split(之前误设 4, 只跑了 4 天)
     days = operating_days(split)[:n_days]
     net, params, dwell, ptc = load_assets()
     adapter = PanelAdapter(net, Featurizer(net, ptc))

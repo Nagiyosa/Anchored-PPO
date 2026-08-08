@@ -115,8 +115,8 @@ def eval_policy(name, make_policy, days, net, params, dwell, ptc, adapter):
 
 
 def make_bc_policy_from_ckpt(ckpt_path):
-    """加载 full-panel BC(PanelOptionPolicy)→ 策略工厂 + 训练时的 route_prior(评估须用同一份, 否则特征错位)。
-    仅在给 --bc 时导入 torch(其余基线不依赖 torch)。act: forward → argmax 选项下标。"""
+    """加载 full-panel BC(PanelOptionPolicy)→ 策略工厂。仅在给 --bc 时导入 torch(其余基线不依赖 torch)。
+    act: forward → argmax 选项下标。BC 是 **no-prior**(M12 纪律), 评估 featurizer 亦 no-prior, 特征一致。"""
     import torch
     from derbysim.learn.panel import collate_panels
     from derbysim.learn.panel_models import PanelOptionPolicy, pick_device, to_tensors
@@ -132,24 +132,26 @@ def make_bc_policy_from_ckpt(ckpt_path):
                 logits, _v, _ = model(bt)
             return int(logits[0].argmax().item()), 0.0, 0.0
         return act
-    return factory, ck.get("route_prior", {})
+    return factory
 
 
 def main(argv):
-    pos = [a for a in argv[1:] if not a.startswith("--")]
+    args = list(argv[1:])
+    bc_ckpt = None
+    if "--bc" in args:                             # 取出 --bc <ckpt> 这一对, 不让路径混进 positional
+        i = args.index("--bc")
+        bc_ckpt = args[i + 1] if i + 1 < len(args) else None
+        args = args[:i] + args[i + 2:]
+    pos = [a for a in args if not a.startswith("--")]
     split = pos[0] if pos else "val"
     n_days = int(pos[1]) if len(pos) > 1 else 999
-    bc_ckpt = argv[argv.index("--bc") + 1] if "--bc" in argv else None
     days = operating_days(split)[:n_days]
     net, params, dwell, ptc = load_assets()
     policies = {"signaller": make_signaller_replay_policy,
                 "greedy": lambda e: make_greedy_set_policy()}
-    route_prior = {}
     if bc_ckpt:                                    # 三方对比: BC 闭环 vs 信号员参照 vs greedy
-        bc_factory, route_prior = make_bc_policy_from_ckpt(bc_ckpt)
-        policies["bc"] = bc_factory
-    # **评估 featurizer 用 BC 训练时的同一份 route_prior**(无 BC 时为空, 对信号员/greedy 无影响)。
-    adapter = PanelAdapter(net, Featurizer(net, ptc, route_prior=route_prior))
+        policies["bc"] = make_bc_policy_from_ckpt(bc_ckpt)
+    adapter = PanelAdapter(net, Featurizer(net, ptc))   # **no-prior**(M12 §10-A 纪律 3; 与 BC 训练一致)
     t0 = time.time()
     out = {}
     for name, mk in policies.items():

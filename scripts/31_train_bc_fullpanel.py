@@ -21,7 +21,7 @@ import torch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from derbysim import config
-from derbysim.learn.features import Featurizer, fit_route_prior
+from derbysim.learn.features import Featurizer
 from derbysim.learn.panel import PanelAdapter, collate_panels
 from derbysim.learn.panel_models import PanelOptionPolicy, pick_device, to_tensors
 from derbysim.sim.env_dynamic import PanelAction, PanelDecision
@@ -79,20 +79,10 @@ def main(argv):
         for r in csv.DictReader(f):
             if (r.get("platform_id") or "").strip().isdigit():
                 ptc[r["tc_id"].strip()] = int(r["platform_id"])
-    # route_prior 特征只从 **train 段**拟合(held-out 纪律 D40; 不碰 holdout/test)。用新数据集的
-    # signal + 该决策车的合法 set 路(从 options 取)。缺 signal 的行(entry/WAIT)不进先验。
-    prior_recs = []
-    for _, r in tr[tr["chosen_kind"] == "set"].iterrows():
-        if r.get("signal") is None or (isinstance(r.get("signal"), float) and r["signal"] != r["signal"]):
-            continue
-        legal = [rid for k, tid, rid in json.loads(r["options"])
-                 if k == "set" and tid == r["chosen_train"]]
-        if len(legal) > 1:
-            prior_recs.append({"signal": r["signal"], "legal_route_ids": legal,
-                               "chosen_route": r["chosen_route"], "n_legal": len(legal)})
-    route_prior = fit_route_prior(prior_recs) if prior_recs else {}
-    print(f"[route_prior] fitted on {len(prior_recs)} multi-choice SET rows -> {len(route_prior)} (sig,route) keys")
-    adapter = PanelAdapter(net, Featurizer(net, ptc, route_prior=route_prior))
+    # **no-prior featurizer(route_prior={})** —— M12 热启动的硬约束(PanelAdapter 拒绝活先验):
+    # 活的路先验会把 no-prior BC 只见过 0.5 的那一格变成活信号 → 稀释热启动、re-suppress 长尾偏离
+    # (M11_DESIGN §12 决定 A / M12_DESIGN §10-A 纪律 3)。故**不拟合先验**。lookup 才用先验/最频路。
+    adapter = PanelAdapter(net, Featurizer(net, ptc))
 
     e0 = _encode_row(adapter, tr.iloc[0])
     dims = (e0["x_dec"].shape[1], e0["x_conf"].shape[2], e0["x_cand"].shape[2],
@@ -128,9 +118,8 @@ def main(argv):
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
     ckpt = config.ARTIFACTS / "dataset" / f"bc_fullpanel_{encoder}.pt"
-    # 存 route_prior: 评估(scripts/29)必须用**同一份** route_prior 建 featurizer, 否则特征对不上、闭环虚低。
-    torch.save({"state_dict": model.state_dict(), "encoder": encoder, "dims": dims,
-                "route_prior": route_prior}, ckpt)
+    # no-prior BC(M12 纪律): 评估侧也用 no-prior featurizer(default), 特征一致。
+    torch.save({"state_dict": model.state_dict(), "encoder": encoder, "dims": dims}, ckpt)
     (config.ARTIFACTS_REPORTS / f"bc_fullpanel_train_{stamp}.json").write_text(json.dumps(
         {"encoder": encoder, "epochs": epochs, "n_train": len(tr), "n_val": len(va),
          "smoke": smoke, "history": hist}, indent=2, ensure_ascii=False))
