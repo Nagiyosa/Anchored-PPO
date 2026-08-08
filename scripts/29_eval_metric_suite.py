@@ -39,7 +39,7 @@ def _pctl(a, q):
 def _summarise(trains_by_day, horizons):
     """trains_by_day: list[list[DynTrain]]; horizons: list[float](各日地平线)。"""
     rows = []       # 每完成/可完成车一条
-    for trains in trains_by_day:
+    for trains, hz in zip(trains_by_day, horizons):
         for t in trains:
             if not can_complete(t):
                 continue
@@ -48,12 +48,17 @@ def _summarise(trains_by_day, horizons):
             # RR 式绝对到达晚点(D58): 实际到达/通过(max sim_occ) − 计划(planned_ref, 已 coalesce arr/dep/pass)。
             arr_delay = ((max(t.sim_occ.values()) - pr) if (done_ok and pr is not None and t.sim_occ)
                          else None)
+            # 次生延误: **搁浅车计到地平线**(D46, 与 scripts/32 realized_weighted_delay 一致);
+            # done 车不计在途幻延误(held_time 即实现值)。之前只用 held_time → gridlock 延误严重低估。
+            sd = float(getattr(t, "held_time", 0.0))
+            if not done_ok and getattr(t, "hold_start", None) is not None:
+                sd += max(0.0, float(hz) - float(t.hold_start))
             rows.append({
                 "cls": (t.service_class or "?")[:1],
                 "done": done_ok,
                 "has_plan": pr is not None,             # PPM 分母 = 有计划的应完成车(搁浅计不准点)
                 "arr_delay": arr_delay,                 # 绝对晚点(vs 计划); None=未到站/无计划
-                "sec_delay": float(getattr(t, "held_time", 0.0)),   # 区内次生延误(秒, D23/D24 价值锚)
+                "sec_delay": sd,                        # 区内次生延误(到地平线, D24/D46 价值锚)
                 "stops": int(getattr(t, "n_stops", 0)),
                 "booked": getattr(t, "booked_platform", None),
                 "served": set(getattr(t, "served_platforms", set()) or set()),
@@ -104,14 +109,19 @@ def _summarise(trains_by_day, horizons):
 
 
 def eval_policy(name, make_policy, days, net, params, dwell, ptc, adapter):
+    from derbysim.sim.reward import realized_weighted_delay
     trains_by_day, horizons = [], []
+    rwd = 0.0
     for day in days:
         env = RewardedDynamicEnv(net, params, ptc, dwell, proactive=True, reserve_window="narrow")
         run_episode(env, adapter, make_policy(env), build_day_trains(day, inject=False),
                     max_decisions=300000, horizon=day_horizon(day))
+        rwd += realized_weighted_delay(env.engine, env.cfg, horizon=env.horizon)   # 全车+到地平线(D46)
         trains_by_day.append(list(env.engine.trains.values()))
         horizons.append(day_horizon(day))
-    return _summarise(trains_by_day, horizons)
+    res = _summarise(trains_by_day, horizons)
+    res["overall"]["weighted_secondary_delay_s"] = round(rwd, 1)   # headline 与 scripts/32 逐口径一致
+    return res
 
 
 def make_bc_policy_from_ckpt(ckpt_path):
@@ -132,16 +142,21 @@ def make_bc_policy_from_ckpt(ckpt_path):
                 logits, _v, _ = model(bt)
             return int(logits[0].argmax().item()), 0.0, 0.0
         return act
-    return factory
+    return factory, ck.get("encoder", "bc")
 
 
 def main(argv):
+    import glob as _glob
     args = list(argv[1:])
-    bc_ckpt = None
-    if "--bc" in args:                             # 取出 --bc <ckpt> 这一对, 不让路径混进 positional
+    bc_ckpts = []                                  # 每编码器一行(D9 消融)。鲁棒: 吃掉 --bc 后所有非 --flag
+    while "--bc" in args:                           # 令牌 → 兼容 引号 glob('a_*.pt') 与 shell 展开的多路径
         i = args.index("--bc")
-        bc_ckpt = args[i + 1] if i + 1 < len(args) else None
-        args = args[:i] + args[i + 2:]
+        j = i + 1
+        while j < len(args) and not args[j].startswith("--"):
+            bc_ckpts += sorted(_glob.glob(args[j])) or [args[j]]
+            j += 1
+        args = args[:i] + args[j:]
+    seen = set(); bc_ckpts = [c for c in bc_ckpts if not (c in seen or seen.add(c))]  # 去重、保序
     pos = [a for a in args if not a.startswith("--")]
     split = pos[0] if pos else "val"
     n_days = int(pos[1]) if len(pos) > 1 else 999
@@ -149,8 +164,9 @@ def main(argv):
     net, params, dwell, ptc = load_assets()
     policies = {"signaller": make_signaller_replay_policy,
                 "greedy": lambda e: make_greedy_set_policy()}
-    if bc_ckpt:                                    # 三方对比: BC 闭环 vs 信号员参照 vs greedy
-        policies["bc"] = make_bc_policy_from_ckpt(bc_ckpt)
+    for ck in bc_ckpts:                            # BC(每编码器) vs 信号员参照 vs greedy
+        fac, enc = make_bc_policy_from_ckpt(ck)
+        policies[f"bc_{enc}"] = fac
     adapter = PanelAdapter(net, Featurizer(net, ptc))   # **no-prior**(M12 §10-A 纪律 3; 与 BC 训练一致)
     t0 = time.time()
     out = {}

@@ -64,6 +64,21 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+### Eval fixes (user's Q2/Q3): delay-to-horizon consistency + per-encoder BC rows (2026-08-08)
+- **Q2 delay-consistency bug fixed**: `scripts/29` computed weighted delay from raw `held_time` (no
+  charge-to-horizon), while `scripts/32` uses `realized_weighted_delay(..., horizon)` (D46). So the eval
+  **understated gridlocking policies' delay** and disagreed with the baseline (even the all-complete signaller
+  differed: 39,271 vs 54,652). Fix: `scripts/29` now charges stranded trains to horizon (per-train sec_delay)
+  and the headline uses `realized_weighted_delay` — now **bit-consistent with `scripts/32`** (val-3 check:
+  signaller 9,165.5 / greedy 49.08M identical in both). Consequence: BC's earlier "11.7M delay, higher than
+  greedy 51k" was a raw-held artifact; with to-horizon, BC (strands 58%) will have **lower** delay than greedy
+  (strands 74%) — the honest picture (BC beats greedy on completion, delay, PPM; still far from signaller).
+- **Q3 multi-encoder BC eval**: `scripts/29 --bc` now accepts multiple checkpoints / a glob and emits one row
+  per encoder (`bc_deepsets`/`bc_mlp`/…), for the D9 ablation table. Notebook eval cell →
+  `--bc 'artifacts/dataset/bc_fullpanel_*.pt'`.
+- **Q4 full-val baseline (n_days fix, `baseline_ladder_val_20260808-052746.json`)**: signaller 1.0/54,652s/
+  PPM 0.546; lookup=fcfs=fsfs 0.352/223.8M/0.173; greedy 0.259/261M/0.117; random 0.254/262M/0.046.
+
 ### Full-panel BC trained (server) — supervised 94%, but closed-loop gridlocks (0.415) = D42 confirmed (2026-08-08)
 - **BC trained, 4 encoders (train 57,139, no-prior)**: val action-match ≈ **0.94** all encoders (deepsets 0.944 /
   mlp 0.944 / settransformer 0.945 / gnn 0.944) — high supervised fit.
