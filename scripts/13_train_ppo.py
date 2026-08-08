@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -71,11 +72,7 @@ def main() -> None:
     ap.add_argument("--lr-final-frac", type=float, default=0.1,
                     help="学习率线性退火到初始值的这个比例(1.0=不退火)")
     ap.add_argument("--target-kl", type=float, default=0.05,
-                    help="单次更新的策略 KL 上限, 超过就提前结束该轮 epoch 循环。**0.05 而不是 0.02**"
-                         "(2026-08-02 重标): 0.02 是在**三轮已知有缺陷的训练**(dropout 污染 ratio / "
-                         "扁平 argmax / 热启动被稀释)上定的; dropout 修好后 approx_kl 才第一次反映"
-                         "**真实的策略位移**, 实测稳定在 0.019-0.024 —— 正好卡在旧阈值上, 25-50% 的 "
-                         "epoch 被无谓截断。护栏是防爆不是限速")
+                    help="单次更新的策略 KL 上限, 超过就提前结束该轮 epoch 循环。护栏是防爆不是限速")
     ap.add_argument("--eval-days", type=int, default=999,
                     help="固定评估集用几个 val 运营日; 默认取满(11 天)")
     ap.add_argument("--days", type=int, default=999,
@@ -120,6 +117,11 @@ def main() -> None:
     ap.add_argument("--resume", action="store_true",
                     help="从 <run-tag>_last.pt 续训(需 --run-tag): 载 model/opt/ret_norm/iter/best/history/rng。"
                          "服务器单次 12h 上限时用 —— 到点被杀后重跑同一命令即从断点继续")
+    ap.add_argument("--no-baseline-cache", action="store_true",
+                    help="不缓存/不复用 baseline 参照线(默认缓存)。baseline 是**策略无关**的(signaller/lookup/"
+                         "规则),(val, eval_days, reserve_window)相同即可跨 run 复用 → 省每 run ~3min 启动")
+    ap.add_argument("--baselines-only", action="store_true",
+                    help="只算并缓存 baseline 参照线然后退出(不热启动/不体检/不训练)。矩阵开跑前预热缓存用")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -143,7 +145,7 @@ def main() -> None:
     # 编码器 + 选路头 + kind/cancel 头 + critic 全给个能跑的起点(避免冷启动死锁)。init 与 KL 锚解耦。
     want_dims = [adapter.dec_dim, adapter.conf_dim, adapter.cand_dim,
                  adapter.cancel_dim, adapter.train_dim, adapter.global_dim]
-    if args.bc_ckpt and not args.no_warm_start:
+    if args.bc_ckpt and not args.no_warm_start and not args.baselines_only:
         ck = torch.load(args.bc_ckpt, map_location=dev, weights_only=False)
         if not (isinstance(ck, dict) and "state_dict" in ck):
             raise SystemExit(f"{args.bc_ckpt} 不是 full-panel BC(应含 state_dict/encoder/dims, "
@@ -180,7 +182,7 @@ def main() -> None:
     roll_dev = dev if args.rollout_device == "same" else torch.device(args.rollout_device)
     roll_gen = gen if roll_dev == dev else torch.Generator(device=roll_dev).manual_seed(args.seed)
     driver = TorchPanelDriver(policy, roll_dev, generator=roll_gen, ret_norm=ret_norm)
-    rcfg = RewardConfig()          # reward_mode 默认 = per_train(D58): 每完成车终局结算, RR 对齐
+    rcfg = RewardConfig()          # reward_mode 默认 = per_train(D58): 每完成车终局结算, 搁浅到地平线(D46)
 
     # ---- 固定评估集(同窗口/同注入种子, 跨 iteration 与跨策略完全可比) + 基线参照线 ----
     # **D28: 一律真实历史, 不注入合成扰动**(旧代码用注入种子 0/1, 与 M10_DESIGN §4.4 的设计
@@ -195,38 +197,63 @@ def main() -> None:
           f" | 训练 {len(windows)} 个 {args.split} 运营日")
     print(f"[warmup] 前 {args.critic_warmup_iters} 轮只训 critic(行首标 *), 策略冻结; "
           f"**EV 是关键诊断** —— EV≈0 表示优势只是'位置噪声', 此时放开策略必被推坏")
-    # **热启动体检(§17)**: 训练前先在固定评估集上跑一次 argmax, 看初始动作构成。
-    # 上一轮冒烟正是栽在这里: 所有单点指标正常, 但策略从第一步就在刷 cancel。
-    if roll_dev != dev:
-        policy.to(roll_dev)          # 体检也走 rollout 设备(否则 driver 的输入在 cpu、权重在 cuda)
-    _chk = evaluate_policy(env_factory, adapter,
-                           as_factory(TorchPanelDriver(policy, roll_dev, greedy=True,
-                                                       ret_norm=ret_norm)), eval_eps)
-    if roll_dev != dev:
-        policy.to(dev)
-    print(f"[热启动体检] (**完整评估集**, 与后续 EVAL 可比) 初始 argmax 动作构成: WAIT {_chk['eval_frac_wait']:.0%} / "
-          f"set {_chk['eval_frac_set']:.0%} / cancel {_chk['eval_frac_cancel']:.0%} "
-          f"| 初始 completion {_chk['eval_completion_rate']:.3f}")
-    if _chk["eval_frac_cancel"] > 0.20 or not (0.02 <= _chk["eval_frac_wait"] <= 0.60):
-        print("  ⚠️ **动作构成异常** —— 参考: 信号员实测 WAIT 10% / set 90% / cancel 0%, "
-              "真实撤销率 10.44%。这一类'热启动静默失效'不会有任何其它指标报警, 先查再跑。")
+    # **热启动体检(§17)**: 训练前先在固定评估集上跑一次 argmax, 看初始动作构成。(baselines-only 跳过)
+    if not args.baselines_only:
+        if roll_dev != dev:
+            policy.to(roll_dev)      # 体检也走 rollout 设备(否则 driver 的输入在 cpu、权重在 cuda)
+        _chk = evaluate_policy(env_factory, adapter,
+                               as_factory(TorchPanelDriver(policy, roll_dev, greedy=True,
+                                                           ret_norm=ret_norm)), eval_eps)
+        if roll_dev != dev:
+            policy.to(dev)
+        print(f"[热启动体检] (**完整评估集**, 与后续 EVAL 可比) 初始 argmax 动作构成: WAIT {_chk['eval_frac_wait']:.0%} / "
+              f"set {_chk['eval_frac_set']:.0%} / cancel {_chk['eval_frac_cancel']:.0%} "
+              f"| 初始 completion {_chk['eval_completion_rate']:.3f}")
+        if _chk["eval_frac_cancel"] > 0.20 or not (0.02 <= _chk["eval_frac_wait"] <= 0.60):
+            print("  ⚠️ **动作构成异常** —— 参考: 信号员实测 WAIT 10% / set 90% / cancel 0%, "
+                  "真实撤销率 10.44%。这一类'热启动静默失效'不会有任何其它指标报警, 先查再跑。")
 
-    baselines = {}
-    _top = lookup_table()          # D42/D44: lookup 最频路是 held-out 最强安全基线, PPO 必须打败它
-    for tag, fac in (("signaller_replay", signaller_replay_factory),
-                     ("lookup_most_frequent", make_lookup_policy(_top)),
-                     ("ars_proxy", make_ars_proxy_policy(_top)),
-                     ("fcfs", make_fcfs_policy(_top)),
-                     ("fsfs", make_fsfs_policy(_top)),
-                     ("greedy_set", as_factory(make_greedy_set_policy())),
-                     ("random_legal", as_factory(make_random_policy(np.random.default_rng(0))))):
-        b = evaluate_policy(env_factory, adapter, fac, eval_eps)
-        b.pop("eval_episodes", None)
-        baselines[tag] = b
-        print(f"[baseline] {tag:<17} completion {b['eval_completion_rate']:.3f} "
+    # ---- baseline 参照线: 策略无关 → 按 (val, eval_days, reserve_window) 缓存, 跨 run 复用(省 ~3min/run) ----
+    # 只影响**对照打印/写入的参照值**, 与 policy/optimizer/reward/训练**完全无关**(不碰主模型)。
+    _blcache = config.ARTIFACTS_REPORTS / "rl_baseline_cache" / f"val_ed{len(ev_wins)}_{args.reserve_window}_v1.json"
+    _bl_tags = ("signaller_replay", "lookup_most_frequent", "ars_proxy", "fcfs", "fsfs",
+                "greedy_set", "random_legal")
+    baselines = None
+    if not args.no_baseline_cache and _blcache.exists():
+        try:
+            cached = json.loads(_blcache.read_text(encoding="utf-8"))
+            if isinstance(cached, dict) and all(t in cached for t in _bl_tags):
+                baselines = cached
+                print(f"[baseline] 命中缓存 {_blcache.name}(7 条参照线, 策略无关)")
+        except Exception:
+            baselines = None                                  # 损坏/半写 → 退回重算
+    if baselines is None:
+        baselines = {}
+        _top = lookup_table()      # D42/D44: lookup 最频路是 held-out 最强安全基线, PPO 必须打败它
+        for tag, fac in (("signaller_replay", signaller_replay_factory),
+                         ("lookup_most_frequent", make_lookup_policy(_top)),
+                         ("ars_proxy", make_ars_proxy_policy(_top)),
+                         ("fcfs", make_fcfs_policy(_top)),
+                         ("fsfs", make_fsfs_policy(_top)),
+                         ("greedy_set", as_factory(make_greedy_set_policy())),
+                         ("random_legal", as_factory(make_random_policy(np.random.default_rng(0))))):
+            b = evaluate_policy(env_factory, adapter, fac, eval_eps)
+            b.pop("eval_episodes", None)
+            baselines[tag] = b
+            print(f"[baseline] {tag:<17} completion {b['eval_completion_rate']:.3f} "
               f"| delay {b['eval_weighted_secondary_delay_s']:>9.0f} "
               f"| reward {b['eval_episode_reward']:>9.1f} "
               f"| WAIT {b['eval_frac_wait']:.0%}/set {b['eval_frac_set']:.0%}")
+        if not args.no_baseline_cache:                        # 原子写缓存(临时文件 + 替换, 并发安全)
+            _blcache.parent.mkdir(parents=True, exist_ok=True)
+            _tmp = _blcache.with_suffix(f".tmp.{os.getpid()}")
+            _tmp.write_text(json.dumps(baselines, ensure_ascii=False, default=str), encoding="utf-8")
+            os.replace(_tmp, _blcache)
+            print(f"[baseline] 已缓存 → {_blcache.name}")
+
+    if args.baselines_only:      # 只预热 baseline 缓存, 不训练(矩阵开跑前调一次即可让所有 run 命中缓存)
+        print("[baselines-only] 缓存就绪, 退出(未热启动/未训练)。")
+        return
 
     # run_id: 给 --run-tag 用稳定名(续训/矩阵幂等), 否则带时间戳(每版留档, 用户 2026-07-31 要求)。
     run_id = args.run_tag or (f"ppo_{args.encoder}_beta{args.kl_beta}_seed{args.seed}"

@@ -64,6 +64,42 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+### Finding (2026-08-08, user-directed diagnostic) — low completion = ENTRY-ADMISSION starvation, NOT in-region silting
+- Torch-free diagnostics on the **proactive** engine (2 val days). Of incomplete *completable* trains, **96–98%
+  NEVER ENTERED the region** (queued at the entry boundary); only 2–4% entered then got stuck; **0 deadlocks,
+  0 collisions**. Signaller replay admits & completes **all 386** (1.000) in both wide and narrow.
+- **All zero-learning policies fail the same way**: greedy 239 never-entered; **lookup/fcfs/fsfs/ars give
+  identical results** (0.456, 203 never-entered, 7 in-region stuck) — routing/ordering choice is irrelevant to
+  the gap. **Not an engine/option bug**: 100% of never-entered trains WERE offered their entry route (441 panels
+  had entry-SET options); the policy just never took them.
+- ⇒ The completion gap (signaller 1.0 vs baselines 0.37–0.46 vs RL best 0.60) is dominated by **when / in what
+  order to admit trains into the throat** — exactly RR's core mechanic and "timing" (D47), specifically **ENTRY
+  admission**. Learnable policy problem (options all present; signaller proves 100% reachable), **not an env cap**.
+- **Implication for game-over**: "game-over on in-region strand" (earlier B/C trigger idea) targets the wrong 2%.
+  The real failure is entry back-up, already penalized via delay (D56: entry-waiting = held_time). Main lever =
+  teach admission timing/ordering; a game-over, if kept, should trigger on an **entry-backup threshold** (reality/RR:
+  back-up is bounded), not in-region gridlock.
+- **Lesson**: diagnose with the methods we actually use (not just greedy), and decompose *where* trains are stuck
+  (never-entered vs in-region) instead of only reading completion rate. BC-GNN/RL need a server (torch) run to
+  confirm; the rule-baseline evidence is already strong and unanimous.
+
+### D62 — VOIDED/REVERTED (2026-08-08, user). Full wide+narrow matrix analyzed; the proposed reward+stability "fix" was wrong and deleted.
+- **Analysis kept (35 gnn runs, held-out val)**. Baselines (wide): signaller comp 0.964/WAIT 68%; lookup 0.313;
+  greedy 0.214. **Best RL** (`schedule β0.1 s0`): comp **0.600 @it9**, WAIT **78%** — beats every zero-learning
+  baseline and learned RR-style deferral (WAIT 78% ≈ signaller 68%; up from the 0.298 wide warm-start). But peaks
+  right after warmup (it9) then degrades (s0: 0.600→0.385 by it39); huge seed variance (s2 oscillates/collapses,
+  kl_stop_rate 75–100%, EV blows to −42/−239); far below the signaller (1.0). Not long-tail (routing_kl ~0.05),
+  not undertraining.
+- **REVERTED (code deleted)**: the proposed "RR-bounded stranded penalty" (`bounded_fail`/`fail_penalty=30`) +
+  stability defaults (`lr 1e-4`, `target-kl 0.1`) were **removed**. Reason (user): a small bounded failure penalty
+  makes stranding *cheap*, which **weakens the completion incentive** and undoes D46's "不丢车是底线" — wrong for
+  the stage-1 (match-the-signaller / reach ~100% completion) goal. `reward.py`/`scripts/13`/tests/notebook restored
+  to the pre-D62 (D59/D60/D61) state; `tests/test_reward.py` green (terminal-penalty asserts per_train+D46 value
+  `base_completion − p_incomplete`; the independent per_step-telescoping fix was kept as it predates D62).
+- **Kept (separate infra, not part of the reverted fix)**: `run_rl_matrix` torch preflight + `py=PY` fix,
+  30 s heartbeat, and the policy-independent baseline cache (`--baselines-only`), `summarize` filtering of pre-D60
+  runs. `default_grid(suffix=…)` retained (neutral).
+
 ### D61 — RL smoke: pipeline validated + warm-start window mismatch (BC-narrow ↔ RL-wide) → run both wide & narrow full sweeps (2026-08-08, user)
 - **Smoke** (`smoke_gnn_schedule.json`, gnn/schedule/β0.1/wide, 6 iters/2 warmup/512 steps/4 days, 79s): pipeline
   **works end-to-end** — no crashes, **0 deadlocks**, schedule KL active (0.10–0.17), resume/`_best`/`_last` written,
@@ -80,6 +116,19 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `run_rl_matrix`; added a one-shot torch **preflight** in `run_rl_matrix` (fails fast with a clear "pass py=PY"
   message instead of 21 silent failures). Also `summarize_rl_matrix` now skips pre-D60 runs (args without
   `kl_anchor`) so old reactive `ppo_deepsets_*.json` don't pollute the ranking.
+- **Progress + baseline-cache optimizations (user: optimize but don't touch the main model)**:
+  - `run_rl_matrix` heartbeat: a daemon thread prints every 30s (done count + each running run's latest `it N`
+    from its log) so the blocking launch cell shows life while tqdm sits at 0/21 (it only advances on run
+    *completion*, first ~15 min). Clarified startup message.
+  - **Baseline reference-line cache** (`scripts/13 --baselines-only` / `--no-baseline-cache`): the 7 baseline
+    lines (signaller/lookup/ars/fcfs/fsfs/greedy/random) are **policy-independent** → cached by
+    `(val, eval_days, reserve_window)` under `artifacts/reports/rl_baseline_cache/`, atomic write
+    (tmp+`os.replace`), corrupt→recompute. `run_rl_matrix` precomputes once before launching so all runs hit the
+    cache instead of each recomputing (~3 min/run). **Zero training impact**: only the printed/stored reference
+    values are cached; policy/optimizer/reward/rollout untouched; `--baselines-only` skips warm-start+census and
+    exits before training; control flow guarantees a valid `baselines` dict always reaches training. wide/narrow
+    get separate cache keys. Timing measured: single-core proactive baseline ≈ signaller 4.7s/day, lookup/greedy
+    ~1.3–1.4s/day → ~3 min for 7×11 val days.
 - **Decision (user)**: run the gnn main sweep on **both wide and narrow, full length** — test the mismatch
   hypothesis directly and let EV self-recovery decide (D45 discipline); 72 cores make it ~free. Notebook updated:
   §1 wide sweep / §2 narrow sweep (tag `_nw`, `reserve_window=narrow`) / §3 joint summary (window column) /

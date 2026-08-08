@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -39,19 +41,21 @@ def _tag(enc, anchor, beta, seed) -> str:
 
 
 def default_grid(encoders=("gnn",), anchors=("schedule", "lookup", "none"),
-                 betas=(0.0, 0.01, 0.1, 1.0), seeds=(0, 1, 2)) -> list:
+                 betas=(0.0, 0.01, 0.1, 1.0), seeds=(0, 1, 2), suffix="") -> list:
     """展开 encoder × kl-anchor × β × seed。规则:
     · anchor='none' → β 无关, 只留一格/seed(β=0);
     · anchor∈{schedule,lookup} 且 β=0 等价 none(锚被关) → 跳过, 避免重复。
+    `suffix`(如 'v2'): 追加到每个 tag 末尾 —— 换 reward/超参重跑时用, 避免和旧 checkpoint 续训混跑。
     """
     grid = []
     seen = set()
+    sfx = f"_{suffix}" if suffix else ""
     for enc in encoders:
         for anchor in anchors:
             bs = [0.0] if anchor == "none" else [b for b in betas if b > 0]
             for beta in bs:
                 for seed in seeds:
-                    t = _tag(enc, anchor, beta, seed)
+                    t = _tag(enc, anchor, beta, seed) + sfx
                     if t in seen:
                         continue
                     seen.add(t)
@@ -81,6 +85,26 @@ def _cmd(cfg: dict, py: str, common: dict) -> list:
     return cmd
 
 
+def _precompute_baselines(py: str, common: dict, env: dict) -> None:
+    """矩阵开跑前**算一次** baseline 参照线并缓存(策略无关)→ 21 个 run 直接命中, 各省 ~3min 启动。
+    非致命: 失败/跳过时各 run 会自行计算(scripts/13 有缓存 miss 回退), 只是慢一点。"""
+    w = common.get("reserve_window", "wide")
+    cmd = [py, "scripts/13_train_ppo.py", "--baselines-only", "--reserve-window", w]
+    if "eval_days" in common:
+        cmd += ["--eval-days", str(common["eval_days"])]
+    LOGDIR.mkdir(parents=True, exist_ok=True)
+    log = LOGDIR / f"_baseline_precompute_{w}.log"
+    print(f"[rl-matrix] 预热 baseline 缓存(reserve_window={w},约 3min,一次)… 明细 {log}", flush=True)
+    t0 = time.time()
+    with log.open("a", encoding="utf-8") as fh:
+        rc = subprocess.run(cmd, cwd=str(REPO), env=env, stdout=fh,
+                            stderr=subprocess.STDOUT).returncode
+    if rc == 0:
+        print(f"[rl-matrix] baseline 缓存就绪({_fmt(time.time()-t0)})。", flush=True)
+    else:
+        print(f"[rl-matrix] ⚠️ 预热 rc={rc}(非致命,各 run 会自行算 baseline);见 {log}", flush=True)
+
+
 def _run_one(cfg: dict, py: str, common: dict, env: dict) -> dict:
     tag = cfg["tag"]
     if _done(tag):
@@ -100,6 +124,37 @@ def _run_one(cfg: dict, py: str, common: dict, env: dict) -> dict:
 def _fmt(sec: float) -> str:
     sec = int(sec); h, rem = divmod(sec, 3600); m, s = divmod(rem, 60)
     return f"{h}h{m:02d}m" if h else f"{m}m{s:02d}s"
+
+
+_IT_RE = re.compile(r"it\s*(\d+)")
+
+
+def _latest_iter(tag: str) -> str:
+    """从 run 日志尾部抓最新的 'it N ...' 行(给心跳看进度)。无则给启动阶段提示。"""
+    lg = LOGDIR / f"{tag}.log"
+    if not lg.exists():
+        return "启动中"
+    try:
+        lines = [l for l in lg.read_text(errors="ignore").splitlines() if l.strip()]
+    except Exception:
+        return "?"
+    for l in reversed(lines):
+        if _IT_RE.search(l):
+            return l.strip()[:70]
+    for l in reversed(lines):
+        if l.startswith(("[baseline]", "[bc]", "[eval]", "[warmup]", "[热启动")):
+            return "baseline/热启动中…"
+    return lines[-1][:60]
+
+
+def _heartbeat(tags, started, stop_evt, period=30):
+    """阻塞的启动格里也能看进度: 每 period 秒打印 完成数 + 各在跑 run 的最新 iter。"""
+    while not stop_evt.wait(period):
+        done = sum(_done(t) for t in tags)
+        running = [t for t in tags if not _done(t)]
+        sample = "  ".join(f"{t.split('ppo_')[-1]}→{_latest_iter(t)}" for t in running[:3])
+        print(f"[hb +{_fmt(time.time()-started)}] 完成 {done}/{len(tags)} | 在跑示例: {sample}",
+              flush=True)
 
 
 def run_rl_matrix(grid: list, n_workers=None, py=None, progress=True, **common) -> dict:
@@ -129,6 +184,8 @@ def run_rl_matrix(grid: list, n_workers=None, py=None, progress=True, **common) 
     if not pending:
         print("[rl-matrix] 全部已完成。")
         return {"ok": 0, "fail": 0, "skip": skipped}
+    if common.get("precompute_baselines", True):      # 开跑前算一次 baseline 缓存(可 precompute_baselines=False 关)
+        _precompute_baselines(py, common, env)
     bar = None
     if progress:
         try:
@@ -138,6 +195,13 @@ def run_rl_matrix(grid: list, n_workers=None, py=None, progress=True, **common) 
             bar = None
     res = {"ok": 0, "fail": 0, "skip": skipped, "runs": []}
     started, n = time.time(), 0
+    print(f"[rl-matrix] 已启动 {len(pending)} 个 run(单核并发)。每个 run 先算 baseline 参照线(~3min)"
+          f"再训练, 单 run 约 10–25min → **首个完成前进度条不动属正常**。\n"
+          f"  实时明细: tail -f {LOGDIR}/<tag>.log ; 下方每 30s 打印一次心跳。", flush=True)
+    stop_evt = threading.Event()
+    hb = threading.Thread(target=_heartbeat, args=([c["tag"] for c in pending], started, stop_evt),
+                          daemon=True)
+    hb.start()
     with ThreadPoolExecutor(max_workers=n_workers) as ex:
         futs = {ex.submit(_run_one, c, py, common, env): c["tag"] for c in pending}
         for fut in as_completed(futs):
@@ -151,9 +215,11 @@ def run_rl_matrix(grid: list, n_workers=None, py=None, progress=True, **common) 
             else:
                 el = time.time() - started
                 print(msg + f"  eta={_fmt(el / n * (len(pending) - n))}", flush=True)
+    stop_evt.set()
     if bar is not None:
         bar.close()
-    print(f"[rl-matrix] DONE ok={res['ok']} fail={res['fail']} skip={res['skip']}", flush=True)
+    print(f"[rl-matrix] DONE ok={res['ok']} fail={res['fail']} skip={res['skip']} "
+          f"用时 {_fmt(time.time()-started)}", flush=True)
     return res
 
 

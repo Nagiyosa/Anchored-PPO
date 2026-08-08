@@ -103,8 +103,9 @@ def test_realized_weighted_delay_old_measure_still_available():
 
 def test_delay_reward_telescopes_to_total():
     # 延误项 telescoping: 关掉所有事件项 → Σ reward == -c_delay*整局 realized(每步 ≤0)
+    # **per_step 模式专属**(逐步 Δ 延误); per_train(D58 默认)是逐车终局, 不 telescoping。
     net, params, dwell, ptc, built = _load()
-    cfg = RewardConfig(eps_replatform=0.0, p_nostop=0.0, b_ontime=0.0,
+    cfg = RewardConfig(reward_mode="per_step", eps_replatform=0.0, p_nostop=0.0, b_ontime=0.0,
                        p_incomplete=0.0, p_deadlock=0.0)
     env = RewardedDynamicEnv(net, params, ptc, dwell, reward_config=cfg)
     rewards = _replay_rewards(env, to_dyn_trains(built))
@@ -202,7 +203,9 @@ def test_stranded_incomplete_penalty():
     env.engine.trains = {"OK": done_ok, "STUCK": stuck, "NOEXIT": impossible}
     env._last_realized = realized_weighted_delay(env.engine, cfg)
     r = env._compute_reward(done=True)
-    assert abs(r - (-cfg.p_incomplete)) < 1e-6        # 只罚 STUCK 一次, NOEXIT 豁免
+    # per_train(D58 默认): OK 到站 +base_completion; STUCK 搁浅 −(w_d·延误到地平线 + p_incomplete)
+    # (此处 STUCK 无 hold_start → 延误 0 → 只 −p_incomplete); NOEXIT 结构不可能豁免。
+    assert abs(r - (cfg.base_completion - cfg.p_incomplete)) < 1e-6
     assert "STUCK" in env._finalized and "OK" in env._finalized
     assert "NOEXIT" not in env._finalized             # 结构不可能的车不进结算
 
