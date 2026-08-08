@@ -311,6 +311,12 @@ def collate_panels(encoded: list) -> dict:
         "opt_col": np.zeros((B, O), np.int64),
         "opt_mask": np.zeros((B, O), np.float32),
     }
+    # D59: 选路 KL 的规则参照目标(仅 RL 训练批携带; run_episode 的 ref_builder 挂上)。
+    # 每行(一辆待决车)一个目标进路列 + 有效位 → routing_kl 只在有效行上把策略拉向计划/lookup 路。
+    has_ref = "ref_col" in encoded[0]
+    if has_ref:
+        out["ref_col"] = np.zeros((B, T), np.int64)
+        out["ref_valid"] = np.zeros((B, T), np.float32)
     for b, e in enumerate(encoded):
         t, mc, ma = e["x_dec"].shape[0], e["x_conf"].shape[1], e["x_cand"].shape[1]
         c, n, o = e["x_cancel"].shape[0], e["x_panel"].shape[0], e["n_options"]
@@ -324,6 +330,11 @@ def collate_panels(encoded: list) -> dict:
         out["x_panel"][b, :n] = e["x_panel"]
         out["panel_mask"][b, :n] = e["panel_mask"]
         out["x_global"][b] = e["x_global"]
+        if has_ref:
+            rc = np.asarray(e["ref_col"]).reshape(-1)[:t]
+            rv = np.asarray(e["ref_valid"]).reshape(-1)[:t]
+            out["ref_col"][b, :rc.shape[0]] = rc
+            out["ref_valid"][b, :rv.shape[0]] = rv
         for i, s in enumerate(e["slots"]):
             out["opt_kind"][b, i] = KIND_CODE[s.kind]
             out["opt_row"][b, i] = max(s.row, 0)

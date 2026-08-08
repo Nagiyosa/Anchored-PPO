@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections import Counter
 
+import numpy as np
 import pandas as pd
 
 from derbysim import config
@@ -99,6 +100,54 @@ def make_fsfs_policy(top):
         pr = getattr(t, "planned_ref", None)
         return pr if pr is not None else getattr(t, "entry_time", _INF)
     return _ordered_policy(top, key)
+
+
+def make_route_reference(top, mode: str = "schedule"):
+    """D59 — RL 选路 KL 的**规则参照**(取代旧的冻结神经 BC 作锚)。按 RR: 跟计划走, 只为冲突偏离。
+
+    对面板每个 set-row(一辆待决车 t)给一个**参照进路目标列** + 有效位:
+      · mode='schedule'(默认, RR faithful): 优先取该车**计划/booked 进路**(`dec.logged[t]`,
+        = 历史逐条请求的那条路)命中的候选列; 若计划路不在本决策候选里, 退回 lookup 最频路 `top[sig]`。
+      · mode='lookup': 只用 lookup 最频路(消融)。
+    命中不了任何参照 → ref_valid=0(该行不进 KL, 让 RL 自由), 不硬塞。
+
+    返回 `build(enc, dec, env) -> (ref_col[T] int64, ref_valid[T] float32)`, 与 `enc['train_rows']`
+    逐行对齐。**纯 numpy / 无 torch / 与引擎无关**: 只读 slots(route_id/col) + dec.logged + lookup 表,
+    proactive 面板同样成立(计划进路稳定, 提前预办与到点办用的是同一条 booked 路)。
+    """
+    use_plan = mode in ("schedule", "both")
+    use_lookup = mode in ("schedule", "both", "lookup")
+
+    def build(enc, dec, env):
+        rows = enc.get("train_rows", [])
+        T = len(rows)
+        ref_col = np.zeros(max(T, 1), np.int64)
+        ref_valid = np.zeros(max(T, 1), np.float32)
+        col_of: dict = {}                                  # tid -> {route_id: col}
+        for s in enc["slots"]:
+            if s.kind == "set":
+                col_of.setdefault(s.train_id, {})[s.route_id] = s.col
+        for i, tid in enumerate(rows):
+            cols = col_of.get(tid, {})
+            if not cols:
+                continue
+            target = None
+            if use_plan and dec is not None:               # 计划/booked 进路(RR: 跟计划走)
+                plan = dec.logged.get(tid)
+                if plan in cols:
+                    target = cols[plan]
+            if target is None and use_lookup:              # 兜底: 逐信号最频路(常规走法)
+                t = env.engine.trains.get(tid)
+                sig = env.engine._decision_signal(t) if t is not None else None
+                lk = top.get(sig) if sig is not None else None
+                if lk in cols:
+                    target = cols[lk]
+            if target is not None:
+                ref_col[i] = int(target)
+                ref_valid[i] = 1.0
+        return ref_col, ref_valid
+
+    return build
 
 
 def make_ars_proxy_policy(top):

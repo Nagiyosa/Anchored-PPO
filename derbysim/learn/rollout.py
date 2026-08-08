@@ -74,11 +74,15 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
 
 
 def run_episode(env, adapter, act_fn, trains, max_decisions: int = 5000,
-                horizon: float | None = None) -> EpisodeResult:
+                horizon: float | None = None, ref_builder=None) -> EpisodeResult:
     """跑完一局: reset → 逐决策(编码→策略选下标→env.step) → 收集转移 + 闭环指标。
 
     `done=True` 只在**自然终局**(全车终局 / 死锁判负)时置位 → GAE 的 bootstrap 值为 0 是正确的。
     因 `max_decisions` 提前收尾时置 `truncated=True`(**如实标注**, 不当成终局)。
+
+    `ref_builder`(D59, 仅 RL 训练用): `f(enc, dec, env) -> (ref_col[T], ref_valid[T])`, 给面板每行
+    附**选路 KL 的规则参照目标**(计划/lookup 进路, 见 baselines.make_route_reference), 挂到 `enc` 上
+    随转移流入更新。不给时行为完全不变(eval/基线路径不受影响)。
     """
     try:
         obs, _info = env.reset(trains, horizon=horizon)
@@ -90,6 +94,9 @@ def run_episode(env, adapter, act_fn, trains, max_decisions: int = 5000,
         if dec is None or obs is None:
             break
         enc = adapter.encode(obs, dec)
+        if ref_builder is not None:                    # D59: 附选路 KL 的规则参照(计划/lookup)
+            rc, rv = ref_builder(enc, dec, env)
+            enc["ref_col"], enc["ref_valid"] = rc, rv
         idx, logp, value = act_fn(enc)
         if not (0 <= idx < len(dec.options)):
             raise IndexError(f"policy returned option index {idx} outside 0..{len(dec.options)-1}")
@@ -177,7 +184,7 @@ def signaller_replay_factory(env):
 
 
 def collect_rollout(env_factory, adapter, policy_factory, episode_iter, target_steps: int,
-                    max_decisions: int = 3000):
+                    max_decisions: int = 3000, ref_builder=None):
     """按**步数预算**收集 rollout(而非固定局数)。
 
     冒烟轮实测每 iter 的步数在 180–4586 之间晃(25×) —— batch 大小随机会让 PPO 本身不稳,
@@ -192,7 +199,7 @@ def collect_rollout(env_factory, adapter, policy_factory, episode_iter, target_s
         horizon = item[2] if len(item) > 2 else None     # (标签, 造车函数[, 地平线])
         env = env_factory()
         res = run_episode(env, adapter, policy_factory(env), make_trains(),
-                          max_decisions=max_decisions, horizon=horizon)
+                          max_decisions=max_decisions, horizon=horizon, ref_builder=ref_builder)
         transitions.extend(res.transitions)
         m = dict(res.metrics); m["episode"] = tag
         metrics.append(m)

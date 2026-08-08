@@ -1,7 +1,9 @@
-"""M12b PPO smoke(torch). 沙盒无 torch → 自动 skip; 本地 GPU 跑。
+"""M12b PPO smoke(torch). 沙盒无 torch → 自动 skip; 本地 GPU / 服务器跑。
 
-验: KL-to-BC 的**正确性**(策略==BC 时 KL 必须为 0) · 只对齐选路(WAIT/cancel 不进 KL) ·
-PPO 更新能跑且参数真的动 · 确定性 · driver 只回环境给的选项下标 · 端到端(真实窗口跑一小局再更新一次)。
+D59 后**选路 KL 锚到规则参照**(schedule 计划路 / lookup 最频路), 不再是冻结神经 BC。故 KL 的
+正确性判据改为: 参照指向策略**最可能**的进路时 KL 小、指向**最不可能**时 KL 大(= 确实在把选路
+拉向参照); 只对齐选路(WAIT/cancel 不进 KL); 无参照 → KL=0。其余(PPO 更新能跑且参数真的动 ·
+确定性 · driver 只回环境给的选项下标 · 归一化 · 贪心 · dropout 关) 不变。
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ torch = pytest.importorskip("torch")
 from derbysim.learn.features import Featurizer
 from derbysim.learn.panel import PanelAdapter, collate_panels
 from derbysim.learn.panel_models import PanelOptionPolicy, pick_device, to_tensors
-from derbysim.learn.ppo import (PPOConfig, RunningMoments, TorchPanelDriver, frozen_bc,
+from derbysim.learn.ppo import (PPOConfig, RunningMoments, TorchPanelDriver,
                                 greedy_option, masked_categorical, ppo_update, prepare_batch,
                                 routing_kl)
 from derbysim.learn.rollout import make_random_policy, run_episode
@@ -28,7 +30,7 @@ def _setup(n_dec=24):
     net, params, dwell, ptc = load_assets()
     ad = PanelAdapter(net, Featurizer(net, ptc))
     w = congested_windows("train", top_k=1)[0]
-    env = RewardedDynamicEnv(net, params, ptc, dwell)
+    env = RewardedDynamicEnv(net, params, ptc, dwell, proactive=True, reserve_window="wide")
     res = run_episode(env, ad, make_random_policy(np.random.default_rng(0)),
                       build_episode_trains(w, seed=0), max_decisions=n_dec)
     return ad, res, (net, params, ptc, dwell, w)
@@ -40,46 +42,68 @@ def _policy(ad, seed=0):
                              ad.cancel_dim, ad.train_dim, ad.global_dim, hidden=HID)
 
 
-def test_kl_to_bc_is_zero_when_policy_equals_bc():
-    """最关键的一条: 载入同一份 BC 权重后, KL 必须**恰好为 0**。非 0 = 两边输入/布局对不上。"""
+def _attach_extreme_ref(pol, enc, dev, which: str):
+    """给单个 enc 挂参照: 每个有效选路行, 参照列 = 策略当前**最可能**('best')或**最不可能**('worst')
+    的候选进路。返回带 ref_col/ref_valid 的 enc 副本。"""
+    b = to_tensors(collate_panels([enc]), dev)
+    lp = pol.routing_log_probs(b["x_dec"], b["x_conf"], b["conf_mask"],
+                              b["x_cand"], b["cand_mask"])[0].detach()      # [T,Ma]
+    cm = b["cand_mask"][0]                                                  # [T,Ma]
+    T, _ = lp.shape
+    rc = np.zeros(T, np.int64)
+    rv = np.zeros(T, np.float32)
+    for t in range(T):
+        valid = cm[t] > 0.5
+        if bool(valid.any()):
+            fill = float("-inf") if which == "best" else float("inf")
+            masked = lp[t].masked_fill(~valid, fill)
+            rc[t] = int(masked.argmax().item() if which == "best" else masked.argmin().item())
+            rv[t] = 1.0
+    e = dict(enc)
+    e["ref_col"], e["ref_valid"] = rc, rv
+    return e
+
+
+def _kl_over(pol, encs, dev, which):
+    batch = to_tensors(collate_panels([_attach_extreme_ref(pol, e, dev, which) for e in encs]), dev)
+    return float(routing_kl(pol, batch).item())
+
+
+def test_routing_kl_pulls_toward_reference():
+    """最关键的一条: 参照指向策略最可能进路时 KL 应**明显小于**指向最不可能进路时。"""
     ad, res, _ = _setup()
     dev = pick_device()
     pol = _policy(ad).to(dev).eval()
-    bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID,
-                   pol.pointer.state_dict(), dev)
-    batch = to_tensors(collate_panels([t.enc for t in res.transitions]), dev)
-    kl = routing_kl(pol, bc, batch)
-    assert float(kl.item()) == pytest.approx(0.0, abs=1e-6)
+    encs = [t.enc for t in res.transitions]
+    kl_best = _kl_over(pol, encs, dev, "best")
+    kl_worst = _kl_over(pol, encs, dev, "worst")
+    assert kl_best < kl_worst, f"best {kl_best:.4f} 应 < worst {kl_worst:.4f}"
+    assert kl_best >= 0.0 and kl_worst > 1e-3
 
 
-def test_kl_to_bc_is_positive_when_policy_differs():
+def test_routing_kl_is_zero_without_reference():
+    """无参照(batch 不含 ref_col / ref_valid 全 0)→ KL 恒为 0(等价关掉锚)。"""
     ad, res, _ = _setup()
     dev = pick_device()
-    pol = _policy(ad, seed=0).to(dev).eval()
-    other = _policy(ad, seed=999)
-    with torch.no_grad():                       # 两个小初始化的随机 pointer 分布几乎一样(KL~1e-5),
-        for prm in other.pointer.parameters():  # 那测的是"随机初始化很接近", 不是 KL 会不会动。
-            prm.mul_(8.0)                       # 放大权重 → 分布真正不同, 才是这条测试要验的事。
-    bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID,
-                   other.pointer.state_dict(), dev)
-    batch = to_tensors(collate_panels([t.enc for t in res.transitions]), dev)
-    assert float(routing_kl(pol, bc, batch).item()) > 1e-4
+    pol = _policy(ad).to(dev).eval()
+    batch = to_tensors(collate_panels([t.enc for t in res.transitions]), dev)   # 未挂 ref
+    assert float(routing_kl(pol, batch).item()) == 0.0
 
 
 def test_kl_ignores_kind_and_cancel_heads():
-    """§10-B: WAIT/cancel 完全放开 —— 改动这两个头不应改变 KL(它只看选路分布)。"""
+    """§10-B: WAIT/cancel 完全放开 —— 改动这两个头不应改变选路 KL(它只看 routing_log_probs)。"""
     ad, res, _ = _setup()
     dev = pick_device()
     pol = _policy(ad).to(dev).eval()
-    bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID, None, dev)
-    batch = to_tensors(collate_panels([t.enc for t in res.transitions]), dev)
-    before = float(routing_kl(pol, bc, batch).item())
+    encs = [_attach_extreme_ref(pol, t.enc, dev, "best") for t in res.transitions]
+    batch = to_tensors(collate_panels(encs), dev)
+    before = float(routing_kl(pol, batch).item())
     with torch.no_grad():
         for head in (pol.kind_head, pol.cancel_head):
             for m in head.modules():
                 if isinstance(m, torch.nn.Linear):
                     m.weight.add_(torch.randn_like(m.weight))
-    assert float(routing_kl(pol, bc, batch).item()) == pytest.approx(before, abs=1e-6)
+    assert float(routing_kl(pol, batch).item()) == pytest.approx(before, abs=1e-6)
 
 
 def test_driver_only_returns_environment_offered_options():
@@ -87,7 +111,7 @@ def test_driver_only_returns_environment_offered_options():
     dev = pick_device()
     pol = _policy(ad).to(dev)
     drv = TorchPanelDriver(pol, dev, generator=torch.Generator(device=dev).manual_seed(0))
-    env = RewardedDynamicEnv(net, params, ptc, dwell)
+    env = RewardedDynamicEnv(net, params, ptc, dwell, proactive=True, reserve_window="wide")
     out = run_episode(env, ad, drv, build_episode_trains(w, seed=0), max_decisions=30)
     assert out.transitions
     for t in out.transitions:
@@ -96,17 +120,25 @@ def test_driver_only_returns_environment_offered_options():
     assert out.metrics["n_collisions"] == 0
 
 
+def _rollout_with_ref(ad, res, dev, pol):
+    """把 best 参照挂到每个转移的 enc 上(模拟 collect_rollout 的 ref_builder), 供更新用。"""
+    for t in res.transitions:
+        e = _attach_extreme_ref(pol, t.enc, dev, "best")
+        t.enc["ref_col"], t.enc["ref_valid"] = e["ref_col"], e["ref_valid"]
+    return res
+
+
 def test_ppo_update_runs_and_moves_parameters():
     ad, res, _ = _setup(n_dec=40)
     dev = pick_device()
     pol = _policy(ad).to(dev)
-    bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID, pol.pointer.state_dict(), dev)
+    _rollout_with_ref(ad, res, dev, pol)
     cfg = PPOConfig(minibatch=16, update_epochs=2, kl_beta=0.1)
     opt = torch.optim.Adam(pol.parameters(), lr=1e-3)
     before = [p.detach().clone() for p in pol.parameters()]
-    stats = ppo_update(pol, bc, opt, prepare_batch(res.transitions, cfg), cfg, dev)
+    stats = ppo_update(pol, opt, prepare_batch(res.transitions, cfg), cfg, dev)
     assert stats["n_minibatch"] > 0
-    for k in ("policy_loss", "value_loss", "entropy", "kl_to_bc", "clip_frac"):
+    for k in ("policy_loss", "value_loss", "entropy", "routing_kl", "clip_frac"):
         assert np.isfinite(stats[k]), k
     assert any(not torch.equal(a, b) for a, b in zip(before, pol.parameters()))
 
@@ -115,13 +147,13 @@ def test_ppo_update_is_deterministic():
     ad, res, _ = _setup(n_dec=32)
     dev = pick_device()
     cfg = PPOConfig(minibatch=16, update_epochs=2, kl_beta=0.1)
-    data = prepare_batch(res.transitions, cfg)
 
     def once():
         pol = _policy(ad, seed=5).to(dev)
-        bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID, pol.pointer.state_dict(), dev)
+        _rollout_with_ref(ad, res, dev, pol)
+        data = prepare_batch(res.transitions, cfg)
         opt = torch.optim.Adam(pol.parameters(), lr=1e-3)
-        return ppo_update(pol, bc, opt, data, cfg, dev)
+        return ppo_update(pol, opt, data, cfg, dev)
     a, b = once(), once()
     assert a == b
 
@@ -130,11 +162,11 @@ def test_zero_beta_disables_the_kl_term():
     ad, res, _ = _setup(n_dec=24)
     dev = pick_device()
     pol = _policy(ad).to(dev)
-    bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID, None, dev)
+    _rollout_with_ref(ad, res, dev, pol)
     cfg = PPOConfig(minibatch=16, update_epochs=1, kl_beta=0.0)
     opt = torch.optim.Adam(pol.parameters(), lr=1e-3)
-    stats = ppo_update(pol, bc, opt, prepare_batch(res.transitions, cfg), cfg, dev)
-    assert stats["kl_to_bc"] == 0.0
+    stats = ppo_update(pol, opt, prepare_batch(res.transitions, cfg), cfg, dev)
+    assert stats["routing_kl"] == 0.0
 
 
 def test_masked_categorical_never_samples_padding():
@@ -148,18 +180,14 @@ def test_masked_categorical_never_samples_padding():
 
 
 def test_driver_denormalises_the_critic_output():
-    """critic 预测的是**归一化值**, driver 必须还原成原始单位再交给 GAE。
-
-    否则 δ = r + γV' − V 里 r 是原始单位(运营日整局 −3 万量级)而 V 是 ~N(0,1),
-    两边量纲差 4 个数量级, 优势直接是垃圾 —— 而且不会报错, 只会安静地训不出东西。
-    """
+    """critic 预测的是**归一化值**, driver 必须还原成原始单位再交给 GAE。"""
     ad, res, (net, params, ptc, dwell, w) = _setup()
     dev = pick_device()
     pol = _policy(ad).to(dev)
     rn = RunningMoments(mean=-3000.0, var=800.0 ** 2, count=1e6)
     plain = TorchPanelDriver(pol, dev, greedy=True)
     normed = TorchPanelDriver(pol, dev, greedy=True, ret_norm=rn)
-    env = RewardedDynamicEnv(net, params, ptc, dwell)
+    env = RewardedDynamicEnv(net, params, ptc, dwell, proactive=True, reserve_window="wide")
     obs, _ = env.reset(build_episode_trains(w, seed=0))
     dec = env.decision()
     enc = ad.encode(obs, dec)
@@ -182,21 +210,15 @@ def test_return_normalisation_keeps_value_loss_in_a_sane_range():
 
     def value_loss(cfg, rn):
         pol = _policy(ad, seed=5).to(dev)
-        bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID, None, dev)
         opt = torch.optim.Adam(pol.parameters(), lr=1e-3)
-        return ppo_update(pol, bc, opt, prepare_batch(big, cfg, ret_norm=rn), cfg, dev)["value_loss"]
+        return ppo_update(pol, opt, prepare_batch(big, cfg, ret_norm=rn), cfg, dev)["value_loss"]
     off, on = value_loss(cfg_off, None), value_loss(cfg_on, RunningMoments())
     assert on < off / 100.0, f"归一化后值损失 {on:.3g} 相对 {off:.3g} 没有明显下降"
     assert on < 100.0
 
 
 def test_greedy_picks_the_most_likely_kind_not_the_singleton_wait():
-    """扁平 argmax 会系统性地选 WAIT —— 因子化之后必须**按类别贪心**(见 `greedy_option`)。
-
-    实测抓到: 初始体检 WAIT 100% / completion 0.028(与"永远WAIT"同级)。原因不是策略偏好, 而是
-    WAIT 类只有 1 个选项独占 p=0.15, 而 set 类的 0.80 摊到 N 条候选上 —— N>5.3 时每条都低于 WAIT。
-    这里构造一个"set 类概率最高但候选很多"的批, 断言贪心必须落在 set 上。
-    """
+    """扁平 argmax 会系统性地选 WAIT —— 因子化之后必须**按类别贪心**(见 `greedy_option`)。"""
     B, O, N = 3, 9, 8
     kind = torch.zeros(B, O, dtype=torch.long); kind[:, 1:1 + N] = 1        # 0=WAIT, 其余=set
     mask = torch.zeros(B, O); mask[:, :1 + N] = 1.0
@@ -212,22 +234,10 @@ def test_greedy_picks_the_most_likely_kind_not_the_singleton_wait():
 
 
 def test_importance_ratio_is_one_when_nothing_changed():
-    """**dropout 必须在 PPO 更新期关闭**, 否则重要性比比较的是两个不同的网络。
-
-    `old_logp` 是 rollout 期采的(driver 里 `policy.eval()`, dropout 关)。若更新期开 `train()`,
-    `ratio = exp(logp - old_lp)` 会带 dropout 噪声 —— 与参数有没有更新无关。实测后果: 1M 步那轮
-    `approx_kl` 在任何学习之前就有 0.023-0.081 > `target_kl=0.02`, 240 迭代触发 **895 次**早停,
-    每轮只做约 4 个 minibatch(本该 256), **实际只执行了 1.5% 的更新**, 曲线全程平坦。
-
-    钉死方式: 用**同一份策略、eval 模式**重算**同一批被记录动作**的 logp 当作 `old_logp`, 再以
-    `lr=0` 跑一次更新 —— 参数不动、动作不变, `approx_kl` 必须 ≈ 0。
-    (第一版这条测试是错的: 我用 driver 重采 logp, 而 driver 会**重新采样动作**, 于是 old_logp 对应
-     的动作与 `data["actions"]` 不是同一个, 自然对不上 —— 那测的是"两个不同动作的 logp 不同"。)
-    """
+    """**dropout 必须在 PPO 更新期关闭**, 否则重要性比比较的是两个不同的网络。"""
     ad, res, _ = _setup(n_dec=40)
     dev = pick_device()
     pol = _policy(ad).to(dev)
-    bc = frozen_bc(ENC, ad.dec_dim, ad.conf_dim, ad.cand_dim, HID, None, dev)
     data = prepare_batch(res.transitions, PPOConfig())
     pol.eval()
     old = []
@@ -241,6 +251,6 @@ def test_importance_ratio_is_one_when_nothing_changed():
     data["old_logp"] = np.asarray(old, dtype=np.float32)
     cfg = PPOConfig(minibatch=64, update_epochs=1, kl_beta=0.0, target_kl=None, lr=0.0)
     opt = torch.optim.Adam(pol.parameters(), lr=0.0)
-    stats = ppo_update(pol, bc, opt, data, cfg, dev)
+    stats = ppo_update(pol, opt, data, cfg, dev)
     assert stats["n_minibatch"] > 0
     assert abs(stats["approx_kl"]) < 5e-3, f"approx_kl={stats['approx_kl']:.4f} —— dropout 没关?"

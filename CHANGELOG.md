@@ -64,6 +64,69 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+### D60 — RL code audit + rewrite for proactive engine (Q5): env→proactive, KL anchor→schedule, warm-start→full-panel, kind-anchor dropped (2026-08-08, user)
+- **Audit finding (critical)**: `scripts/13` built `RewardedDynamicEnv(...)` **without `proactive=True`** → RL
+  would have trained on the **old reactive engine** (D48's fundamental error). Also: KL anchored to a frozen
+  neural BC (`frozen_bc`/`bc_ref`); warm-start loaded the old M11 routing-only `PointerBC` (routing branch
+  only); `kind_anchor` pinned p(WAIT/SET/cancel) to the **reactive-engine** signaller mix (`INIT_KIND_MIX`,
+  D38). None reusable as-is — validates "audit before reuse".
+- **Rewrite (all old-engine refs removed)**:
+  - **env → proactive** (`proactive=True, reserve_window=wide` default per user "按RR来", narrow ablation).
+  - **selective KL → rule anchor** (`routing_kl` no longer takes `bc_ref`): per routing row, a rule
+    **reference target route** is attached at rollout (`baselines.make_route_reference` →
+    `rollout.run_episode(ref_builder=…)` → `enc['ref_col'/'ref_valid']` → `collate_panels` → batch). Anchor =
+    **schedule** (`dec.logged` plan route) with **lookup fallback** (RR-faithful; user "KL锚按RR来"); ablation
+    `--kl-anchor schedule|lookup|none`. KL = **KL(q‖π) = cross-entropy toward the plan route** (stable for a
+    ~one-hot target; ε=0.02 smoothing), averaged only over `ref_valid ∩ valid_routing_rows`. `frozen_bc`
+    deleted.
+  - **warm-start → full-panel BC whole network** (`policy.load_state_dict(ck['state_dict'])`, ck from
+    scripts/31 `{state_dict,encoder,dims}`, D9-best **gnn**) — inits encoder + routing + kind + cancel + critic,
+    not just routing. **init (BC) and KL anchor (schedule) now decoupled**: BC init avoids cold-start gridlock;
+    schedule anchor keeps routing on RR-safe routes, deviations earned by reward.
+  - **kind-anchor default OFF** (`kind_anchor_beta=0.0`): RL learns timing freely (main thesis); old signaller
+    mix voided (reactive engine) — must re-measure on new engine before any re-enable.
+  - reward = **per_train** (D58, RewardConfig default); β kept loose-first (D59/D45, no presumed strong anchor).
+  - stat key `kl_to_bc`→`routing_kl`; removed `--allow-prior-ckpt`; PPO mechanics (GAE/clip/EV/critic-warmup)
+    untouched (env-agnostic).
+- **Verified (sandbox, no torch)**: py_compile all 6 changed files; numpy smoke of `make_route_reference`
+  (schedule-hit / lookup-fallback / lookup-only / no-ref→valid=0) + `collate_panels` ref padding + backward
+  compat (no-ref path); numpy replication of `routing_kl` confirms monotonic pull toward plan route
+  (hit 0.012 < uniform 1.019 < wrong 3.806). Full torch smoke + training on server.
+  Files: `derbysim/learn/{baselines,rollout,panel,panel_models,ppo}.py`, `scripts/13_train_ppo.py`.
+- **Server run infra (D60, hardware decision + resume + matrix)**: measured proactive sim ≈180–550 steps/s on a
+  **single** core; net is hidden=64 → GPU idle-waits (D32: batch=1 forward is 73% kernel-launch, "A100 no better").
+  → **no-GPU / 72-core** chosen: throughput comes from running the ablation matrix N-way single-core parallel, not
+  per-run acceleration (18-core+GPU would be strictly worse). Per run ~30 min–2 h; full matrix in one 12 h window.
+  - `scripts/13`: added `--run-tag` (stable run_id, no timestamp) + `--resume` (loads `<tag>_last.pt`:
+    model/opt/ret_norm/next_iter/best/history/rng) + periodic `<tag>_last.pt` full-state save each eval cycle →
+    true within-run resume for the server's 12 h cap.
+  - `derbysim/learn/rl_matrix.py` (NEW, mirrors `step9_parallel`): `default_grid` (encoder×kl-anchor×β×seed;
+    none-anchor collapses β; β=0 dedup'd to none), `run_rl_matrix` (ThreadPool of scripts/13 **subprocesses**,
+    each forced single-core via OMP/MKL=1; **idempotent resume** = skip configs whose `<tag>.json` exists,
+    `--resume` the rest; tqdm/ETA; per-run `rl_logs/<tag>.log`), `summarize_rl_matrix` (rank by val best reward
+    vs lookup/signaller reference lines).
+  - `notebooks/rl_ppo_server.ipynb` (NEW): PROJ/PY/PREFIX convention, N_WORKERS=70; smoke (warm-start census +
+    EV first) → gnn main sweep (21 runs) → encoder ablation → narrow ablation → progress snapshot cell.
+    Re-running a launch cell = resume. Verified: py_compile all files + `default_grid` (gnn=21, 4-enc=84) + cmd
+    build; notebook JSON valid.
+
+### D59 — 4-encoder BC closed-loop (D9 ablation) + RL routing-anchor decision: lookup/schedule not BC (2026-08-08, user)
+- **4-encoder BC closed-loop (11 val, `eval_metric_suite_val_20260808-060230.json`)**: all val-acc ≈0.94 (tied)
+  but closed-loop diverges — **bc_gnn 0.501** (delay 163M, PPM 0.173) > bc_mlp 0.452 > bc_deepsets 0.415 >
+  bc_settransformer 0.390; all < signaller 1.0 (delay 54,652, PPM 0.546), all > greedy 0.259. So match-rate
+  doesn't predict closed-loop (D42 again) — **encoder matters at the closed-loop level even at tied supervised
+  acc**; gnn is the best warm-start BC. BC also stops far more than the signaller (655–1025 vs 413) = worse
+  timing (stop-go) — exactly RL's job to fix.
+- **D59 — RL routing KL anchor = lookup/schedule, NOT BC** (re-opens D44's KL-to-BC, which was set for the old
+  0.90-BC): with BC now 0.39–0.50 and carrying long-tail landmine routes (D42), anchoring routing to BC keeps
+  those tendencies. lookup's routing is *safe* (it gridlocks on timing, not routing, which RL supplies), so
+  anchoring to lookup/schedule keeps RL on safe common/plan routes while **RL earns deviations from reward —
+  auto-filtering BC's unjustified landmine deviations, keeping only reward-positive ones** (RR-aligned: follow
+  the plan, deviate for conflicts). Warm-start (init) still from the best BC (gnn); init and KL anchor are
+  decoupled. β loose (D44's tight was for a good BC; try no/loose KL first, watch EV — D45). Reward = per_train
+  (D58). Ablation: KL-to-lookup (lean) vs KL-to-schedule vs KL-to-BC vs no-KL. Before building: audit the old
+  `ppo.py`/`scripts/13` (written for the reactive engine) — don't reuse blindly.
+
 ### Eval fixes (user's Q2/Q3): delay-to-horizon consistency + per-encoder BC rows (2026-08-08)
 - **Q2 delay-consistency bug fixed**: `scripts/29` computed weighted delay from raw `held_time` (no
   charge-to-horizon), while `scripts/32` uses `realized_weighted_delay(..., horizon)` (D46). So the eval

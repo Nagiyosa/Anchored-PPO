@@ -1,14 +1,14 @@
-"""M12b maskable PPO + KL-to-BC（torch，设备无关）。
+"""M12b maskable PPO + 选路 KL-to-rule（torch，设备无关）。
 
 - **动作分布**: 只在环境给的 `PanelDecision.options` 上做 softmax(padding 屏蔽) → 结构性安全(D6)
   不由网络负责; 策略输出的是**选项下标**, 不构造动作。
 - **SMDP**: 优势用 `smdp.compute_gae` 按**实际推进的仿真时长**折扣; 默认 β=0(γ=1, §10-G)。
-- **KL-to-BC(§10-B/F)**: 只对齐**选路**子决策 —— 拿 `routing_log_probs()`(π(r|车 t)) 与冻结的
-  no-prior BC 在**同一输入**上的分布算 KL, `WAIT`/`cancel` 完全不进这一项 = "最小安全偏离"。
-  方向取 `KL(π ‖ π_BC)`(mode-seeking, 把策略摁在 BC 支撑集内 = 安全先验的本意)。
-  系数 `kl_beta` 是**固定档位**(手动扫描), 不是自适应 —— β 本身就是论文的自变量。
-  **必须按 `valid_routing_rows` 掩行**: 全 padding 行的分布是均匀的, 混进去等于把 1/Ma 的噪声
-  当成"策略偏离 BC"(M12a GPU 冒烟发现)。
+- **选路 KL(D59, §10-B)**: 只对齐**选路**子决策, 锚到**规则参照**(schedule 计划路 / lookup 最频路,
+  由 `run_episode` 的 ref_builder 逐行算好、随 enc 流入; 见 `routing_kl`)——按 RR"跟计划走、偏离靠
+  reward 挣", 取代旧的冻结神经 BC 锚(该锚会把长尾偏离拽回、稀释 warm-start)。`WAIT`/`cancel` 不进
+  KL = 时机放开由 RL 自学。**必须按 `valid_routing_rows ∩ ref_valid` 掩行**(全 pad / 无参照行不算)。
+- **热启动**(scripts/13): 从 full-panel BC(整个 `PanelOptionPolicy`, D9 最优 gnn)**整网**载入 —— init
+  与 KL 锚解耦(init=BC 给能跑的起点避免冷启死锁; 锚=schedule)。
 
 **沙盒装不上 torch → 本模块未运行**; 数学部分(GAE/折扣)在 `smdp.py` 已用 numpy 单测,
 本模块由 `tests/test_ppo_smoke.py` 在本地 GPU 验证。
@@ -42,7 +42,11 @@ class PPOConfig:
     #   连续两次评估逐位相同。λ=1 让信用完整回溯; 方差由优势归一化 + critic 承担。
     lam: float = 1.0
     half_life_s: float | None = None       # None = γ≡1(不打折, §10-G); M12e 扫 300/900/3600
-    kl_beta: float = 0.1                   # KL-to-BC 固定档位(手动扫描: 0/0.01/0.1/1/10)
+    # **选路 KL 锚系数**(D59, 手动扫描: 0/0.01/0.1/1)。锚点是**规则参照**(schedule 计划路 /
+    # lookup 最频路, 见 routing_kl + baselines.make_route_reference), 不再是冻结神经 BC ——
+    # 按 RR: 把选路拉向计划/常规路, 偏离靠 reward 自己挣。β 先松(0/小)看 EV 能否自恢复(D45 作废,
+    # 不预设强锚)。只约束选路; WAIT/cancel 时机放开由 RL 自学。
+    kl_beta: float = 0.1
     normalise_adv: bool = True
     # **回报标准化**(2026-08-01 取代写死的 reward_scale, 理由见 `smdp.RunningMoments`):
     #   运营日 episode 的单步 |r| 中位 0.00 / p99 826 / 最大 8968, 末步独占 29%;
@@ -55,14 +59,11 @@ class PPOConfig:
     # PPO 标准护栏: 一次更新内策略走太远就提前停 epoch 循环。实测三轮训练都在解冻后约 20 轮见顶
     # 然后塌(KL-to-BC 0.028→0.044, 熵 0.888→0.769) —— 更新步长失控是主要嫌疑。
     target_kl: float | None = 0.02
-    # **时机锚(2026-08-02)**: 对 p(动作类别) 到信号员实测构成的 KL。§10-B 的设计只约束**选路**,
-    # `kind_head`(何时办/是否撤)完全没有锚 —— 当初假设"奖励会管住它", 实测**不会**: 撤销能立刻
-    # 释放预留、降低其它车的 held_time(即时正奖励), 而代价(完成率下降)是分摊到全局、延后到终局的
-    # 一笔总账; 即使 γ=1/λ=1 让信用完整回溯, 那笔账摊到 ~350 步上单步优势里几乎看不见。
-    # 实测后果: cancel 占比 0%→58%, completion 从 0.306 退回 0.241(真实撤销率只有 10.44%)。
-    # 与 KL-to-BC 完全同构, 锚点是**数据**(信号员 2857 步实测 WAIT 10.2%/set 89.8%/cancel 0%,
-    # 撤销按真实 10.44% 给非零下限 = `INIT_KIND_MIX`)。0 = 关掉(消融对照)。
-    kind_anchor_beta: float = 0.05
+    # **时机锚**: 对 p(动作类别) 到某参照构成的 KL。**D59 默认关(0)** —— 主线要 RL **自由学时机**
+    # (何时办/是否撤), 硬锚会摁死这个杠杆; 且旧的锚点构成(信号员 2857 步 WAIT 10.2% = `INIT_KIND_MIX`)
+    # 是**旧 reactive 引擎**实测, 已作废。若将来新 proactive 引擎上 WAIT/cancel 塌了再考虑: 必须先在
+    # 新引擎重测信号员的类别构成, 不得沿用旧数。>0 仅作消融对照。
+    kind_anchor_beta: float = 0.0
 
 
 def masked_categorical(logits, opt_mask):
@@ -148,22 +149,33 @@ def kind_anchor_kl(kind_log_probs, batch) -> torch.Tensor:
     return term.sum(-1).mean()
 
 
-def routing_kl(policy, bc_ref, batch) -> torch.Tensor:
-    """KL(π_routing ‖ π_BC) —— 只在**有效选路行**上平均(§10-B; 全 pad 行必须掩掉)。"""
+def routing_kl(policy, batch, eps: float = 0.02) -> torch.Tensor:
+    """D59 — 选路 KL **锚到规则参照**(schedule 计划路 / lookup 最频路), 取代旧的冻结神经 BC。
+
+    参照目标由 `run_episode` 的 `ref_builder` 逐行算好、随 `enc` 流进 batch(`ref_col`/`ref_valid`):
+    每个有效行给一条**目标进路列**。这里把它做成 ε 平滑的 one-hot 目标分布 q, 取
+    **KL(q ‖ π_routing)**(= 目标进路的交叉熵 + 常数) —— 即"把策略往计划/常规路拉", 对 one-hot 目标
+    数值稳定(mode-seeking 的 KL(π‖q) 对 one-hot 目标会发散)。
+
+    只在 `ref_valid`(参照命中) ∩ `valid_routing_rows`(该行真有候选) 上平均; WAIT/cancel 不进(§10-B)。
+    无参照(batch 不含 ref_col, 或全 0)→ 返回 0(等价关掉 KL)。
+    """
+    if "ref_col" not in batch:
+        return torch.zeros((), device=batch["x_dec"].device)
     x = (batch["x_dec"], batch["x_conf"], batch["conf_mask"], batch["x_cand"], batch["cand_mask"])
-    pi_lp = policy.routing_log_probs(*x)                                   # [B,T,Ma]
-    B, T = pi_lp.shape[0], pi_lp.shape[1]
-    with torch.no_grad():
-        ref = bc_ref(batch["x_dec"].reshape(B * T, -1),
-                     batch["x_conf"].reshape(B * T, batch["x_conf"].shape[2], -1),
-                     batch["conf_mask"].reshape(B * T, -1),
-                     batch["x_cand"].reshape(B * T, batch["x_cand"].shape[2], -1),
-                     batch["cand_mask"].reshape(B * T, -1))
-        bc_lp = torch.log_softmax(torch.nan_to_num(ref, neginf=-1e9), dim=-1).reshape(B, T, -1)
-    valid = batch["cand_mask"] > 0.5
-    term = torch.where(valid, pi_lp.exp() * (pi_lp - bc_lp), torch.zeros_like(pi_lp))
-    kl_row = term.sum(-1)                                                  # [B,T]
-    row_mask = valid_routing_rows(batch["cand_mask"]).float()
+    pi_lp = policy.routing_log_probs(*x)                                   # [B,T,Ma] log π(r|t)
+    valid = batch["cand_mask"] > 0.5                                       # [B,T,Ma] 有效候选
+    n_valid = valid.float().sum(-1, keepdim=True).clamp(min=1.0)          # 每行候选数
+    ref_col = batch["ref_col"].long().unsqueeze(-1)                        # [B,T,1] 目标列
+    tgt = torch.zeros_like(pi_lp).scatter(-1, ref_col.clamp(min=0), 1.0)  # 目标 one-hot
+    tgt = tgt * valid.float()                                              # 目标必落在有效候选上
+    q = (1.0 - eps) * tgt + eps * valid.float() / n_valid                 # ε 平滑到有效候选
+    q = torch.where(valid, q, torch.zeros_like(q))
+    q = q / q.sum(-1, keepdim=True).clamp(min=1e-8)
+    term = torch.where(valid, q * (torch.log(q.clamp(min=1e-8)) - pi_lp), torch.zeros_like(q))
+    kl_row = term.sum(-1)                                                  # [B,T] KL(q‖π)
+    row_mask = (valid_routing_rows(batch["cand_mask"]).float()
+                * batch["ref_valid"].float())                             # 参照命中且有候选
     return (kl_row * row_mask).sum() / row_mask.sum().clamp(min=1.0)
 
 
@@ -180,7 +192,7 @@ def explained_variance(pred, target) -> float:
     return float(1.0 - ((t - p).var() / var)) if var > 1e-12 else 0.0
 
 
-def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
+def ppo_update(policy, optimizer, data: dict, cfg: PPOConfig, device,
                value_only: bool = False) -> dict:
     """一轮 PPO 更新(多 epoch × minibatch)。返回诊断量(损失/KL/熵/裁剪比例/**EV**)。
 
@@ -193,7 +205,7 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
     if cfg.normalise_adv and n > 1:
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
     stats = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0,
-             "kl_to_bc": 0.0, "kind_anchor_kl": 0.0, "clip_frac": 0.0, "n_minibatch": 0, "explained_variance": 0.0,
+             "routing_kl": 0.0, "kind_anchor_kl": 0.0, "clip_frac": 0.0, "n_minibatch": 0, "explained_variance": 0.0,
              "approx_kl": 0.0, "kl_early_stops": 0}
     preds = np.zeros(n, dtype=np.float64)
     # **必须 eval() 而不是 train() —— dropout 会污染重要性比(2026-08-01 实测)。**
@@ -227,7 +239,7 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
             pol_loss = -torch.min(unclipped, clipped).mean()
             val_loss = ((value - mb_ret) ** 2).mean()
             ent = dist.entropy().mean()
-            kl = routing_kl(policy, bc_ref, batch) if cfg.kl_beta > 0 else torch.zeros((), device=device)
+            kl = routing_kl(policy, batch) if cfg.kl_beta > 0 else torch.zeros((), device=device)
             kkl = (kind_anchor_kl(_aux["kind_log_probs"], batch)
                    if (cfg.kind_anchor_beta > 0 and isinstance(_aux, dict)
                        and "kind_log_probs" in _aux) else torch.zeros((), device=device))
@@ -250,7 +262,7 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
             stats["policy_loss"] += float(pol_loss.item())
             stats["value_loss"] += float(val_loss.item())
             stats["entropy"] += float(ent.item())
-            stats["kl_to_bc"] += float(kl.item())
+            stats["routing_kl"] += float(kl.item())
             stats["kind_anchor_kl"] += float(kkl.item())
             stats["clip_frac"] += float(((ratio - 1).abs() > cfg.clip).float().mean().item())
             stats["n_minibatch"] += 1
@@ -261,23 +273,10 @@ def ppo_update(policy, bc_ref, optimizer, data: dict, cfg: PPOConfig, device,
                 stats["kl_early_stops"] = stats.get("kl_early_stops", 0) + 1
                 break
     k = max(stats["n_minibatch"], 1)
-    for key in ("policy_loss", "value_loss", "entropy", "kl_to_bc", "kind_anchor_kl", "clip_frac"):
+    for key in ("policy_loss", "value_loss", "entropy", "routing_kl", "kind_anchor_kl", "clip_frac"):
         stats[key] /= k
     stats["explained_variance"] = explained_variance(preds, data["ret"])
     # 护栏若长期主导, 训练就是在空转 —— 必须能一眼看见(而不是埋在 JSON 里)。
     stats["kl_stop_rate"] = stats["kl_early_stops"] / max(cfg.update_epochs, 1)
     stats["value_only"] = bool(value_only)
     return stats
-
-
-def frozen_bc(encoder: str, dec_dim: int, conf_dim: int, cand_dim: int, hidden: int,
-              state_dict: dict | None, device):
-    """冻结的 no-prior BC 参照(KL 的另一端)。无 checkpoint 时用随机初始化(仅供冒烟)。"""
-    from derbysim.learn.models import PointerBC
-    bc = PointerBC(encoder, dec_dim, conf_dim, cand_dim, hidden=hidden)
-    if state_dict is not None:
-        bc.load_state_dict(state_dict)
-    bc.to(device).eval()
-    for p in bc.parameters():
-        p.requires_grad_(False)
-    return bc

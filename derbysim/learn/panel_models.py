@@ -175,6 +175,6 @@ def to_tensors(batch: dict, device) -> dict:
     out = {}
     for k, v in batch.items():
         t = torch.as_tensor(v)
-        out[k] = t.to(device) if k.startswith("opt_") and t.dtype == torch.int64 \
-            else t.float().to(device)
+        keep_int = (k.startswith("opt_") or k == "ref_col") and t.dtype == torch.int64
+        out[k] = t.to(device) if keep_int else t.float().to(device)
     return out

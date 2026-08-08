@@ -1,25 +1,30 @@
 #!/usr/bin/env python3
-"""M12b: 在真实运营日上训练 maskable PPO(KL-to-BC + no-prior BC 热启动, SMDP)。
+"""M12b (D59 重写): 在真实**proactive**运营日上训练 maskable PPO(选路 KL-to-rule + full-panel BC 整网热启动, SMDP)。
 
-用法(本地 GPU):
-    python scripts/13_train_ppo.py --iters 40 --steps-per-iter 2048 --kl-beta 0.1 \
-        --bc-ckpt artifacts/reports/bc_deepsets_noprior_nw_d35.pt --seed 0
-    # ↑ 当前正确的 no-prior 热启动权重(D35 + M11 §18 修好配置 --no-route-weight)。
-    #   旧名 bc_deepsets_noprior.pt / _noprior_nw.pt / _noprior_d35.pt 均已过时, 勿用(F2, 2026-08-05)。
+用法(本地 GPU / 服务器):
+    python scripts/13_train_ppo.py --iters 40 --steps-per-iter 2048 --encoder gnn \
+        --bc-ckpt artifacts/dataset/bc_fullpanel_gnn.pt --kl-anchor schedule --kl-beta 0.1 --seed 0
+    # ↑ 热启动 = full-panel BC(整个 PanelOptionPolicy, D9 最优 gnn), **整网**载入(不只选路头)。
+    #   旧的 M11 只选路 PointerBC 热启动(bc_deepsets_noprior_*)与 reactive 环境已作废(D48/D59)。
 
-关键旋钮(与 docs/M12_DESIGN §10 对应):
-    --kl-beta      KL-to-BC 固定档位(§10-F 手动扫描: 0 / 0.01 / 0.1 / 1 / 10)
-    --half-life    SMDP 折扣半衰期(秒)。**默认不给 = γ=1 不打折**(§10-G); M12e 扫 300/900/3600
-    --encoder      mlp/deepsets/settransformer/gnn (D9 消融; bring-up 用 deepsets)
+D59 关键改动(全部去旧引擎):
+    * **环境 proactive**(--reserve-window wide, 默认按 RR): 旧脚本建的是 reactive 环境(致命)。
+    * **选路 KL 锚 = 规则参照**(--kl-anchor schedule|lookup|none): schedule=计划路(dec.logged)+lookup 兜底
+      (RR faithful, 默认); lookup=只最频路; none=关 KL。取代旧的冻结神经 BC 锚。偏离靠 reward 挣。
+    * **热启动整网**从 full-panel BC 载入(init); init 与 KL 锚**解耦**(init=BC 避免冷启死锁, 锚=schedule)。
+    * **reward = per_train**(D58, RewardConfig 默认); **kind-anchor 默认关**(RL 自由学时机, 旧信号员混合作废)。
+
+其它旋钮:
+    --kl-beta      选路 KL 锚系数(先松: 0 / 0.01 / 0.1 / 1 看 EV 能否自恢复, D45 作废不预设强锚)
+    --half-life    SMDP 折扣半衰期(秒)。**默认不给 = γ=1 不打折**(§10-G); 扫 300/900/3600
+    --encoder      mlp/deepsets/settransformer/gnn (D9 消融; 热启动首选 gnn)
     --split        train/val (test 是完全留出集, 本脚本**拒绝**跑 test, §10-E)
-    场景 = **运营日**(03:00→次日03:00, 完整覆盖的 96 天按时间划分 train64/val11/test21),
-    不筛拥堵窗口(D27+D34),
+    场景 = **运营日**(03:00→次日03:00, 按运营日划分 train/val/test, D43), 不筛拥堵窗口(D27+D34),
                    **真实历史、不注入合成扰动**(D28)
-    --steps-per-iter 每轮更新的步数预算(不是局数 —— 局长在 180-4586 间晃, batch 会不稳)
-    --eval-every   每 N 轮在**固定评估集**上评一次(val 运营日, **真实历史不注入** D28),
-                   并与三条基线参照线(信号员回放 / 有路就办 / 随机)同图对照
+    --steps-per-iter 每轮更新的步数预算(不是局数 —— 局长会晃, batch 会不稳)
+    --eval-every   每 N 轮在**固定评估集**(val 运营日, 真实历史不注入 D28)评一次 + 基线参照线对照
 
-诚实: 无 `--bc-ckpt` 时 KL 参照是随机初始化的网络 —— 那只是**跑通用**, 不是热启动, 结果无意义。
+诚实: 无 `--bc-ckpt` 时是随机网络热启动 —— 只**跑通用**, 结果无意义。
 """
 from __future__ import annotations
 
@@ -38,13 +43,13 @@ from derbysim import config
 from derbysim.learn.features import Featurizer
 from derbysim.learn.panel import PanelAdapter
 from derbysim.learn.panel_models import PanelOptionPolicy, pick_device
-from derbysim.learn.ppo import (PPOConfig, RunningMoments, TorchPanelDriver, frozen_bc,
+from derbysim.learn.ppo import (PPOConfig, RunningMoments, TorchPanelDriver,
                                 ppo_update, prepare_batch)
 from derbysim.learn.rollout import (as_factory, collect_rollout, evaluate_policy,
                                     make_greedy_set_policy, make_random_policy,
                                     signaller_replay_factory)
 from derbysim.learn.baselines import (lookup_table, make_ars_proxy_policy, make_fcfs_policy,
-                                      make_fsfs_policy, make_lookup_policy)
+                                      make_fsfs_policy, make_lookup_policy, make_route_reference)
 from derbysim.learn.scenarios import (build_day_trains, day_horizon, load_assets,
                                       operating_days)
 from derbysim.sim.reward import RewardConfig, RewardedDynamicEnv
@@ -77,11 +82,17 @@ def main() -> None:
                     help="训练用几个**运营日**(03:00→次日03:00); 默认取满(train 段 65 天)。"
                          "此前是'最堵的 6 个 3h 窗口'= 18 小时 = 全量的 0.77%%(见 D26 更正)")
     ap.add_argument("--split", default="train", choices=["train", "val"])
-    ap.add_argument("--kl-beta", type=float, default=0.1)
-    ap.add_argument("--kind-anchor-beta", type=float, default=0.05,
-                    help="**时机锚**: p(动作类别) 到信号员实测构成的 KL 系数。0=关(消融)。"
-                         "不加锚时实测 cancel 占比会从 0%% 漂到 58%%(真实撤销率仅 10.44%%), "
-                         "completion 从 0.306 退回 0.241 —— kind_head 是唯一没有行为锚的分支")
+    ap.add_argument("--reserve-window", default="wide", choices=["wide", "narrow"],
+                    help="proactive 预留窗口(D57): wide=按 RR 从已知前沿即可预留(默认); "
+                         "narrow=校准的位置触发窗。RL 默认 wide, narrow 作消融")
+    ap.add_argument("--kl-anchor", default="schedule", choices=["schedule", "lookup", "none"],
+                    help="选路 KL 的**规则参照**(D59): schedule=计划路(dec.logged)+lookup 兜底(RR, 默认); "
+                         "lookup=只最频路; none=关 KL。取代旧的冻结神经 BC 锚")
+    ap.add_argument("--kl-beta", type=float, default=0.1,
+                    help="选路 KL 锚系数(先松: 0/0.01/0.1/1 看 EV 自恢复); --kl-anchor none 时无效")
+    ap.add_argument("--kind-anchor-beta", type=float, default=0.0,
+                    help="**时机锚**(默认 0 关): p(动作类别) 到某参照的 KL。D59 主线要 RL 自由学时机, "
+                         "旧信号员类别混合(reactive 引擎实测)已作废; >0 仅消融, 须先在新引擎重测构成")
     ap.add_argument("--half-life", type=float, default=None,
                     help="SMDP 折扣半衰期(秒); 缺省 = γ=1 不打折(§10-G)")
     ap.add_argument("--lam", type=float, default=1.0,
@@ -100,10 +111,15 @@ def main() -> None:
     ap.add_argument("--update-epochs", type=int, default=4)
     ap.add_argument("--max-decisions", type=int, default=3000)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--bc-ckpt", default=None, help="M11 **no-prior** BC 权重(PointerBC state_dict)")
+    ap.add_argument("--bc-ckpt", default=None,
+                    help="full-panel BC 权重(scripts/31 产出 {state_dict,encoder,dims}); 首选 gnn")
     ap.add_argument("--no-warm-start", action="store_true", help="消融: 不做 BC 热启动")
-    ap.add_argument("--allow-prior-ckpt", action="store_true",
-                    help="放行含先验的 BC(仅对照实验; 默认拒绝, 见 M11 §12 决定 A)")
+    ap.add_argument("--run-tag", default=None,
+                    help="稳定 run_id(无时间戳): 断点续训/矩阵幂等续跑用。给了它, checkpoint/输出用该名; "
+                         "不给则沿用带时间戳的旧行为(每版留档)")
+    ap.add_argument("--resume", action="store_true",
+                    help="从 <run-tag>_last.pt 续训(需 --run-tag): 载 model/opt/ret_norm/iter/best/history/rng。"
+                         "服务器单次 12h 上限时用 —— 到点被杀后重跑同一命令即从断点继续")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -121,35 +137,34 @@ def main() -> None:
     policy = PanelOptionPolicy(args.encoder, adapter.dec_dim, adapter.conf_dim, adapter.cand_dim,
                                adapter.cancel_dim, adapter.train_dim, adapter.global_dim,
                                hidden=args.hidden).to(dev)
-    bc_state = None
-    if args.bc_ckpt:
+    # ---- 热启动: full-panel BC(整个 PanelOptionPolicy, D9 最优 gnn)**整网**载入(D59) ----
+    # 与旧路线的区别: 旧的载 M11 只选路 PointerBC(load_bc_state_dict, 只迁选路头); 现在 BC 本身就是
+    # 同一个 PanelOptionPolicy(scripts/31 训, 存 {state_dict,encoder,dims}), 整网 load_state_dict ——
+    # 编码器 + 选路头 + kind/cancel 头 + critic 全给个能跑的起点(避免冷启动死锁)。init 与 KL 锚解耦。
+    want_dims = [adapter.dec_dim, adapter.conf_dim, adapter.cand_dim,
+                 adapter.cancel_dim, adapter.train_dim, adapter.global_dim]
+    if args.bc_ckpt and not args.no_warm_start:
         ck = torch.load(args.bc_ckpt, map_location=dev, weights_only=False)
-        if isinstance(ck, dict) and "model" in ck:
-            # **硬校验**: 静默的不匹配会毁掉热启动而不报错(§10-A 三条纪律)。
-            if ck.get("use_prior", False) and not args.allow_prior_ckpt:
-                raise SystemExit(
-                    "该 checkpoint 是**含先验**的 BC。M11 §12 决定 A + M12_DESIGN §10-A③: "
-                    "热启动必须用 no-prior 版(scripts/12 --no-prior) —— 含先验版长尾低于随机, "
-                    "KL 会把 RL 拽向'永不选罕见路', 正好压制我们要研究的偏离。"
-                    "确要对照实验请加 --allow-prior-ckpt。")
-            if ck.get("encoder") and ck["encoder"] != args.encoder:
-                raise SystemExit(f"checkpoint 编码器={ck['encoder']} 与 --encoder={args.encoder} 不符")
-            if ck.get("hidden") and int(ck["hidden"]) != args.hidden:
-                raise SystemExit(f"checkpoint hidden={ck['hidden']} 与 --hidden={args.hidden} 不符")
-            want = [adapter.dec_dim, adapter.conf_dim, adapter.cand_dim]
-            if ck.get("dims") and list(ck["dims"]) != want:
-                raise SystemExit(f"checkpoint dims={ck['dims']} 与当前特征器 {want} 不符")
-            print(f"[bc] {args.bc_ckpt}: encoder={ck.get('encoder')} hidden={ck.get('hidden')} "
-                  f"use_prior={ck.get('use_prior')} holdout_macro={ck.get('holdout_macro')}")
-            bc_state = ck["model"]
-        else:
-            bc_state = ck
-        if not args.no_warm_start:
-            policy.load_bc_state_dict(bc_state)                 # 选路分支整体热启动(§10-A)
+        if not (isinstance(ck, dict) and "state_dict" in ck):
+            raise SystemExit(f"{args.bc_ckpt} 不是 full-panel BC(应含 state_dict/encoder/dims, "
+                             f"scripts/31 产出)。旧的 M11 PointerBC 热启动已作废(D59)。")
+        if ck.get("encoder") and ck["encoder"] != args.encoder:
+            raise SystemExit(f"checkpoint 编码器={ck['encoder']} 与 --encoder={args.encoder} 不符")
+        if ck.get("dims") and list(ck["dims"]) != want_dims:
+            raise SystemExit(f"checkpoint dims={ck['dims']} 与当前特征器 {want_dims} 不符")
+        print(f"[bc] {args.bc_ckpt}: encoder={ck.get('encoder')} dims={ck.get('dims')}")
+        policy.load_state_dict(ck["state_dict"])               # **整网**热启动(strict, 维度不符即报错)
     else:
-        print("[warn] 未给 --bc-ckpt: KL 参照与热启动都是随机网络, 仅供跑通, 结果无意义")
-    bc_ref = frozen_bc(args.encoder, adapter.dec_dim, adapter.conf_dim, adapter.cand_dim,
-                       args.hidden, bc_state, dev)
+        print("[warn] 未做热启动(无 --bc-ckpt 或 --no-warm-start): 随机网络起步, 仅供跑通, 结果无意义")
+
+    # ---- 选路 KL 的规则参照(D59, 取代冻结神经 BC) ----
+    # schedule=计划路(dec.logged)+lookup 兜底(RR faithful); lookup=只最频路; none=关。lookup 表 held-out
+    # 只用 train 段拟合(D43)。ref_builder 逐决策把参照目标挂到 enc, 只在 rollout 采集时用(评估不需要)。
+    ref_builder = None
+    if args.kl_anchor != "none" and args.kl_beta > 0:
+        _top_ref = lookup_table("train")
+        ref_builder = make_route_reference(_top_ref, mode=args.kl_anchor)
+    print(f"[kl] anchor={args.kl_anchor} beta={args.kl_beta} kind_anchor_beta={args.kind_anchor_beta}")
 
     cfg = PPOConfig(lr=args.lr, lam=args.lam, half_life_s=args.half_life, kl_beta=args.kl_beta,
                     minibatch=args.minibatch, update_epochs=args.update_epochs,
@@ -165,7 +180,7 @@ def main() -> None:
     roll_dev = dev if args.rollout_device == "same" else torch.device(args.rollout_device)
     roll_gen = gen if roll_dev == dev else torch.Generator(device=roll_dev).manual_seed(args.seed)
     driver = TorchPanelDriver(policy, roll_dev, generator=roll_gen, ret_norm=ret_norm)
-    rcfg = RewardConfig()
+    rcfg = RewardConfig()          # reward_mode 默认 = per_train(D58): 每完成车终局结算, RR 对齐
 
     # ---- 固定评估集(同窗口/同注入种子, 跨 iteration 与跨策略完全可比) + 基线参照线 ----
     # **D28: 一律真实历史, 不注入合成扰动**(旧代码用注入种子 0/1, 与 M10_DESIGN §4.4 的设计
@@ -174,7 +189,8 @@ def main() -> None:
     ev_wins = operating_days("val")[:args.eval_days]
     eval_eps = [(str(w["start"])[:16], (lambda w=w: build_day_trains(w)), day_horizon(w))
                 for w in ev_wins]
-    env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg)
+    env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg,
+                                             proactive=True, reserve_window=args.reserve_window)
     print(f"[eval] 固定集 = {len(eval_eps)} 个 val 运营日(**真实历史, 不注入**, D28)"
           f" | 训练 {len(windows)} 个 {args.split} 运营日")
     print(f"[warmup] 前 {args.critic_warmup_iters} 轮只训 critic(行首标 *), 策略冻结; "
@@ -212,16 +228,49 @@ def main() -> None:
               f"| reward {b['eval_episode_reward']:>9.1f} "
               f"| WAIT {b['eval_frac_wait']:.0%}/set {b['eval_frac_set']:.0%}")
 
-    # **每一版都留下来**(用户 2026-07-31 要求): 文件名带时间戳, 不再覆盖上一轮。
-    run_id = (f"ppo_{args.encoder}_beta{args.kl_beta}_seed{args.seed}"
-              f"_{time.strftime('%Y%m%d-%H%M%S')}")
-    print(f"[run] {run_id}")
+    # run_id: 给 --run-tag 用稳定名(续训/矩阵幂等), 否则带时间戳(每版留档, 用户 2026-07-31 要求)。
+    run_id = args.run_tag or (f"ppo_{args.encoder}_beta{args.kl_beta}_seed{args.seed}"
+                              f"_{time.strftime('%Y%m%d-%H%M%S')}")
+    last_ck = config.ARTIFACTS_REPORTS / f"{run_id}_last.pt"
     history, evals = [], []
     best = {"reward": float("-inf"), "iter": -1}
     since_best = 0
+    start_iter = 0
+    # ---- 断点续训(D60): 从 <run-tag>_last.pt 恢复全状态 ----
+    if args.resume:
+        if not args.run_tag:
+            raise SystemExit("--resume 需要 --run-tag(稳定名)才能定位 _last.pt")
+        if last_ck.exists():
+            st = torch.load(last_ck, map_location=dev, weights_only=False)
+            policy.load_state_dict(st["model"])
+            opt.load_state_dict(st["opt"])
+            if ret_norm is not None and st.get("ret_norm"):
+                ret_norm.load_state_dict(st["ret_norm"])
+            start_iter = int(st["next_iter"]); best = st["best"]; since_best = st["since_best"]
+            history = st.get("history", []); evals = st.get("evals", [])
+            total_steps_resumed = int(st.get("total_steps", 0))
+            try:
+                rng.bit_generator.state = st["np_rng"]; torch.set_rng_state(st["torch_rng"])
+            except Exception:
+                pass
+            print(f"[resume] {last_ck.name}: 从 it{start_iter} 续训(best it{best['iter']} "
+                  f"reward {best['reward']:.1f}, since_best {since_best})")
+        else:
+            print(f"[resume] 无 {last_ck.name}, 从头开始")
+    print(f"[run] {run_id}")
+
+    def save_last(next_iter):                    # 周期全状态存档(续训用)
+        torch.save({"model": {k: v.detach().to("cpu") for k, v in policy.state_dict().items()},
+                    "opt": opt.state_dict(),
+                    "ret_norm": (ret_norm.state_dict() if ret_norm else None),
+                    "next_iter": next_iter, "best": best, "since_best": since_best,
+                    "history": history, "evals": evals, "total_steps": total_steps,
+                    "np_rng": rng.bit_generator.state, "torch_rng": torch.get_rng_state(),
+                    "args": vars(args), "run_id": run_id}, last_ck)
+
     t0 = time.time()
-    total_steps = 0
-    for it in range(args.iters):
+    total_steps = int(locals().get("total_steps_resumed", 0))
+    for it in range(start_iter, args.iters):
         def episode_stream():
             while True:
                 w = windows[int(rng.integers(len(windows)))]
@@ -233,7 +282,8 @@ def main() -> None:
             policy.to(roll_dev)                       # 权重搬到 rollout 设备(小模型, 开销可忽略)
         transitions, ep_metrics = collect_rollout(
             env_factory, adapter, as_factory(driver), episode_stream(),
-            target_steps=args.steps_per_iter, max_decisions=args.max_decisions)
+            target_steps=args.steps_per_iter, max_decisions=args.max_decisions,
+            ref_builder=ref_builder)          # D59: 采集时挂选路 KL 的规则参照(schedule/lookup)
         if roll_dev != dev:
             policy.to(dev)                            # 更新在训练设备上做
         roll_s = time.time() - t_roll
@@ -244,7 +294,7 @@ def main() -> None:
             frac = it / max(args.iters - 1, 1)
             for gp in opt.param_groups:
                 gp["lr"] = args.lr * (1.0 - frac * (1.0 - args.lr_final_frac))
-        stats = ppo_update(policy, bc_ref, opt,
+        stats = ppo_update(policy, opt,
                            prepare_batch(transitions, cfg, ret_norm=ret_norm), cfg, dev,
                            value_only=warming)
         upd_s = time.time() - t_upd
@@ -258,7 +308,7 @@ def main() -> None:
                "ret_std": (ret_norm.std if ret_norm else 1.0)}
         print(f"it {it:>3}{'*' if warming else ' '}| steps {row['steps']:>5} ({row['episodes']} eps) "
               f"| **完成率 {row['train_completion_mean']:.3f} 延误 {row['train_delay_mean']:>9.0f} "
-              f"reward {row['train_reward_mean']:>8.1f}** | EV {row['explained_variance']:>5.3f} | KL {row['kl_to_bc']:.4f} "
+              f"reward {row['train_reward_mean']:>8.1f}** | EV {row['explained_variance']:>5.3f} | 选路KL {row['routing_kl']:.4f} "
               f"| 锚 {row.get('kind_anchor_kl', 0):.3f} "
               f"| ent {row['entropy']:.3f} | aKL {row.get('approx_kl', 0):.3f} "
               f"| 早停 {row.get('kl_stop_rate', 0):.0%}"
@@ -295,6 +345,7 @@ def main() -> None:
                     print(f"        早停: 连续 {since_best} 次评估未创新高 "
                           f"(最佳 it{best['iter']} reward {best['reward']:.1f})")
                     history.append(row)
+                    save_last(args.iters)        # 标记已完成(next_iter=iters → 续跑不再重训)
                     break
             print(f"    >>> EVAL it {it}: completion {ev['eval_completion_rate']:.3f} "
                   f"| delay {ev['eval_weighted_secondary_delay_s']:>9.0f} "
@@ -307,6 +358,7 @@ def main() -> None:
                   f"| (人类 {baselines['signaller_replay']['eval_episode_reward']:.1f} / "
                   f"有路就办 {baselines['greedy_set']['eval_episode_reward']:.1f} / "
                   f"随机 {baselines['random_legal']['eval_episode_reward']:.1f})")
+            save_last(it + 1)          # D60: 每 eval 周期存全状态 → 12h 被杀后可续训
         history.append(row)
     print(f"\n总计 {total_steps} 步 / {time.time()-t0:.0f}s")
     if best["iter"] >= 0:
