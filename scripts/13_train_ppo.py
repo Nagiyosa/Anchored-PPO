@@ -122,6 +122,19 @@ def main() -> None:
                          "规则),(val, eval_days, reserve_window)相同即可跨 run 复用 → 省每 run ~3min 启动")
     ap.add_argument("--baselines-only", action="store_true",
                     help="只算并缓存 baseline 参照线然后退出(不热启动/不体检/不训练)。矩阵开跑前预热缓存用")
+    # ---- curriculum(由易到难, 累加式; 只改'喂哪些天', 不动环境/奖励/网络)----
+    ap.add_argument("--curriculum", action="store_true",
+                    help="开启课程学习: 按每天车流量由易到难、累加式喂 train 日(档满/达标才升档)")
+    ap.add_argument("--curriculum-tiers", default="185,286,300,999999",
+                    help="各档**车数上限**(累加): 默认 ≤185/≤286/≤300/全部 = 9/33/48/64 天")
+    ap.add_argument("--promote-at", type=float, default=0.9,
+                    help="当前档 train 完成率≥此值就升档")
+    ap.add_argument("--tier-max-iters", type=int, default=12,
+                    help="每档最多训多少'评估周期'没达标也升档(兜底, 免卡死)")
+    ap.add_argument("--train-eval-days", type=int, default=6,
+                    help="每次评估时在**当前档**抽几天算 train 完成率(升档判据 + train 曲线)")
+    ap.add_argument("--final-test", action="store_true",
+                    help="**训练结束后**用 best 权重在 test 段评**一次**(D43: test 全程封存, 只在最后碰一次)")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
@@ -276,6 +289,7 @@ def main() -> None:
             start_iter = int(st["next_iter"]); best = st["best"]; since_best = st["since_best"]
             history = st.get("history", []); evals = st.get("evals", [])
             total_steps_resumed = int(st.get("total_steps", 0))
+            cur_tier_resumed = int(st.get("cur_tier", 0)); tier_iter_resumed = int(st.get("tier_iter", 0))
             try:
                 rng.bit_generator.state = st["np_rng"]; torch.set_rng_state(st["torch_rng"])
             except Exception:
@@ -292,15 +306,40 @@ def main() -> None:
                     "ret_norm": (ret_norm.state_dict() if ret_norm else None),
                     "next_iter": next_iter, "best": best, "since_best": since_best,
                     "history": history, "evals": evals, "total_steps": total_steps,
+                    "cur_tier": cur_tier, "tier_iter": tier_iter,        # curriculum 续训状态
                     "np_rng": rng.bit_generator.state, "torch_rng": torch.get_rng_state(),
                     "args": vars(args), "run_id": run_id}, last_ck)
+
+    # ---- curriculum(由易到难, 累加式): 只改'喂哪些天', 不动环境/奖励/网络 ----
+    def _sample_eps(pool_days, k):
+        """从 pool 里确定性均匀取最多 k 天, 做 train 完成率(升档判据 + train 曲线)。"""
+        if not pool_days:
+            return []
+        step = max(1, len(pool_days) // max(k, 1))
+        picks = pool_days[::step][:k]
+        return [(str(w["start"])[:16], (lambda w=w: build_day_trains(w)), day_horizon(w)) for w in picks]
+
+    if args.curriculum:
+        tier_thr = [int(x) for x in args.curriculum_tiers.split(",")]
+        _dc = sorted(((w, len(build_day_trains(w))) for w in windows), key=lambda x: x[1])
+        def _pool_for(k):
+            return [w for (w, c) in _dc if c <= tier_thr[min(k, len(tier_thr) - 1)]]
+        cur_tier = int(locals().get("cur_tier_resumed", 0))
+        tier_iter = int(locals().get("tier_iter_resumed", 0))
+        pool = _pool_for(cur_tier)
+        print(f"[curriculum] 起始 档{cur_tier+1} ≤{tier_thr[cur_tier]}车 → {len(pool)} 天; "
+              f"升档@train完成率≥{args.promote_at} 或满 {args.tier_max_iters} 次评估(累加式)")
+    else:
+        tier_thr = None; cur_tier = 0; tier_iter = 0
+        pool = windows
+    train_eval_eps = _sample_eps(pool, args.train_eval_days)
 
     t0 = time.time()
     total_steps = int(locals().get("total_steps_resumed", 0))
     for it in range(start_iter, args.iters):
         def episode_stream():
             while True:
-                w = windows[int(rng.integers(len(windows)))]
+                w = pool[int(rng.integers(len(pool)))]           # curriculum: 从当前档池子抽
                 yield (str(w["start"])[:16],
                        (lambda w=w: build_day_trains(w)),      # D28: 真实历史, 不注入
                        day_horizon(w))
@@ -333,7 +372,8 @@ def main() -> None:
                "steps_per_s": len(transitions) / max(roll_s, 1e-9),
                "ret_mean": (ret_norm.mean if ret_norm else 0.0),
                "ret_std": (ret_norm.std if ret_norm else 1.0)}
-        print(f"it {it:>3}{'*' if warming else ' '}| steps {row['steps']:>5} ({row['episodes']} eps) "
+        row["tier"] = cur_tier
+        print(f"it {it:>3}{'*' if warming else ' '}| 档{cur_tier+1} | steps {row['steps']:>5} ({row['episodes']} eps) "
               f"| **完成率 {row['train_completion_mean']:.3f} 延误 {row['train_delay_mean']:>9.0f} "
               f"reward {row['train_reward_mean']:>8.1f}** | EV {row['explained_variance']:>5.3f} | 选路KL {row['routing_kl']:.4f} "
               f"| 锚 {row.get('kind_anchor_kl', 0):.3f} "
@@ -346,13 +386,19 @@ def main() -> None:
         if args.eval_every and ((it + 1) % args.eval_every == 0 or it == args.iters - 1):
             if roll_dev != dev:
                 policy.to(roll_dev)
-            ev = evaluate_policy(env_factory, adapter,
-                                 as_factory(TorchPanelDriver(policy, roll_dev, greedy=True,
-                                                             ret_norm=ret_norm)), eval_eps)
+            greedy_fac = as_factory(TorchPanelDriver(policy, roll_dev, greedy=True, ret_norm=ret_norm))
+            ev = evaluate_policy(env_factory, adapter, greedy_fac, eval_eps)          # val(固定 11 日)
+            tev = (evaluate_policy(env_factory, adapter, greedy_fac, train_eval_eps)  # train(当前档抽样)
+                   if train_eval_eps else {})
             if roll_dev != dev:
                 policy.to(dev)
-            ev.pop("eval_episodes", None)
-            ev["iter"] = it
+            ev.pop("eval_episodes", None); tev.pop("eval_episodes", None)
+            ev["iter"] = it; ev["tier"] = cur_tier
+            # **point4: train(greedy, 当前档) 与 val 两套都记录**(之前只记 val)
+            _tc = tev.get("eval_completion_rate")
+            ev["train_completion"] = _tc
+            ev["train_episode_reward"] = tev.get("eval_episode_reward")
+            ev["train_weighted_secondary_delay_s"] = tev.get("eval_weighted_secondary_delay_s")
             evals.append(ev)
             if ev["eval_episode_reward"] > best["reward"]:
                 best = {"reward": ev["eval_episode_reward"], "iter": it,
@@ -368,23 +414,32 @@ def main() -> None:
                 since_best = 0
             else:
                 since_best += 1
-                if args.early_stop_patience and since_best >= args.early_stop_patience:
-                    print(f"        早停: 连续 {since_best} 次评估未创新高 "
-                          f"(最佳 it{best['iter']} reward {best['reward']:.1f})")
-                    history.append(row)
-                    save_last(args.iters)        # 标记已完成(next_iter=iters → 续跑不再重训)
-                    break
-            print(f"    >>> EVAL it {it}: completion {ev['eval_completion_rate']:.3f} "
-                  f"| delay {ev['eval_weighted_secondary_delay_s']:>9.0f} "
-                  f"| reward {ev['eval_episode_reward']:>9.1f} "
-                  f"| WAIT {ev['eval_frac_wait']:.0%}/set {ev['eval_frac_set']:.0%}"
-                  f"/cancel {ev['eval_frac_cancel']:.0%} | 死锁 {ev['eval_deadlocks']} "
-                  f"|| 靶子 lookup: delay {baselines['lookup_most_frequent']['eval_weighted_secondary_delay_s']:>9.0f} "
-                  f"reward {baselines['lookup_most_frequent']['eval_episode_reward']:.1f}  "
+            print(f"    >>> EVAL it {it} 档{cur_tier+1}: "
+                  f"train完成率 {(_tc if _tc is not None else float('nan')):.3f} | "
+                  f"val完成率 {ev['eval_completion_rate']:.3f} | val_delay {ev['eval_weighted_secondary_delay_s']:>9.0f} "
+                  f"| val_reward {ev['eval_episode_reward']:>9.1f} "
+                  f"| WAIT {ev['eval_frac_wait']:.0%}/set {ev['eval_frac_set']:.0%}/cancel {ev['eval_frac_cancel']:.0%} "
+                  f"| 死锁 {ev['eval_deadlocks']} "
+                  f"|| 靶子 lookup reward {baselines['lookup_most_frequent']['eval_episode_reward']:.1f} "
                   f"{'✅压过' if ev['eval_weighted_secondary_delay_s'] < baselines['lookup_most_frequent']['eval_weighted_secondary_delay_s'] else '❌未过'} "
-                  f"| (人类 {baselines['signaller_replay']['eval_episode_reward']:.1f} / "
-                  f"有路就办 {baselines['greedy_set']['eval_episode_reward']:.1f} / "
-                  f"随机 {baselines['random_legal']['eval_episode_reward']:.1f})")
+                  f"| 人类 {baselines['signaller_replay']['eval_episode_reward']:.1f}")
+            # ---- 升档(累加式): 当前档 train 完成率达标 或 到 cap → 扩池(最终档不再升)----
+            at_final_tier = (not args.curriculum) or (cur_tier >= len(tier_thr) - 1)
+            if args.curriculum and not at_final_tier:
+                tier_iter += 1
+                if (_tc is not None and _tc >= args.promote_at) or tier_iter >= args.tier_max_iters:
+                    cur_tier += 1; tier_iter = 0
+                    pool = _pool_for(cur_tier); train_eval_eps = _sample_eps(pool, args.train_eval_days)
+                    at_final_tier = cur_tier >= len(tier_thr) - 1
+                    print(f"        ⏫ 升档 → 档{cur_tier+1} ≤{tier_thr[cur_tier]}车 → {len(pool)} 天"
+                          + ("(最终档/全高峰)" if at_final_tier else ""))
+            # early-stop **只在最终档生效**: 课程中途 val 会平台期(还没练到难日), 不能误判为收敛
+            if at_final_tier and args.early_stop_patience and since_best >= args.early_stop_patience:
+                print(f"        早停: 最终档连续 {since_best} 次评估未创新高 "
+                      f"(最佳 it{best['iter']} reward {best['reward']:.1f})")
+                history.append(row)
+                save_last(args.iters)        # 标记已完成(next_iter=iters → 续跑不再重训)
+                break
             save_last(it + 1)          # D60: 每 eval 周期存全状态 → 12h 被杀后可续训
         history.append(row)
     print(f"\n总计 {total_steps} 步 / {time.time()-t0:.0f}s")
@@ -397,11 +452,36 @@ def main() -> None:
               f"有路就办 {b['greedy_set']['eval_episode_reward']:.1f} / "
               f"随机 {b['random_legal']['eval_episode_reward']:.1f}")
 
+    # ---- final-test(D43: test 全程封存, 只在最后用 best 权重碰一次)----
+    final_test_result = None
+    if args.final_test:
+        best_ck = config.ARTIFACTS_REPORTS / f"{run_id}_best.pt"
+        if best_ck.exists():
+            st = torch.load(best_ck, map_location=dev, weights_only=False)
+            policy.load_state_dict(st["model"])
+            if ret_norm is not None and st.get("ret_norm"):
+                ret_norm.load_state_dict(st["ret_norm"])
+            test_eps = [(str(w["start"])[:16], (lambda w=w: build_day_trains(w)), day_horizon(w))
+                        for w in operating_days("test")]
+            if roll_dev != dev:
+                policy.to(roll_dev)
+            tst = evaluate_policy(env_factory, adapter,
+                                  as_factory(TorchPanelDriver(policy, roll_dev, greedy=True,
+                                                              ret_norm=ret_norm)), test_eps)
+            if roll_dev != dev:
+                policy.to(dev)
+            tst.pop("eval_episodes", None)
+            final_test_result = tst
+            print(f"[final-test] (D43 一次性) test {len(test_eps)} 日: completion {tst['eval_completion_rate']:.3f} "
+                  f"| delay {tst['eval_weighted_secondary_delay_s']:.0f} | reward {tst['eval_episode_reward']:.1f}")
+        else:
+            print("[final-test] 无 best 权重, 跳过")
+
     out = Path(args.out) if args.out else (config.ARTIFACTS_REPORTS / f"{run_id}.json")
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"args": vars(args), "device": str(dev),
                                "elapsed_s": time.time() - t0, "total_steps": total_steps,
-                               "run_id": run_id, "best": best,
+                               "run_id": run_id, "best": best, "final_test": final_test_result,
                                "baselines": baselines, "evals": evals, "history": history},
                               indent=2, default=str), encoding="utf-8")
     print(f"\nwrote {out}")

@@ -64,6 +64,28 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   `chosen_idx` land within the panel `opt_mask`); the torch forward/training runs on the server (torch can't be
   installed in the sandbox — expected, per the local-smoke / server-training discipline). Server commands are in
   HANDOFF (full dataset `gen all` + `combine`; BC `scripts/31 deepsets 30`; eval `scripts/29 val`).
+### D63 — Curriculum (easy→hard by daily traffic) + single-seed first + train/val both recorded (2026-08-08, user)
+- **Response to the entry-admission finding**: the skill to learn = **when/in what order to admit trains** (RR core,
+  D47). On busy days the policy jams the entry immediately and never experiences a full successful episode → can't
+  learn. **Curriculum** starts on light days (policy CAN complete → learns admit→route→complete + a critic not
+  drowned in strand-penalties), then ramps to peaks. RR = levels; real dispatchers train quiet→peak.
+- **Design (agreed)**: difficulty axis = **daily train count** (our train days: 15–348 trains, signaller 1.0 on all).
+  **Cumulative** tiers (keep easy days): **≤185 / ≤286 / ≤300 / all = 9 / 33 / 48 / 64 days** (tier-1 narrowed to
+  ≤185 per user). **Promotion** when current-tier train-completion ≥ 0.9 **or** tier hits a max-eval cap; **final
+  tier = all peaks** (respects D27 full days / D28 real history / D43 held-out). **Env/reward/network untouched —
+  only which days are fed.** Time-series safe: we learn a control policy (each day = independent level, order carries
+  no info), and the anti-leakage boundary (train<val<test, D43) is not touched; traffic ≠ date in our data.
+- **This run: single seed** (`cur_gnn_schedule_s0`, gnn/schedule/β0.1/wide) — iterate one config to ~100% before
+  any matrix/ablation.
+- **Implemented in `scripts/13`** (completed the partial scaffolding): `--curriculum --curriculum-tiers
+  --promote-at --tier-max-iters --train-eval-days --final-test`; per-eval **greedy train-completion on the current
+  tier** (promotion signal + train curve); **train AND val both recorded** each eval (point 4, was val-only);
+  early-stop **only on the final tier** (mid-curriculum val plateaus are expected, not convergence); resume saves/
+  restores `cur_tier/tier_iter`; `--final-test` runs best on test once (D43). Notebook `rl_ppo_server.ipynb`:
+  single-seed curriculum run cell (live progress + resume) + a train/val curve cell; matrix demoted to optional.
+- **Verified (torch-free)**: py_compile; curriculum controller logic (tiering 9/33/48/64, cumulative, promotion →
+  full peaks). Torch training on server.
+
 ### Finding (2026-08-08, user-directed diagnostic) — low completion = ENTRY-ADMISSION starvation, NOT in-region silting
 - Torch-free diagnostics on the **proactive** engine (2 val days). Of incomplete *completable* trains, **96–98%
   NEVER ENTERED the region** (queued at the entry boundary); only 2–4% entered then got stuck; **0 deadlocks,
