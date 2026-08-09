@@ -118,9 +118,11 @@ def main() -> None:
     ap.add_argument("--no-bounded-fail", action="store_true",
                     help="消融: 关掉有界搁浅罚, 回退 D46 到地平线(无界)")
     ap.add_argument("--gameover-entry-pileup", action="store_true",
-                    help="D65(d): 入区堆积 set_pending>K 判负(修信用分配, 逼出入区放行时机)")
+                    help="D65(d): 入区堆积 set_pending>K 判负。⚠️ D66 实验证明它抹平梯度, 默认关、勿开")
     ap.add_argument("--entry-pileup-K", type=int, default=6,
                     help="D65(d): 入区堆积判负阈值(信号员全局峰值实测=3, 默认 6)")
+    ap.add_argument("--control-classes", default="12",
+                    help="D67①: 受控车次类别(如 '12'=只控客运, 论文口径; 'all'=全控)。其余背景化自动驾驶")
     ap.add_argument("--run-tag", default=None,
                     help="稳定 run_id(无时间戳): 断点续训/矩阵幂等续跑用。给了它, checkpoint/输出用该名; "
                          "不给则沿用带时间戳的旧行为(每版留档)")
@@ -216,10 +218,12 @@ def main() -> None:
     ev_wins = operating_days("val")[:args.eval_days]
     eval_eps = [(str(w["start"])[:16], (lambda w=w: build_day_trains(w)), day_horizon(w))
                 for w in ev_wins]
+    _cc = None if args.control_classes in ("all", "") else set(args.control_classes)   # D67①
     env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg,
                                              proactive=True, reserve_window=args.reserve_window,
                                              gameover_entry_pileup=args.gameover_entry_pileup,
-                                             entry_pileup_K=args.entry_pileup_K)
+                                             entry_pileup_K=args.entry_pileup_K,
+                                             control_classes=_cc)
     print(f"[eval] 固定集 = {len(eval_eps)} 个 val 运营日(**真实历史, 不注入**, D28)"
           f" | 训练 {len(windows)} 个 {args.split} 运营日")
     print(f"[warmup] 前 {args.critic_warmup_iters} 轮只训 critic(行首标 *), 策略冻结; "
@@ -243,11 +247,13 @@ def main() -> None:
 
     # ---- baseline 参照线: 策略无关 → 按 (val, eval_days, reserve_window) 缓存, 跨 run 复用(省 ~3min/run) ----
     # 只影响**对照打印/写入的参照值**, 与 policy/optimizer/reward/训练**完全无关**(不碰主模型)。
-    # D65: key 必须含 game-over(否则 go/no-go 共用 → greedy 值错)+ 升 v2 使旧 3000-cap 时代的陈旧缓存
+    # D65: key 必须含 game-over(否则 go/no-go 共用 → greedy 值错)+ 版本号使旧 env 时代的陈旧缓存
     # (signaller=0.964 幽灵)自动失效。此前 key 只有 (window, eval_days) → 旧缓存跨版本复用是 0.964 反复出现的根因。
+    # D67: 再加控制范围 + 升 v3(背景车/tick/入区可撤 改变所有基线值)。
     _go_tag = f"_go{args.entry_pileup_K}" if args.gameover_entry_pileup else ""
+    _cc_tag = f"_c{args.control_classes}" if _cc is not None else ""
     _blcache = (config.ARTIFACTS_REPORTS / "rl_baseline_cache"
-                / f"val_ed{len(ev_wins)}_{args.reserve_window}{_go_tag}_v2.json")
+                / f"val_ed{len(ev_wins)}_{args.reserve_window}{_go_tag}{_cc_tag}_v3.json")
     _bl_tags = ("signaller_replay", "lookup_most_frequent", "ars_proxy", "fcfs", "fsfs",
                 "greedy_set", "random_legal")
     baselines = None

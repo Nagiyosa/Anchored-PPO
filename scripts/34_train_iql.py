@@ -54,8 +54,10 @@ def main() -> None:
     ap.add_argument("--w-max", type=float, default=100.0, help="AWR 权重上限")
     ap.add_argument("--reserve-window", default="wide", choices=["wide", "narrow"])
     ap.add_argument("--gameover-entry-pileup", action="store_true",
-                    help="D65(d): 评估env入区堆积 set_pending>K 判负(须与离线数据生成口径一致)")
+                    help="D65(d): 评估env入区堆积判负。⚠️ D66 证明抹平梯度, 默认关、勿开")
     ap.add_argument("--entry-pileup-K", type=int, default=6, help="D65(d): 判负阈值(默认 6)")
+    ap.add_argument("--control-classes", default="12",
+                    help="D67①: 受控车次类别('12'=只控客运; 'all'=全控)。须与离线数据生成口径一致")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--run-tag", default=None)
     ap.add_argument("--resume", action="store_true")
@@ -102,10 +104,12 @@ def main() -> None:
     rcfg = RewardConfig()          # bounded_fail 默认 True(D64); 评估指标与 reward 无关
     ev_wins = operating_days("val")[:args.eval_days]
     eval_eps = [(str(w["start"])[:16], (lambda w=w: build_day_trains(w)), day_horizon(w)) for w in ev_wins]
+    _cc = None if args.control_classes in ("all", "") else set(args.control_classes)   # D67①
     env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg,
                                              proactive=True, reserve_window=args.reserve_window,
                                              gameover_entry_pileup=args.gameover_entry_pileup,
-                                             entry_pileup_K=args.entry_pileup_K)
+                                             entry_pileup_K=args.entry_pileup_K,
+                                             control_classes=_cc)
     top = lookup_table("train")
     baselines = {}
     for tag, fac in (("signaller_replay", signaller_replay_factory),

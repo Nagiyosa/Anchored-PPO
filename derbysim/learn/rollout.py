@@ -42,7 +42,9 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
     次生延误**只报相对量时才有意义**(M9 自由时序 + overlap 使绝对量膨胀 ~4×, M10 §5),
     这里记绝对值仅供**同环境内**跨策略相减。
     """
-    trains = list(engine.trains.values())
+    all_trains = list(engine.trains.values())
+    # D67①: 背景车(幽灵/控制范围外, 自动驾驶)不进任何计分口径 —— 只评受控车
+    trains = [t for t in all_trains if not getattr(t, "background", False)]
     able = [t for t in trains if can_complete(t)]        # 有可观测目标的车(分母, 含终到车 D29)
     reached = [t for t in trains if has_reached_goal(t)]  # 出区 或 终到目标台 dwell 完成
     stops = [t for t in trains if (t.stop_pids or t.booked_platform is not None)]
@@ -55,6 +57,7 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
                      if hasattr(engine, "state_invariant_violations") else [])
     return {
         "n_trains": len(trains),
+        "n_background": len(all_trains) - len(trains),    # D67①: 背景车数(自动驾驶, 不计分)
         "n_completable": len(able),                       # 分母: 只排除"无可观测目标"的车(D29)
         "n_impossible": len(trains) - len(able),
         "n_reached_exit": len(reached),

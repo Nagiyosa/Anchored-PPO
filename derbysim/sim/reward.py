@@ -71,6 +71,8 @@ def realized_weighted_delay(engine, cfg: RewardConfig, horizon: float | None = N
     total = 0.0
     hold = bool(getattr(cfg, "count_awaiting_hold", True))
     for t in engine.trains.values():
+        if getattr(t, "background", False):          # D67①: 背景车(自动驾驶)不进延误账本
+            continue
         if hold:
             # **单一计时器**: 车"走不动"的总时长(从停下到真正驶入下一个 TC)。它已经覆盖了
             # "排队等锁"那段, 故**不再叠加** wait_time —— 否则重复计; 也不受 set/cancel 影响。
@@ -190,12 +192,16 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
                  reward_config: RewardConfig | None = None, overlap_depth: int = 1,
                  proactive: bool = False, reserve_window: str = "narrow",
-                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6) -> None:
+                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6,
+                 tick_s: float = 60.0, control_classes=None,
+                 background_ghosts: bool = True) -> None:
         super().__init__(net, params, plat_tc_to_pid, dwell_by_platform,
                          overlap_depth=overlap_depth, proactive=proactive,
                          reserve_window=reserve_window,
                          gameover_entry_pileup=gameover_entry_pileup,
-                         entry_pileup_K=entry_pileup_K)
+                         entry_pileup_K=entry_pileup_K,
+                         tick_s=tick_s, control_classes=control_classes,
+                         background_ghosts=background_ghosts)
         self.cfg = reward_config or RewardConfig()
         self.horizon: float | None = None          # 由 reset(trains, horizon=...) 设定
         self._last_realized = 0.0
@@ -205,6 +211,7 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
     def reset(self, trains, horizon: float | None = None):
         self.horizon = horizon
         obs, info = super().reset(trains)
+        self.engine.horizon = horizon              # D67③: tick 闹钟只到 horizon(躺平者到点终局结算)
         self._last_realized = realized_weighted_delay(self.engine, self.cfg)
         self._was_deadlocked = self.engine.deadlocked
         self._finalized = set()
@@ -240,8 +247,8 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
             self._was_deadlocked = True
             r -= self.cfg.p_deadlock
         for t in self.engine.trains.values():                # 新完成的车逐车结账
-            if t.train_id in self._finalized:
-                continue
+            if t.train_id in self._finalized or getattr(t, "background", False):
+                continue                                     # D67①: 背景车不进奖励账本(功过都不算)
             if t.done and has_reached_goal(t):
                 r += (self.cfg.base_completion
                       - self.cfg.w_delay * self._train_weighted_delay(t, horizon=None)
@@ -249,7 +256,7 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
                 self._finalized.add(t.train_id)
         if done or newly_deadlocked:                         # 终局: 未完成车结账(不丢车, D46)
             for t in self.engine.trains.values():
-                if t.train_id in self._finalized:
+                if t.train_id in self._finalized or getattr(t, "background", False):
                     continue
                 if can_complete(t) and not has_reached_goal(t):
                     if self.cfg.bounded_fail:                 # D64: RR 式有界固定罚(取代到地平线无界项)

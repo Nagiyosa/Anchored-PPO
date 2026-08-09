@@ -69,6 +69,9 @@ class DynTrain:
     # D57 entry (a)(仅 proactive): 车已到区界、等面板决定"何时放行"(SET 入区路)/ WAIT(边界等、计延误)。
     awaiting_entry: bool = False
     entered: bool = False
+    # D67①: 背景车(无可观测目标的幽灵车 / 控制范围外的车)—— 不上面板, 由 env 照历史
+    # route_chain/req_times 自动驾驶(真实占道的 AI 车, 如 RR); 不进分母、不进奖励账本。
+    background: bool = False
     pos: int = 0
     dwell_idx: int | None = None
     dwell_s: float = 0.0
@@ -100,7 +103,9 @@ class DynamicEngine:
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
                  overlap_depth: int = 1, proactive: bool = False, advance_cfg=None,
                  reserve_window: str = "narrow",
-                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6) -> None:
+                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6,
+                 tick_s: float = 60.0, control_classes=None,
+                 background_ghosts: bool = True) -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
@@ -111,6 +116,18 @@ class DynamicEngine:
         # D57 候选窗口: "narrow"=触发点=141s 标定(复现真人时机, 回放/BC 恒用此); "wide"=前沿一提交即可
         # 预留(=RR 自由, RL 默认)。别限制学习者(RL 宽)、别篡改裁判(回放/BC 窄)。
         self.reserve_window = reserve_window
+        # D67③: 学习者的闹钟。门口有受控车在等时, 每 tick_s 排一个 tick 事件重开面板(仅 wide+proactive
+        # +有 horizon), 使"WAIT"= 最多等 60s 而非"睡到下个事件"(清闲天一跳 6h/队列空散场的修复)。
+        # 60s = 现实时刻表/TRUST 的分钟粒度; 不取 1s: 状态不变时重复问同一问题会稀释学习信号(D50 教训)。
+        self.tick_s = float(tick_s)
+        self.horizon: float | None = None            # 由 RewardedDynamicEnv.reset 注入; tick 只到 horizon
+        self._tick_at: float | None = None
+        # D67①: 背景车口径。background_ghosts=无可观测目标的幽灵车(~9%, 空 exit_group 且非终到)自动
+        # 背景化(它们卡死免罚还堵路 = 对学习者不可赢); control_classes=受控车次类别白名单(None=全部
+        # 可计分车受控; 如 {"1","2"}=只控客运主流, 其余背景化 —— 轻量版, 用户定)。
+        self.background_ghosts = bool(background_ghosts)
+        self.control_classes = (frozenset(str(c) for c in control_classes)
+                                if control_classes else None)
         # D65 (d): 入区堆积 game-over。set_pending(已放行入区、进路被冲突挡住 QUEUED、车未入区)> K 判负。
         # 触发变量只用 set_pending(信号员全局峰值=3), 不含 awaiting(信号员合法攒到 12)。K 默认 6。
         self.gameover_entry_pileup = bool(gameover_entry_pileup)
@@ -303,7 +320,7 @@ class DynamicEngine:
         # 前沿有待决进路、且当前无排队请求在途的车。前沿窗口 = [提前触发点 … deadline]。
         out = []
         for t in self.trains.values():
-            if t.done:
+            if t.done or t.background:               # D67①: 背景车不上面板
                 continue
             if t.awaiting_entry:                    # D57 entry (a): 等"何时放行"决策
                 out.append(t)
@@ -361,12 +378,11 @@ class DynamicEngine:
         """
         out = []
         for t in self.trains.values():
-            if t.pending_request is None or t.done:
+            if t.pending_request is None or t.done or t.background:
                 continue
-            if not t.entered:
-                # The entry route is an automatic infrastructure request
-                # (D14.8), not an agent decision, so it cannot appear as cancel.
-                continue
+            # D67②(取代 D14.8 旧规): 入区 QUEUED **允许撤销**。D57 把入区变成决策后, 撤销侧必须跟上:
+            # 否则放行失误永远无法反悔(实测傻瓜调度员被一个永不落锁的入区请求锁死全场)。撤销后回
+            # awaiting_entry(延误 hold_start 从到达起连续计, 不清零 —— 现实/RR: 改主意免费、等待收费)。
             if (t.pending_request, t.train_id) not in self.res.queue:
                 continue
             if self.res.is_locked(t.pending_request, t.train_id):
@@ -380,7 +396,47 @@ class DynamicEngine:
     def _entry_pileup(self) -> int:
         """D65 (d): 已放行入区但被冲突挡住(pending_request 且未入区)的车数 = 入区堆积触发变量。"""
         return sum(1 for t in self.trains.values()
-                   if t.pending_request is not None and not t.entered and not t.done)
+                   if t.pending_request is not None and not t.entered and not t.done
+                   and not t.background)                     # D67①: 背景车走历史时机, 不计堆积
+
+    def _maybe_tick(self) -> None:
+        """D67③: 学习者的闹钟。有受控车在门口等(awaiting_entry 或入区 pending)且未到 horizon 时,
+        排一个 now+tick_s 的 tick 事件 —— 保证面板每 tick_s 至少开一次(WAIT 不再"睡到下个事件"),
+        且事件队列排空时游戏**不散场**(躺平到 horizon 才终局结算)。仅 proactive+wide(裁判/回放不加戏)。"""
+        if not (self.proactive and self.reserve_window == "wide" and self.horizon is not None):
+            return
+        if self.now >= self.horizon:
+            return
+        if not any((t.awaiting_entry or (t.pending_request is not None and not t.entered))
+                   and not t.done and not t.background for t in self.trains.values()):
+            return
+        if self._tick_at is not None and self._tick_at > self.now:
+            return                                           # 已有未来闹钟, 不重复排
+        due = min(self.now + self.tick_s, self.horizon)
+        self.q.push(due, "tick", {})
+        self._tick_at = due
+
+    def _auto_drive(self, t) -> None:
+        """D67①: 背景车自动驾驶 —— 照历史 route_chain/req_times 逐段办路(req_times 全量 100% 覆盖)。
+        到点未办则请求; 被占(QUEUED)交给 _wake 落锁续办; 下一段到点由 auto_set 事件驱动。"""
+        if t.done or t.pending_request is not None:
+            return
+        i = len(t.actual_chain)
+        if i >= len(t.route_chain):
+            return                                           # 全链已办; 物理走完由目标终止收尾
+        due = float(t.req_times[i]) if i < len(t.req_times) else self.now
+        if due > self.now + 1e-9:
+            self.q.push(due, "auto_set", {"tr": t.train_id})
+            return
+        t.awaiting_decision = False
+        t.awaiting_entry = False
+        if self._request(t, t.route_chain[i]):
+            if not t.entered:
+                t.entered = True
+                self.q.push(self.now, "enter", {"tr": t.train_id, "idx": 0})
+            else:
+                self.q.push(self.now, "try_advance", {"tr": t.train_id, "idx": t.pos})
+            self._auto_drive(t)                              # 下一段可能同刻到点(链长 ≤6, 有守卫不失控)
 
     def _build_options(self, awaiting, cancellable):
         opts = [PanelAction("wait")]
@@ -442,7 +498,10 @@ class DynamicEngine:
                 if t.blocked_since is not None:          # 排队等锁的那段**必须结清**, 不能丢
                     t.wait_time += self.now - t.blocked_since
                     t.blocked_since = None
-                t.awaiting_decision = True               # hold_start **不清**: 车自始至终没动
+                if t.entered:
+                    t.awaiting_decision = True           # hold_start **不清**: 车自始至终没动
+                else:
+                    t.awaiting_entry = True              # D67②: 入区撤销 → 回边界重新等(延误连续计)
                 t.cancel_sig = None
             elif rid is not None and self.res.is_locked(rid, t.train_id):
                 # Queue pumping may have promoted it since the panel snapshot.
@@ -466,6 +525,13 @@ class DynamicEngine:
             t = self.trains.get(ev.data["tr"])
             if t is not None and not t.done:
                 t.set_offer_sig = None
+        elif ev.kind == "auto_set":
+            # D67①: 背景车到点自动办路
+            t = self.trains.get(ev.data["tr"])
+            if t is not None:
+                self._auto_drive(t)
+        elif ev.kind == "tick":
+            self._tick_at = None                     # D67③: 闹钟到点 —— 本切面照常开面板即可
 
     def _drain_slice(self, t_cut):
         """D38 契约①: 弹尽并处理时间戳 == t_cut 的**全部**队列事件后才开面板。
@@ -518,6 +584,12 @@ class DynamicEngine:
         self.trains = {t.train_id: t for t in trains}
         for t in trains:
             t.goal = train_goal(t.route_chain, self.net, t.stop_pids, self.plat_tc_to_pid)
+            if self.proactive:                       # D67①: 入场即定背景/受控(reactive 旧行为不变)
+                ghost = not (getattr(t.goal, "exit_group", None)
+                             or getattr(t.goal, "terminates_at_platform", False))
+                off_scope = (self.control_classes is not None
+                             and str(t.service_class) not in self.control_classes)
+                t.background = (self.background_ghosts and ghost) or off_scope
             self.q.push(t.entry_time, "arrive", {"tr": t.train_id})
         guard = 0
         limit = 500000 + 5000 * len(trains)
@@ -529,6 +601,7 @@ class DynamicEngine:
             # 使在 t_cut 变为 awaiting 的所有车联合可见(②③④); WAIT 后由本循环推进到严格 > t_cut。
             t_cut = self.q._h[0].time
             yield from self._time_slice(t_cut)
+            self._maybe_tick()                       # D67③: 门口有受控车在等 → 排闹钟(队列空也不散场)
 
     def _on_arrive(self, d):
         t = self.trains[d["tr"]]
@@ -537,6 +610,9 @@ class DynamicEngine:
             t.termination_reason = "no_route"
             return
         if self.proactive:
+            if t.background:                         # D67①: 背景车不上面板, 到 req_time 自动入区
+                self._auto_drive(t)
+                return
             # D57 entry (a): 到区界不自动办入区路; 变成"何时放行"的面板决策(选路固定为日志入区路)。
             # 起计 hold_start —— 若被 WAIT 压在边界, 这段等待按 D56 计延误; 立即放行则 _on_enter 结清为 0。
             t.awaiting_entry = True
@@ -624,6 +700,8 @@ class DynamicEngine:
                     self.q.push(self.now, "enter", {"tr": t.train_id, "idx": 0})
                 else:
                     self.q.push(self.now, "try_advance", {"tr": t.train_id, "idx": t.pos})
+                if t.background:                     # D67①: 背景车落锁后续排下一段的 auto_set
+                    self.q.push(self.now, "auto_set", {"tr": t.train_id})
 
     def _on_try_advance(self, d):
         t = self.trains[d["tr"]]
@@ -827,7 +905,9 @@ class DynamicDerbyEnv:
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
                  overlap_depth: int = 1, proactive: bool = False,
                  reserve_window: str = "narrow",
-                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6) -> None:
+                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6,
+                 tick_s: float = 60.0, control_classes=None,
+                 background_ghosts: bool = True) -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
@@ -837,6 +917,9 @@ class DynamicDerbyEnv:
         self.reserve_window = reserve_window       # D57: narrow(回放/BC) | wide(RL 默认=RR)
         self.gameover_entry_pileup = bool(gameover_entry_pileup)   # D65 (d)
         self.entry_pileup_K = int(entry_pileup_K)
+        self.tick_s = float(tick_s)                                # D67③
+        self.control_classes = control_classes                     # D67①
+        self.background_ghosts = bool(background_ghosts)
         self.engine: DynamicEngine | None = None
         self._gen = None
         self._pending: PanelDecision | None = None
@@ -846,7 +929,9 @@ class DynamicDerbyEnv:
                                     self.dwell_by_platform, overlap_depth=self.overlap_depth,
                                     proactive=self.proactive, reserve_window=self.reserve_window,
                                     gameover_entry_pileup=self.gameover_entry_pileup,
-                                    entry_pileup_K=self.entry_pileup_K)
+                                    entry_pileup_K=self.entry_pileup_K,
+                                    tick_s=self.tick_s, control_classes=self.control_classes,
+                                    background_ghosts=self.background_ghosts)
         self._gen = self.engine.run(trains)
         self._pending = next(self._gen, None)
         return self._obs(), self._info()
