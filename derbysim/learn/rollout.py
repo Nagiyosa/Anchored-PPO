@@ -184,7 +184,7 @@ def signaller_replay_factory(env):
 
 
 def collect_rollout(env_factory, adapter, policy_factory, episode_iter, target_steps: int,
-                    max_decisions: int = 3000, ref_builder=None):
+                    max_decisions: int = 20000, ref_builder=None):
     """按**步数预算**收集 rollout(而非固定局数)。
 
     冒烟轮实测每 iter 的步数在 180–4586 之间晃(25×) —— batch 大小随机会让 PPO 本身不稳,
@@ -209,7 +209,7 @@ def collect_rollout(env_factory, adapter, policy_factory, episode_iter, target_s
 
 
 def evaluate_policy(env_factory, adapter, policy_factory, episodes,
-                    max_decisions: int = 3000) -> dict:
+                    max_decisions: int = 20000) -> dict:
     """在**固定** (场景, 注入种子) 上评估 → 跨 iteration 可比的曲线。
 
     训练时每 iter 随机抽场景, 场景间难度差很大 → 训练回报不可比。评估必须固定场景,

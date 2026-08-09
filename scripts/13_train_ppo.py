@@ -106,7 +106,9 @@ def main() -> None:
     ap.add_argument("--hidden", type=int, default=64)
     ap.add_argument("--minibatch", type=int, default=64)
     ap.add_argument("--update-epochs", type=int, default=4)
-    ap.add_argument("--max-decisions", type=int, default=3000)
+    ap.add_argument("--max-decisions", type=int, default=20000,
+                    help="单局决策上限。**3000 太低**: 宽窗每天要 ~3848 个决策, 3000 会截断 episode "
+                         "→ 完成率被低估(旧'宽窗信号员 0.964'就是这个假象)。正常天 ≤3848, 2万足够。")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--bc-ckpt", default=None,
                     help="full-panel BC 权重(scripts/31 产出 {state_dict,encoder,dims}); 首选 gnn")

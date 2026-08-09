@@ -6,6 +6,12 @@ Milestone-based, newest first. Authoritative sources: `PROJECT_BRIEF.md` (decisi
 
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+> ⚠️ **口径更正(2026-08-08,权威,凡冲突以此为准)**:**宽窗信号员回放完成率 = ~1.0**(实测 24 个 train 日
+> 全 1.000 或 0.996;窄窗全 1.000)。历史上任何"wide signaller **0.964** / **0.9988** / 搁浅 89 辆 / 前沿淤积
+> 搁浅 / 宽窗未过正确性门禁"的说法**全部作废**——那是 `evaluate_policy` 的 `max_decisions=3000` **太低**造成的
+> **测量假象**(宽窗每天要 ~3848 个决策,3000 会把 episode 截断、把没跑完的车算成"没完成")。**已把上限提到
+> 20000**(rollout/eval/scripts/13)。**以后凡看到 wide signaller <1.0 的旧口径,一律不信、不引用。**
+
 ---
 
 ## [In progress] Phase 4 (M12): online RL — closed-loop dispatching
@@ -142,7 +148,8 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
   confirm; the rule-baseline evidence is already strong and unanimous.
 
 ### D62 — VOIDED/REVERTED (2026-08-08, user). Full wide+narrow matrix analyzed; the proposed reward+stability "fix" was wrong and deleted.
-- **Analysis kept (35 gnn runs, held-out val)**. Baselines (wide): signaller comp 0.964/WAIT 68%; lookup 0.313;
+- **Analysis kept (35 gnn runs, held-out val)**. Baselines (wide): signaller comp **~1.0** (the old "0.964" was the
+  `max_decisions=3000` truncation artifact, since fixed)/WAIT 68%; lookup 0.313;
   greedy 0.214. **Best RL** (`schedule β0.1 s0`): comp **0.600 @it9**, WAIT **78%** — beats every zero-learning
   baseline and learned RR-style deferral (WAIT 78% ≈ signaller 68%; up from the 0.298 wide warm-start). But peaks
   right after warmup (it9) then degrades (s0: 0.600→0.385 by it39); huge seed variance (s2 oscillates/collapses,

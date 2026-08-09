@@ -25,11 +25,13 @@ from derbysim import config
 
 _NET = _PARAMS = _DWELL = _PTC = _AD = _POLICIES = _DAYS = None
 _OUTDIR: Path | None = None
+_MAXDEC = 20000
 
 
-def _init_worker(split: str, outdir: str) -> None:
+def _init_worker(split: str, outdir: str, maxdec: int) -> None:
     """每个 worker 只加载一次网络/适配器/策略/日历(避免每任务重载)。"""
-    global _NET, _PARAMS, _DWELL, _PTC, _AD, _POLICIES, _DAYS, _OUTDIR
+    global _NET, _PARAMS, _DWELL, _PTC, _AD, _POLICIES, _DAYS, _OUTDIR, _MAXDEC
+    _MAXDEC = int(maxdec)
     from derbysim.learn.features import Featurizer
     from derbysim.learn.panel import PanelAdapter
     from derbysim.learn.baselines import (lookup_table, make_fcfs_policy, make_fsfs_policy,
@@ -62,7 +64,7 @@ def _run_one(policy_name: str, day_idx: int) -> tuple:
         return (f"{policy_name}/{date}", -1)             # 已有 → 跳过(续跑)
     env = RewardedDynamicEnv(_NET, _PARAMS, _PTC, _DWELL, proactive=True, reserve_window="wide")
     res = run_episode(env, _AD, _POLICIES[policy_name](env), build_day_trains(w, inject=False),
-                      max_decisions=300000, horizon=day_horizon(w))
+                      max_decisions=_MAXDEC, horizon=day_horizon(w))    # 上限防病态局(宽窗 D57.1)暴涨
     ep = {"policy": policy_name, "day": date,
           "steps": [{"enc": t.enc, "opt_idx": int(t.option_idx),
                      "reward": float(t.reward), "done": bool(t.done)} for t in res.transitions]}
@@ -77,6 +79,8 @@ def main(argv) -> int:
     split = argv[1] if len(argv) > 1 else "train"
     n_days = int(argv[2]) if len(argv) > 2 else 24
     n_workers = int(argv[3]) if len(argv) > 3 else min(70, os.cpu_count() or 8)
+    maxdec = int(argv[4]) if len(argv) > 4 else 5000      # 单局上限: 信号员≤3848 不受影响; 规则基线 gridlock
+    # 的病态局截到 5000, 防它们(每个撞 2万)占满数据、冲淡专家信号 + 爆内存(20000 版 12 个占 70%/4.7GB)
     from derbysim.learn.scenarios import operating_days
     days = operating_days(split)[:n_days]
     pols = ["signaller", "lookup", "greedy", "fcfs", "fsfs"]
@@ -86,7 +90,7 @@ def main(argv) -> int:
     tasks = [(p, i) for p in pols for i in range(len(days))]
     todo = [(p, i) for (p, i) in tasks
             if not (outdir / f"{p}_{str(days[i]['start'])[:10]}.pkl").exists()]
-    print(f"[offline] split={split} days={len(days)} policies={pols} workers={n_workers} "
+    print(f"[offline] split={split} days={len(days)} policies={pols} workers={n_workers} maxdec={maxdec} "
           f"| 任务 {len(tasks)} 待跑 {len(todo)}(已存跳过 {len(tasks)-len(todo)}) -> {outdir}", flush=True)
     if not todo:
         print("[offline] 全部已生成。"); return 0
@@ -100,7 +104,7 @@ def main(argv) -> int:
 
     started, n, n_steps = time.time(), 0, 0
     with ProcessPoolExecutor(max_workers=n_workers, initializer=_init_worker,
-                             initargs=(split, str(outdir))) as ex:
+                             initargs=(split, str(outdir), maxdec)) as ex:
         futs = {ex.submit(_run_one, p, i): (p, i) for (p, i) in todo}
         for fut in as_completed(futs):
             tag, k = fut.result()

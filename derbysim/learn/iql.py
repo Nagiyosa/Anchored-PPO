@@ -42,6 +42,14 @@ class IQL(nn.Module):
         # Q(s, a_data): [critic 摘要 ++ 取到的 option 特征(kind onehot 3 + set 候选特征)]
         self.q_head = nn.Sequential(nn.Linear(hidden + 3 + cand_dim, hidden), nn.ReLU(),
                                     nn.Linear(hidden, 1))
+        # D64.1 修 bug: **target Q 网络**(Polyak 慢更新)—— 没有它 Q 自举正反馈发散(实测 loss_q 10→1400)。
+        import copy as _copy
+        self.tgt_c_train_enc = _copy.deepcopy(self.c_train_enc)
+        self.tgt_c_mix = _copy.deepcopy(self.c_mix)
+        self.tgt_q_head = _copy.deepcopy(self.q_head)
+        for m in (self.tgt_c_train_enc, self.tgt_c_mix, self.tgt_q_head):
+            for p in m.parameters():
+                p.requires_grad_(False)
 
     # ---- critic 侧 ----
     def _csummary(self, b: dict):
@@ -67,6 +75,21 @@ class IQL(nn.Module):
     def q(self, b: dict, a):
         return self.q_head(torch.cat([self._csummary(b), self._opt_feat(b, a)], dim=-1)).squeeze(-1)  # [B]
 
+    def _tgt_summary(self, b: dict):
+        h = self.tgt_c_train_enc(b["x_panel"])
+        return self.tgt_c_mix(torch.cat([masked_mean(h, b["panel_mask"]), b["x_global"]], dim=-1))
+
+    def q_target(self, b: dict, a):
+        """target Q(慢更新, no-grad)—— 给 V 的 expectile 目标 + AWR 优势用, 打断 Q→V→Q 自举发散。"""
+        return self.tgt_q_head(torch.cat([self._tgt_summary(b), self._opt_feat(b, a)], dim=-1)).squeeze(-1)
+
+    def polyak(self, rho: float = 0.005):
+        """target ← (1−ρ)·target + ρ·live。"""
+        for tm, lm in ((self.tgt_c_train_enc, self.c_train_enc), (self.tgt_c_mix, self.c_mix),
+                       (self.tgt_q_head, self.q_head)):
+            for tp, lp in zip(tm.parameters(), lm.parameters()):
+                tp.data.mul_(1.0 - rho).add_(rho * lp.data)
+
     # ---- actor 侧(评估/AWR 用)----
     def logp(self, b: dict, a):
         logits, _v, _aux = self.actor(b)
@@ -87,27 +110,30 @@ def iql_update(model: IQL, opt_critic, opt_actor, batch: dict, next_batch: dict,
                actions, rewards, dones, gamma: float = 1.0, tau: float = 0.7,
                beta: float = 3.0, w_max: float = 100.0) -> dict:
     """一步 IQL 更新。batch/next_batch = to_tensors(collate_panels(...)); actions/rewards/dones [B] tensor。"""
-    # ---- critic: Q(Bellman) + V(expectile) ----
+    # ---- critic: Q(Bellman, 用 V(s')) + V(expectile, 目标用 **target Q** 打断自举) ----
     with torch.no_grad():
         v_next = model.v(next_batch)
-        q_target = rewards + gamma * (1.0 - dones) * v_next
+        q_bellman = rewards + gamma * (1.0 - dones) * v_next
+        q_tgt_sa = model.q_target(batch, actions)          # V 的 expectile 目标(慢更新, 稳)
     q_sa = model.q(batch, actions)
-    loss_q = (q_sa - q_target).pow(2).mean()
+    loss_q = (q_sa - q_bellman).pow(2).mean()
     v_s = model.v(batch)
-    loss_v = expectile_loss(q_sa.detach() - v_s, tau)
+    loss_v = expectile_loss(q_tgt_sa - v_s, tau)
     opt_critic.zero_grad()
     (loss_q + loss_v).backward()
     opt_critic.step()
 
-    # ---- actor: AWR(照抄数据 option, 优势加权)----
+    # ---- actor: AWR(照抄数据 option, 优势用 target Q − V)----
     with torch.no_grad():
-        adv = model.q(batch, actions) - model.v(batch)
+        adv = model.q_target(batch, actions) - model.v(batch)
         w = torch.clamp(torch.exp(adv / beta), max=w_max)
     logp = model.logp(batch, actions)
     loss_pi = -(w * logp).mean()
     opt_actor.zero_grad()
     loss_pi.backward()
     opt_actor.step()
+
+    model.polyak(0.005)                                    # target 慢跟 live
 
     return {"loss_q": float(loss_q.item()), "loss_v": float(loss_v.item()),
             "loss_pi": float(loss_pi.item()), "adv_mean": float(adv.mean().item()),
