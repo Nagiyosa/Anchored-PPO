@@ -60,6 +60,7 @@ def episode_metrics(engine, cfg: RewardConfig, plat_tc_to_pid: dict,
         "n_reached_exit": len(reached),
         "completion_rate": (len(reached) / len(able)) if able else 1.0,
         "deadlocked": bool(engine.deadlocked),
+        "entry_gridlock": bool(getattr(engine, "entry_gridlock", False)),   # D65 (d): 入区堆积判负
         "n_collisions": len(engine.collisions),          # 结构性应恒为 0
         "n_state_invariant_violations": len(invariant_bad),
         "state_invariant_violations": invariant_bad[:20],
@@ -258,6 +259,7 @@ def evaluate_policy(env_factory, adapter, policy_factory, episodes,
     for k in ("frac_wait", "frac_set", "frac_cancel"):
         out[f"eval_{k}"] = (sum(r[k] * r["n_steps"] for r in rows) / steps) if steps else 0.0
     out["eval_deadlocks"] = int(sum(bool(r["deadlocked"]) for r in rows))
+    out["eval_entry_gridlocks"] = int(sum(bool(r.get("entry_gridlock")) for r in rows))   # D65 (d)
     out["eval_truncated"] = int(sum(bool(r.get("truncated")) for r in rows))
     out["eval_episodes"] = rows
     return out

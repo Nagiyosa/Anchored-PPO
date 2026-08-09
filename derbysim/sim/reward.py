@@ -189,10 +189,13 @@ class RewardedDynamicEnv(DynamicDerbyEnv):
 
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
                  reward_config: RewardConfig | None = None, overlap_depth: int = 1,
-                 proactive: bool = False, reserve_window: str = "narrow") -> None:
+                 proactive: bool = False, reserve_window: str = "narrow",
+                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6) -> None:
         super().__init__(net, params, plat_tc_to_pid, dwell_by_platform,
                          overlap_depth=overlap_depth, proactive=proactive,
-                         reserve_window=reserve_window)
+                         reserve_window=reserve_window,
+                         gameover_entry_pileup=gameover_entry_pileup,
+                         entry_pileup_K=entry_pileup_K)
         self.cfg = reward_config or RewardConfig()
         self.horizon: float | None = None          # 由 reset(trains, horizon=...) 设定
         self._last_realized = 0.0

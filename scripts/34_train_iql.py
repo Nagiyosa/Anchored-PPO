@@ -53,6 +53,9 @@ def main() -> None:
     ap.add_argument("--beta", type=float, default=3.0, help="AWR 温度(越大越像纯模仿)")
     ap.add_argument("--w-max", type=float, default=100.0, help="AWR 权重上限")
     ap.add_argument("--reserve-window", default="wide", choices=["wide", "narrow"])
+    ap.add_argument("--gameover-entry-pileup", action="store_true",
+                    help="D65(d): 评估env入区堆积 set_pending>K 判负(须与离线数据生成口径一致)")
+    ap.add_argument("--entry-pileup-K", type=int, default=6, help="D65(d): 判负阈值(默认 6)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--run-tag", default=None)
     ap.add_argument("--resume", action="store_true")
@@ -100,7 +103,9 @@ def main() -> None:
     ev_wins = operating_days("val")[:args.eval_days]
     eval_eps = [(str(w["start"])[:16], (lambda w=w: build_day_trains(w)), day_horizon(w)) for w in ev_wins]
     env_factory = lambda: RewardedDynamicEnv(net, params, ptc, dwell, reward_config=rcfg,
-                                             proactive=True, reserve_window=args.reserve_window)
+                                             proactive=True, reserve_window=args.reserve_window,
+                                             gameover_entry_pileup=args.gameover_entry_pileup,
+                                             entry_pileup_K=args.entry_pileup_K)
     top = lookup_table("train")
     baselines = {}
     for tag, fac in (("signaller_replay", signaller_replay_factory),

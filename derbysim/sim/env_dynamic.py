@@ -99,7 +99,8 @@ class DynTrain:
 class DynamicEngine:
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
                  overlap_depth: int = 1, proactive: bool = False, advance_cfg=None,
-                 reserve_window: str = "narrow") -> None:
+                 reserve_window: str = "narrow",
+                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6) -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
@@ -110,6 +111,11 @@ class DynamicEngine:
         # D57 候选窗口: "narrow"=触发点=141s 标定(复现真人时机, 回放/BC 恒用此); "wide"=前沿一提交即可
         # 预留(=RR 自由, RL 默认)。别限制学习者(RL 宽)、别篡改裁判(回放/BC 窄)。
         self.reserve_window = reserve_window
+        # D65 (d): 入区堆积 game-over。set_pending(已放行入区、进路被冲突挡住 QUEUED、车未入区)> K 判负。
+        # 触发变量只用 set_pending(信号员全局峰值=3), 不含 awaiting(信号员合法攒到 12)。K 默认 6。
+        self.gameover_entry_pileup = bool(gameover_entry_pileup)
+        self.entry_pileup_K = int(entry_pileup_K)
+        self.entry_gridlock = False
         self.proactive = bool(proactive)
         if self.proactive and advance_cfg is None:
             from derbysim.sim.env import load_advance_cfg
@@ -164,6 +170,12 @@ class DynamicEngine:
             if r.route_id in seen:
                 continue
             seen.add(r.route_id)
+            # D65 修 livelock: 不重复预留**本车已锁过的进路**。路网存在环(如 REC5475A↔RTD5053A 互为续接
+            # 且各自 route_keeps_goal 通过), wide 的 reserve-ahead 会顺着环无限预留、车原地绕圈、时钟冻住
+            # (实测 always-set 一辆车 SET 242 次)。真实 route_chain 无重复(max 6), 信号员只办日志路不成环 →
+            # 此过滤对回放/BC 零影响, 只掐掉"绕环无限预留"。
+            if r.route_id in t.actual_chain:
+                continue
             # D41 决策空间限于建模区域: 只提供 in-scope 进路(起始信号 ∈ 48 白名单)。可达性(_reach)
             # 本就只在区内扩展、把区边界当出区口, 故此过滤与可达性一致; 真实列车 0/2809 用过区外进路,
             # 对信号员回放零影响。旧行为会在区边界端出区外 route, 让策略被引出区、卡在 TDBN 等区外死点。
@@ -365,6 +377,11 @@ class DynamicEngine:
                 out.append(t)
         return out
 
+    def _entry_pileup(self) -> int:
+        """D65 (d): 已放行入区但被冲突挡住(pending_request 且未入区)的车数 = 入区堆积触发变量。"""
+        return sum(1 for t in self.trains.values()
+                   if t.pending_request is not None and not t.entered and not t.done)
+
     def _build_options(self, awaiting, cancellable):
         opts = [PanelAction("wait")]
         logged = {}
@@ -493,6 +510,9 @@ class DynamicEngine:
             if action is None or action.kind == "wait":
                 return
             self._apply(action)
+            if self.gameover_entry_pileup and self._entry_pileup() > self.entry_pileup_K:
+                self.entry_gridlock = True          # D65 (d): 入区堆积超阈值 → 判负, 结束本 cut + run
+                return
 
     def run(self, trains):
         self.trains = {t.train_id: t for t in trains}
@@ -501,7 +521,7 @@ class DynamicEngine:
             self.q.push(t.entry_time, "arrive", {"tr": t.train_id})
         guard = 0
         limit = 500000 + 5000 * len(trains)
-        while len(self.q) and not self.deadlocked:
+        while len(self.q) and not self.deadlocked and not self.entry_gridlock:
             guard += 1
             if guard > limit:
                 break
@@ -806,7 +826,8 @@ class DynamicDerbyEnv:
 
     def __init__(self, net, params=None, plat_tc_to_pid=None, dwell_by_platform=None,
                  overlap_depth: int = 1, proactive: bool = False,
-                 reserve_window: str = "narrow") -> None:
+                 reserve_window: str = "narrow",
+                 gameover_entry_pileup: bool = False, entry_pileup_K: int = 6) -> None:
         self.net = net
         self.params = params or {}
         self.plat_tc_to_pid = plat_tc_to_pid or {}
@@ -814,6 +835,8 @@ class DynamicDerbyEnv:
         self.overlap_depth = int(overlap_depth)    # M10 F6: M13 overlap 鲁棒性扫描用; 默认 1 不改原行为
         self.proactive = bool(proactive)           # D50: 提前触发(默认 False = 原 reactive)
         self.reserve_window = reserve_window       # D57: narrow(回放/BC) | wide(RL 默认=RR)
+        self.gameover_entry_pileup = bool(gameover_entry_pileup)   # D65 (d)
+        self.entry_pileup_K = int(entry_pileup_K)
         self.engine: DynamicEngine | None = None
         self._gen = None
         self._pending: PanelDecision | None = None
@@ -821,7 +844,9 @@ class DynamicDerbyEnv:
     def reset(self, trains):
         self.engine = DynamicEngine(self.net, self.params, self.plat_tc_to_pid,
                                     self.dwell_by_platform, overlap_depth=self.overlap_depth,
-                                    proactive=self.proactive, reserve_window=self.reserve_window)
+                                    proactive=self.proactive, reserve_window=self.reserve_window,
+                                    gameover_entry_pileup=self.gameover_entry_pileup,
+                                    entry_pileup_K=self.entry_pileup_K)
         self._gen = self.engine.run(trains)
         self._pending = next(self._gen, None)
         return self._obs(), self._info()
