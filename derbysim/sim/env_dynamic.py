@@ -591,6 +591,20 @@ class DynamicEngine:
                              and str(t.service_class) not in self.control_classes)
                 t.background = (self.background_ghosts and ghost) or off_scope
             self.q.push(t.entry_time, "arrive", {"tr": t.train_id})
+        # D71 fv2: 背景车"运行图"索引 TC → 未来使用时刻有序表(脚本在 reset 即已知, 每局建一次)
+        self._bg_tc_times: dict = {}
+        for t in trains:
+            if t.background and t.req_times:
+                for i, rid in enumerate(t.route_chain):
+                    if i >= len(t.req_times):
+                        break
+                    r = self.net.routes.get(rid)
+                    if r is None:
+                        continue
+                    for tc in r.tc_sequence:
+                        self._bg_tc_times.setdefault(tc, []).append(float(t.req_times[i]))
+        for v in self._bg_tc_times.values():
+            v.sort()
         guard = 0
         limit = 500000 + 5000 * len(trains)
         while len(self.q) and not self.deadlocked and not self.entry_gridlock:
@@ -888,6 +902,8 @@ class DynamicEngine:
             "reservations": {tc: k[0] for tc, k in self.res.reserved.items()},
             "n_reserved_tc": len(self.res.reserved),
             "queue_len": len(self.res.queue),
+            # D71 fv2: 背景车 TC→未来使用时刻有序表(= 调度员的运行图; 引用传递零拷贝, fv1 特征器忽略)
+            "bg_tc_times": getattr(self, "_bg_tc_times", None),
         }
 
     def _at_goal_exit(self, t):

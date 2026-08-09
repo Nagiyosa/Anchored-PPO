@@ -184,6 +184,8 @@ class PanelAdapter:
         set 选项按**车**分组成行(纪律①): 一行 = 一辆待决车的 M11 式 context, 其候选沿列排开
         → `PointerBC` 的批布局原样可用, BC 权重(编码器 + 打分头)整体迁移。
         """
+        if hasattr(self.fz, "set_runtime"):        # D71 fv2: 注入 (now, 背景车 TC 时刻表); fv1 忽略
+            self.fz.set_runtime(obs.get("now"), obs.get("bg_tc_times"))
         options = list(decision.options)
         set_by_train: dict = {}
         cancel_ids: list = []

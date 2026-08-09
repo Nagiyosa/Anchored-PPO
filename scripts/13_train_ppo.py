@@ -129,6 +129,13 @@ def main() -> None:
                     help="D69: 连续 2 次评估未创新高 → 回滚 best 权重 + lr 减半(防漂移浪费几小时)")
     ap.add_argument("--promote-delay-k", type=float, default=1.0,
                     help="D69 升档分数条件: 档内延误 ≤ k × fcfs(同 6 日)。与完成率条件同时满足才升")
+    ap.add_argument("--feature-version", type=int, default=1,
+                    help="D71: 1=现状(旧 run 逐位可复现); 2=+距计划分钟(dec) +背景车前瞻(cand)")
+    ap.add_argument("--init-ckpt", default=None,
+                    help="D71: 从训练 checkpoint(best/last.pt, 含 model/ret_norm)初始化权重; 维度变大时"
+                         "新特征列**零填充迁移**(初始行为与旧网逐位相同)。给了它则跳过 --bc-ckpt")
+    ap.add_argument("--anchor-ckpt", default=None,
+                    help="D71: 时机锚的参照 checkpoint(如 best.pt = 移动信任域)。缺省=热启动/init 权重")
     ap.add_argument("--run-tag", default=None,
                     help="稳定 run_id(无时间戳): 断点续训/矩阵幂等续跑用。给了它, checkpoint/输出用该名; "
                          "不给则沿用带时间戳的旧行为(每版留档)")
@@ -163,7 +170,9 @@ def main() -> None:
     gen = torch.Generator(device=dev).manual_seed(args.seed)
 
     net, params, dwell, ptc = load_assets()
-    adapter = PanelAdapter(net, Featurizer(net, ptc))          # route_prior={} 由适配层强制(§10-A③)
+    adapter = PanelAdapter(net, Featurizer(net, ptc, fv=args.feature_version))   # route_prior={} 由适配层强制(§10-A③)
+    if args.feature_version >= 2:
+        print(f"[feature] v{args.feature_version}: +距计划分钟(dec) +背景车前瞻(cand)(D71)")
     windows = operating_days(args.split)[:args.days]
     if not windows:
         raise SystemExit(f"no operating days for split={args.split}")
@@ -177,7 +186,40 @@ def main() -> None:
     # 编码器 + 选路头 + kind/cancel 头 + critic 全给个能跑的起点(避免冷启动死锁)。init 与 KL 锚解耦。
     want_dims = [adapter.dec_dim, adapter.conf_dim, adapter.cand_dim,
                  adapter.cancel_dim, adapter.train_dim, adapter.global_dim]
-    if args.bc_ckpt and not args.no_warm_start and not args.baselines_only:
+
+    def _padded_load(module, sd, tag=""):
+        """D71: 零填充迁移 —— 新特征列一律**追加在向量末尾**, 故 in_features 变大的 Linear 权重把
+        旧列拷入、新列置 0 → 初始输出与旧网**逐位相同**, 然后训练自己学会用新信息。"""
+        tgt = module.state_dict()
+        out, padded, kept = {}, [], 0
+        for k, v in tgt.items():
+            s = sd.get(k)
+            if s is not None and tuple(s.shape) == tuple(v.shape):
+                out[k] = s; kept += 1
+            elif (s is not None and s.dim() == 2 and v.dim() == 2
+                  and s.shape[0] == v.shape[0] and s.shape[1] < v.shape[1]):
+                w = torch.zeros_like(v); w[:, :s.shape[1]] = s
+                out[k] = w; padded.append(k)
+            else:
+                out[k] = v
+                if s is not None:
+                    print(f"[init] ⚠️ {tag}{k} 形状不符 {tuple(s.shape)}→{tuple(v.shape)}, 保留新初始化")
+        module.load_state_dict(out)
+        if padded:
+            print(f"[init] {tag}零填充迁移 {len(padded)} 层(新特征列): {padded}")
+        return kept
+
+    _init_ret_norm_state = None
+    if args.init_ckpt and not args.baselines_only:
+        _ick = torch.load(args.init_ckpt, map_location=dev, weights_only=False)
+        _sd = _ick.get("model") or _ick.get("state_dict")
+        if _sd is None:
+            raise SystemExit(f"{args.init_ckpt} 缺 model/state_dict")
+        kept = _padded_load(policy, _sd, tag="policy: ")
+        _init_ret_norm_state = _ick.get("ret_norm")
+        print(f"[init] {args.init_ckpt}: 载入 {kept} 层原样 + 零填充(it{_ick.get('iter','?')})"
+              f"{' + ret_norm' if _init_ret_norm_state else ''}")
+    elif args.bc_ckpt and not args.no_warm_start and not args.baselines_only:
         ck = torch.load(args.bc_ckpt, map_location=dev, weights_only=False)
         if not (isinstance(ck, dict) and "state_dict" in ck):
             raise SystemExit(f"{args.bc_ckpt} 不是 full-panel BC(应含 state_dict/encoder/dims, "
@@ -207,18 +249,28 @@ def main() -> None:
                     kind_anchor_beta=args.kind_anchor_beta,
                     bc_anchor_beta=args.bc_anchor_beta,
                     target_kl=(args.target_kl if args.target_kl > 0 else None))
-    # D69 时机锚A: 热启动加载后的**冻结副本**(逐状态 KL 的参照; 不训练、不进 optimizer)
+    # D69 时机锚A: 冻结参照(逐状态 KL; 不训练、不进 optimizer)。D71: --anchor-ckpt 可指定参照
+    # (如 best.pt = **移动信任域**: 围着当前最好的自己小步爬, 而不是围着起点打转)。
     anchor_policy = None
     if args.bc_anchor_beta > 0:
         import copy as _copy
         anchor_policy = _copy.deepcopy(policy).to(dev)
+        if args.anchor_ckpt:
+            _ack = torch.load(args.anchor_ckpt, map_location=dev, weights_only=False)
+            _asd = _ack.get("model") or _ack.get("state_dict")
+            _padded_load(anchor_policy, _asd, tag="anchor: ")
+            print(f"[anchor] 时机锚A β={args.bc_anchor_beta} | 参照={args.anchor_ckpt}(移动信任域)")
+        else:
+            print(f"[anchor] 时机锚A β={args.bc_anchor_beta} | 参照=当前初始权重(热启动/init)")
         anchor_policy.eval()
         for _p in anchor_policy.parameters():
             _p.requires_grad_(False)
-        print(f"[anchor] 时机锚A 开启 β={args.bc_anchor_beta}(逐状态 KL 到冻结热启动)")
     opt = torch.optim.Adam(policy.parameters(), lr=cfg.lr)
     # critic 预测归一化值 → driver 必须还原成原始单位再交给 GAE(见 smdp.RunningMoments)。
     ret_norm = RunningMoments() if cfg.normalise_returns else None
+    if ret_norm is not None and _init_ret_norm_state:              # D71: init-ckpt 的值归一化状态一并恢复
+        ret_norm.load_state_dict(_init_ret_norm_state)
+        print("[init] ret_norm 已从 init-ckpt 恢复(critic 输出单位一致)")
     # 方案 B(D32): rollout 期把策略放 CPU —— batch=1 的 GPU 前向 73% 是 kernel 启动往返。
     # `--rollout-device` 缺省 cpu; 传 same 则沿用训练设备(消融/对照用)。
     roll_dev = dev if args.rollout_device == "same" else torch.device(args.rollout_device)
@@ -435,7 +487,7 @@ def main() -> None:
               f"| ent {row['entropy']:.3f} | aKL {row.get('approx_kl', 0):.3f} "
               f"| 早停 {row.get('kl_stop_rate', 0):.0%}"
               f"| rollout {roll_s:>5.1f}s ({row['steps_per_s']:>4.0f}步/s) upd {upd_s:>4.1f}s")
-        if not warming and row.get("kl_stop_rate", 0) >= 0.5:
+        if not warming and row.get("kl_stop_rate", 0) >= 1.0:      # D71: 50%→100%(偶发早停=信任域正常工作)
             print("        ⚠️ **target_kl 护栏在主导训练** —— 半数以上 epoch 在第一个 minibatch 就 "
                   "break, 实际只执行了很小一部分更新。查 approx_kl 为何在学习前就偏高。")
         if args.eval_every and ((it + 1) % args.eval_every == 0 or it == args.iters - 1):
