@@ -123,6 +123,12 @@ def main() -> None:
                     help="D65(d): 入区堆积判负阈值(信号员全局峰值实测=3, 默认 6)")
     ap.add_argument("--control-classes", default="12",
                     help="D67①: 受控车次类别(如 '12'=只控客运, 论文口径; 'all'=全控)。其余背景化自动驾驶")
+    ap.add_argument("--bc-anchor-beta", type=float, default=0.0,
+                    help="D69 时机锚A: 逐状态 KL(π(类别|s)‖冻结热启动) 的系数(0=关, 消融对照; 建议 0.02)")
+    ap.add_argument("--best-rescue", action="store_true",
+                    help="D69: 连续 2 次评估未创新高 → 回滚 best 权重 + lr 减半(防漂移浪费几小时)")
+    ap.add_argument("--promote-delay-k", type=float, default=1.0,
+                    help="D69 升档分数条件: 档内延误 ≤ k × fcfs(同 6 日)。与完成率条件同时满足才升")
     ap.add_argument("--run-tag", default=None,
                     help="稳定 run_id(无时间戳): 断点续训/矩阵幂等续跑用。给了它, checkpoint/输出用该名; "
                          "不给则沿用带时间戳的旧行为(每版留档)")
@@ -139,7 +145,7 @@ def main() -> None:
                     help="开启课程学习: 按每天车流量由易到难、累加式喂 train 日(档满/达标才升档)")
     ap.add_argument("--curriculum-tiers", default="185,286,300,999999",
                     help="各档**车数上限**(累加): 默认 ≤185/≤286/≤300/全部 = 9/33/48/64 天")
-    ap.add_argument("--promote-at", type=float, default=0.9,
+    ap.add_argument("--promote-at", type=float, default=1.0,
                     help="当前档 train 完成率≥此值就升档")
     ap.add_argument("--tier-max-iters", type=int, default=0,
                     help="**默认 0 = 不设上限, 只按达标(≥promote-at)升档**。>0 才启用'到点强制升'的兜底; "
@@ -199,7 +205,17 @@ def main() -> None:
                     reward_scale=args.reward_scale,
                     normalise_returns=not args.no_return_norm,
                     kind_anchor_beta=args.kind_anchor_beta,
+                    bc_anchor_beta=args.bc_anchor_beta,
                     target_kl=(args.target_kl if args.target_kl > 0 else None))
+    # D69 时机锚A: 热启动加载后的**冻结副本**(逐状态 KL 的参照; 不训练、不进 optimizer)
+    anchor_policy = None
+    if args.bc_anchor_beta > 0:
+        import copy as _copy
+        anchor_policy = _copy.deepcopy(policy).to(dev)
+        anchor_policy.eval()
+        for _p in anchor_policy.parameters():
+            _p.requires_grad_(False)
+        print(f"[anchor] 时机锚A 开启 β={args.bc_anchor_beta}(逐状态 KL 到冻结热启动)")
     opt = torch.optim.Adam(policy.parameters(), lr=cfg.lr)
     # critic 预测归一化值 → driver 必须还原成原始单位再交给 GAE(见 smdp.RunningMoments)。
     ret_norm = RunningMoments() if cfg.normalise_returns else None
@@ -315,6 +331,7 @@ def main() -> None:
             history = st.get("history", []); evals = st.get("evals", [])
             total_steps_resumed = int(st.get("total_steps", 0))
             cur_tier_resumed = int(st.get("cur_tier", 0)); tier_iter_resumed = int(st.get("tier_iter", 0))
+            lr_scale_resumed = float(st.get("lr_scale", 1.0))          # D69 best-rescue 状态
             try:
                 rng.bit_generator.state = st["np_rng"]; torch.set_rng_state(st["torch_rng"])
             except Exception:
@@ -332,6 +349,7 @@ def main() -> None:
                     "next_iter": next_iter, "best": best, "since_best": since_best,
                     "history": history, "evals": evals, "total_steps": total_steps,
                     "cur_tier": cur_tier, "tier_iter": tier_iter,        # curriculum 续训状态
+                    "lr_scale": lr_scale,                                # D69 best-rescue 状态
                     "np_rng": rng.bit_generator.state, "torch_rng": torch.get_rng_state(),
                     "args": vars(args), "run_id": run_id}, last_ck)
 
@@ -353,11 +371,23 @@ def main() -> None:
         tier_iter = int(locals().get("tier_iter_resumed", 0))
         pool = _pool_for(cur_tier)
         print(f"[curriculum] 起始 档{cur_tier+1} ≤{tier_thr[cur_tier]}车 → {len(pool)} 天; "
-              f"升档@train完成率≥{args.promote_at} 或满 {args.tier_max_iters} 次评估(累加式)")
+              f"升档@train完成率≥{args.promote_at} 且 延误≤{args.promote_delay_k}×fcfs(累加式, D69)")
     else:
         tier_thr = None; cur_tier = 0; tier_iter = 0
         pool = windows
     train_eval_eps = _sample_eps(pool, args.train_eval_days)
+    # D69 升档分数参照: **同一批档内评估日**上的 fcfs 延误(每档算一次; 同日配对 → 公平、无抽样噪声)
+    lr_scale = float(locals().get("lr_scale_resumed", 1.0))
+    tier_fcfs = None
+    if args.curriculum:
+        _fcfs_top = lookup_table()
+        def _tier_fcfs(eps):
+            if not eps:
+                return None
+            return float(evaluate_policy(env_factory, adapter, make_fcfs_policy(_fcfs_top),
+                                         eps)["eval_weighted_secondary_delay_s"])
+        tier_fcfs = _tier_fcfs(train_eval_eps)
+        print(f"[curriculum] 档{cur_tier+1} fcfs 延误参照 = {tier_fcfs:.0f}(升档需 ≤ {args.promote_delay_k}×)")
 
     t0 = time.time()
     total_steps = int(locals().get("total_steps_resumed", 0))
@@ -384,10 +414,10 @@ def main() -> None:
         if args.lr_final_frac < 1.0 and args.iters > 1:     # 线性退火, 减少后期外飘
             frac = it / max(args.iters - 1, 1)
             for gp in opt.param_groups:
-                gp["lr"] = args.lr * (1.0 - frac * (1.0 - args.lr_final_frac))
+                gp["lr"] = args.lr * (1.0 - frac * (1.0 - args.lr_final_frac)) * lr_scale  # D69 rescue 减半持久化
         stats = ppo_update(policy, opt,
                            prepare_batch(transitions, cfg, ret_norm=ret_norm), cfg, dev,
-                           value_only=warming)
+                           value_only=warming, anchor_policy=anchor_policy)
         upd_s = time.time() - t_upd
         row = {"iter": it, "steps": len(transitions), "episodes": len(ep_metrics), **stats,
                "train_reward_mean": float(np.mean([m["episode_reward"] for m in ep_metrics])),
@@ -401,7 +431,7 @@ def main() -> None:
         print(f"it {it:>3}{'*' if warming else ' '}| 档{cur_tier+1} | steps {row['steps']:>5} ({row['episodes']} eps) "
               f"| **完成率 {row['train_completion_mean']:.3f} 延误 {row['train_delay_mean']:>9.0f} "
               f"reward {row['train_reward_mean']:>8.1f}** | EV {row['explained_variance']:>5.3f} | 选路KL {row['routing_kl']:.4f} "
-              f"| 锚 {row.get('kind_anchor_kl', 0):.3f} "
+              f"| 锚 {(row.get('bc_anchor_kl', 0) or row.get('kind_anchor_kl', 0)):.3f} "
               f"| ent {row['entropy']:.3f} | aKL {row.get('approx_kl', 0):.3f} "
               f"| 早停 {row.get('kl_stop_rate', 0):.0%}"
               f"| rollout {roll_s:>5.1f}s ({row['steps_per_s']:>4.0f}步/s) upd {upd_s:>4.1f}s")
@@ -439,6 +469,18 @@ def main() -> None:
                 since_best = 0
             else:
                 since_best += 1
+                # D69 best-rescue: 连续 2 次未创新高 → 回滚 best 权重 + lr 减半(防漂移浪费小时级算力)
+                if args.best_rescue and since_best % 2 == 0:
+                    _bck = config.ARTIFACTS_REPORTS / f"{run_id}_best.pt"
+                    if _bck.exists():
+                        _b = torch.load(_bck, map_location=dev, weights_only=False)
+                        policy.load_state_dict(_b["model"])
+                        if (ret_norm is not None and _b.get("ret_norm")
+                                and hasattr(ret_norm, "load_state_dict")):
+                            ret_norm.load_state_dict(_b["ret_norm"])
+                        lr_scale = max(lr_scale * 0.5, 0.05)
+                        print(f"        🛟 best-rescue: 连续 {since_best} 次未创新高 → 回滚 "
+                              f"best(it{_b['iter']}) 权重, lr_scale→{lr_scale:.2f}")
             print(f"    >>> EVAL it {it} 档{cur_tier+1}: "
                   f"train完成率 {(_tc if _tc is not None else float('nan')):.3f} | "
                   f"val完成率 {ev['eval_completion_rate']:.3f} | val_delay {ev['eval_weighted_secondary_delay_s']:>9.0f} "
@@ -453,12 +495,22 @@ def main() -> None:
             if args.curriculum and not at_final_tier:
                 tier_iter += 1
                 cap_hit = args.tier_max_iters > 0 and tier_iter >= args.tier_max_iters   # 默认 0 = 不强制
-                if (_tc is not None and _tc >= args.promote_at) or cap_hit:
+                # D69: 完成率**和**延误双条件(掌握 = 全跑完 + 打平最强规则 fcfs)
+                _td = tev.get("eval_weighted_secondary_delay_s")
+                comp_ok = _tc is not None and _tc >= args.promote_at
+                delay_ok = (tier_fcfs is None
+                            or (_td is not None and _td <= args.promote_delay_k * tier_fcfs))
+                if (comp_ok and delay_ok) or cap_hit:
                     cur_tier += 1; tier_iter = 0
                     pool = _pool_for(cur_tier); train_eval_eps = _sample_eps(pool, args.train_eval_days)
+                    tier_fcfs = _tier_fcfs(train_eval_eps)
                     at_final_tier = cur_tier >= len(tier_thr) - 1
                     print(f"        ⏫ 升档 → 档{cur_tier+1} ≤{tier_thr[cur_tier]}车 → {len(pool)} 天"
-                          + ("(最终档/全高峰)" if at_final_tier else ""))
+                          + ("(最终档/全高峰)" if at_final_tier else "")
+                          + (f" | 新档 fcfs 参照 {tier_fcfs:.0f}" if tier_fcfs else ""))
+                elif comp_ok and not delay_ok:
+                    print(f"        ⛔ 完成率达标但延误 {_td:.0f} > {args.promote_delay_k}×fcfs "
+                          f"{tier_fcfs:.0f} → 留档磨延误(D69)")
             # early-stop **只在最终档生效**: 课程中途 val 会平台期(还没练到难日), 不能误判为收敛
             if at_final_tier and args.early_stop_patience and since_best >= args.early_stop_patience:
                 print(f"        早停: 最终档连续 {since_best} 次评估未创新高 "

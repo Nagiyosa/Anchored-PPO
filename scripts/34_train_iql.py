@@ -52,6 +52,10 @@ def main() -> None:
     ap.add_argument("--tau", type=float, default=0.7, help="expectile(τ→1 越像 max)")
     ap.add_argument("--beta", type=float, default=3.0, help="AWR 温度(越大越像纯模仿)")
     ap.add_argument("--w-max", type=float, default=100.0, help="AWR 权重上限")
+    ap.add_argument("--reward-scale", type=float, default=0.1,
+                    help="D64.2: 训练时奖励缩放(压 Q/V 数值量级防发散; 只影响 critic 目标, 评估不变)")
+    ap.add_argument("--shard-glob", default="*.pkl",
+                    help="D68: 分片过滤(如 'signaller_*.pkl' 只用专家数据 —— 混合数据会让 w≈1 的 AWR 退化成克隆大杂烩)")
     ap.add_argument("--reserve-window", default="wide", choices=["wide", "narrow"])
     ap.add_argument("--gameover-entry-pileup", action="store_true",
                     help="D65(d): 评估env入区堆积判负。⚠️ D66 证明抹平梯度, 默认关、勿开")
@@ -76,7 +80,7 @@ def main() -> None:
     dp = Path(args.dataset)
     if dp.is_dir():
         episodes = []
-        for shard in sorted(dp.glob("*.pkl")):
+        for shard in sorted(dp.glob(args.shard_glob)):
             with shard.open("rb") as f:
                 episodes.append(pickle.load(f))
     else:
@@ -129,10 +133,16 @@ def main() -> None:
     start_iter = 0
     if args.resume and last_ck.exists():
         st = torch.load(last_ck, map_location=dev, weights_only=False)
-        model.load_state_dict(st["model"]); opt_critic.load_state_dict(st["opt_critic"])
-        opt_actor.load_state_dict(st["opt_actor"]); start_iter = int(st["next_iter"]); best = st["best"]
-        history = st.get("history", []); evals = st.get("evals", [])
-        print(f"[resume] 从 it{start_iter} 续训(best it{best['iter']} reward {best['reward']:.1f})")
+        try:
+            model.load_state_dict(st["model"]); opt_critic.load_state_dict(st["opt_critic"])
+            opt_actor.load_state_dict(st["opt_actor"]); start_iter = int(st["next_iter"]); best = st["best"]
+            history = st.get("history", []); evals = st.get("evals", [])
+            print(f"[resume] 从 it{start_iter} 续训(best it{best['iter']} reward {best['reward']:.1f})")
+        except RuntimeError as e:
+            # D64.2: 模型结构升级(独立 V 编码器/双Q/target)后, 旧版 checkpoint 不兼容 → 从头开始, 不再硬崩。
+            print(f"[resume] ⚠️ {last_ck.name} 与当前模型结构不匹配(旧版代码的产物), 忽略并从头训练。\n"
+                  f"         ({str(e).splitlines()[0][:120]}...)")
+            start_iter, best, history, evals = 0, {"reward": float("-inf"), "iter": -1}, [], []
     print(f"[run] {run_id} | dev {dev} | γ{args.gamma} τ{args.tau} β{args.beta}")
 
     def sample_batch(k):
@@ -140,7 +150,7 @@ def main() -> None:
         b = to_tensors(collate_panels([trans[i][0] for i in idx]), dev)
         nb = to_tensors(collate_panels([trans[i][1] for i in idx]), dev)
         a = torch.as_tensor([trans[i][2] for i in idx], device=dev, dtype=torch.long)
-        r = torch.as_tensor([trans[i][3] for i in idx], device=dev, dtype=torch.float32)
+        r = torch.as_tensor([trans[i][3] for i in idx], device=dev, dtype=torch.float32) * args.reward_scale
         d = torch.as_tensor([trans[i][4] for i in idx], device=dev, dtype=torch.float32)
         return b, nb, a, r, d
 

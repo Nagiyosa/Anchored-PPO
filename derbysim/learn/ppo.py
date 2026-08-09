@@ -64,6 +64,10 @@ class PPOConfig:
     # 是**旧 reactive 引擎**实测, 已作废。若将来新 proactive 引擎上 WAIT/cancel 塌了再考虑: 必须先在
     # 新引擎重测信号员的类别构成, 不得沿用旧数。>0 仅作消融对照。
     kind_anchor_beta: float = 0.0
+    # D69 时机锚A(用户批准, 与上面的边际锚不同): **逐状态** KL(π(类别|s) ‖ π_BC冻结(类别|s))。
+    # 治 D68.1 的"灾难日梯度把时机头逐状态推向 WAIT 的慢性棘轮" —— 每个状态都有回复力, 但 β 小,
+    # 有持续奖励支持的改进仍推得动。选路锚管"走哪条", 本锚管"何时办"(D57 框架的对称一对)。
+    bc_anchor_beta: float = 0.0
 
 
 def masked_categorical(logits, opt_mask):
@@ -149,6 +153,22 @@ def kind_anchor_kl(kind_log_probs, batch) -> torch.Tensor:
     return term.sum(-1).mean()
 
 
+def bc_kind_anchor_kl(kind_log_probs, ref_kind_log_probs, batch) -> torch.Tensor:
+    """D69 时机锚A: KL(p_cur(类别|s) ‖ p_BC冻结(类别|s)) —— **逐状态**行为正则(非边际比例锚)。
+
+    两个分布都先在**可用类别**掩码内重归一化(同 `kind_anchor_kl` 的理由: 不可用类别概率恒 0,
+    不归一化就会去推不可能的动作)。ref 来自冻结的热启动策略, no-grad。"""
+    kind, valid = batch["opt_kind"], batch["opt_mask"] > 0.5
+    avail = torch.stack([((kind == j) & valid).any(-1) for j in range(3)], dim=-1)      # [B,3]
+    p = kind_log_probs.exp() * avail
+    p = p / p.sum(-1, keepdim=True).clamp(min=1e-8)
+    q = ref_kind_log_probs.exp() * avail
+    q = q / q.sum(-1, keepdim=True).clamp(min=1e-8)
+    term = torch.where(avail, p * (torch.log(p.clamp(min=1e-8)) - torch.log(q.clamp(min=1e-8))),
+                       torch.zeros_like(p))
+    return term.sum(-1).mean()
+
+
 def routing_kl(policy, batch, eps: float = 0.02) -> torch.Tensor:
     """D59 — 选路 KL **锚到规则参照**(schedule 计划路 / lookup 最频路), 取代旧的冻结神经 BC。
 
@@ -193,7 +213,7 @@ def explained_variance(pred, target) -> float:
 
 
 def ppo_update(policy, optimizer, data: dict, cfg: PPOConfig, device,
-               value_only: bool = False) -> dict:
+               value_only: bool = False, anchor_policy=None) -> dict:
     """一轮 PPO 更新(多 epoch × minibatch)。返回诊断量(损失/KL/熵/裁剪比例/**EV**)。
 
     `value_only=True` = **critic 预热**: 只训值头, 策略完全不动。用于训练开局 ——
@@ -205,7 +225,8 @@ def ppo_update(policy, optimizer, data: dict, cfg: PPOConfig, device,
     if cfg.normalise_adv and n > 1:
         adv = (adv - adv.mean()) / (adv.std() + 1e-8)
     stats = {"policy_loss": 0.0, "value_loss": 0.0, "entropy": 0.0,
-             "routing_kl": 0.0, "kind_anchor_kl": 0.0, "clip_frac": 0.0, "n_minibatch": 0, "explained_variance": 0.0,
+             "routing_kl": 0.0, "kind_anchor_kl": 0.0, "bc_anchor_kl": 0.0, "clip_frac": 0.0,
+             "n_minibatch": 0, "explained_variance": 0.0,
              "approx_kl": 0.0, "kl_early_stops": 0}
     preds = np.zeros(n, dtype=np.float64)
     # **必须 eval() 而不是 train() —— dropout 会污染重要性比(2026-08-01 实测)。**
@@ -243,11 +264,20 @@ def ppo_update(policy, optimizer, data: dict, cfg: PPOConfig, device,
             kkl = (kind_anchor_kl(_aux["kind_log_probs"], batch)
                    if (cfg.kind_anchor_beta > 0 and isinstance(_aux, dict)
                        and "kind_log_probs" in _aux) else torch.zeros((), device=device))
+            bkl = torch.zeros((), device=device)      # D69 时机锚A: 逐状态 KL 到冻结热启动
+            if (cfg.bc_anchor_beta > 0 and anchor_policy is not None
+                    and isinstance(_aux, dict) and "kind_log_probs" in _aux):
+                with torch.no_grad():
+                    _, _, _ref_aux = anchor_policy(batch)
+                if isinstance(_ref_aux, dict) and "kind_log_probs" in _ref_aux:
+                    bkl = bc_kind_anchor_kl(_aux["kind_log_probs"],
+                                            _ref_aux["kind_log_probs"], batch)
             if value_only:
                 loss = val_loss                       # critic 预热: 策略不动
             else:
                 loss = (pol_loss + cfg.vf_coef * val_loss - cfg.ent_coef * ent
-                        + cfg.kl_beta * kl + cfg.kind_anchor_beta * kkl)
+                        + cfg.kl_beta * kl + cfg.kind_anchor_beta * kkl
+                        + cfg.bc_anchor_beta * bkl)
             preds[sel] = value.detach().to("cpu").numpy().astype("float64")
 
             with torch.no_grad():                     # 本次更新把策略推了多远(PPO 标准诊断)
@@ -264,6 +294,7 @@ def ppo_update(policy, optimizer, data: dict, cfg: PPOConfig, device,
             stats["entropy"] += float(ent.item())
             stats["routing_kl"] += float(kl.item())
             stats["kind_anchor_kl"] += float(kkl.item())
+            stats["bc_anchor_kl"] += float(bkl.item())
             stats["clip_frac"] += float(((ratio - 1).abs() > cfg.clip).float().mean().item())
             stats["n_minibatch"] += 1
             # **护栏放在更新之后**(SB3 口径, 2026-08-01 修): 原先在 step 之前就 break —— 只要第一个
@@ -273,7 +304,8 @@ def ppo_update(policy, optimizer, data: dict, cfg: PPOConfig, device,
                 stats["kl_early_stops"] = stats.get("kl_early_stops", 0) + 1
                 break
     k = max(stats["n_minibatch"], 1)
-    for key in ("policy_loss", "value_loss", "entropy", "routing_kl", "kind_anchor_kl", "clip_frac"):
+    for key in ("policy_loss", "value_loss", "entropy", "routing_kl", "kind_anchor_kl",
+                "bc_anchor_kl", "clip_frac"):
         stats[key] /= k
     stats["explained_variance"] = explained_variance(preds, data["ret"])
     # 护栏若长期主导, 训练就是在空转 —— 必须能一眼看见(而不是埋在 JSON 里)。
