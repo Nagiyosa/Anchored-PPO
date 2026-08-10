@@ -68,6 +68,8 @@ class PPOConfig:
     # 治 D68.1 的"灾难日梯度把时机头逐状态推向 WAIT 的慢性棘轮" —— 每个状态都有回复力, 但 β 小,
     # 有持续奖励支持的改进仍推得动。选路锚管"走哪条", 本锚管"何时办"(D57 框架的对称一对)。
     bc_anchor_beta: float = 0.0
+    # D76 基线家族: A2C 模式 —— 无重要性比/无裁剪的一阶策略梯度(单 epoch 由调用方 update_epochs=1 保证)
+    a2c: bool = False
 
 
 def masked_categorical(logits, opt_mask):
@@ -255,9 +257,12 @@ def ppo_update(policy, optimizer, data: dict, cfg: PPOConfig, device,
             dist = masked_categorical(logits, batch["opt_mask"])
             logp = dist.log_prob(a)
             ratio = (logp - old_lp).exp()
-            unclipped = ratio * mb_adv
-            clipped = ratio.clamp(1 - cfg.clip, 1 + cfg.clip) * mb_adv
-            pol_loss = -torch.min(unclipped, clipped).mean()
+            if cfg.a2c:                                   # D76: A2C 基线 —— 纯策略梯度, 无比率/裁剪
+                pol_loss = -(logp * mb_adv).mean()
+            else:
+                unclipped = ratio * mb_adv
+                clipped = ratio.clamp(1 - cfg.clip, 1 + cfg.clip) * mb_adv
+                pol_loss = -torch.min(unclipped, clipped).mean()
             val_loss = ((value - mb_ret) ** 2).mean()
             ent = dist.entropy().mean()
             kl = routing_kl(policy, batch) if cfg.kl_beta > 0 else torch.zeros((), device=device)

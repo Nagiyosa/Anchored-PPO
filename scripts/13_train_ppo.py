@@ -136,6 +136,8 @@ def main() -> None:
                          "新特征列**零填充迁移**(初始行为与旧网逐位相同)。给了它则跳过 --bc-ckpt")
     ap.add_argument("--anchor-ckpt", default=None,
                     help="D71: 时机锚的参照 checkpoint(如 best.pt = 移动信任域)。缺省=热启动/init 权重")
+    ap.add_argument("--a2c", action="store_true",
+                    help="D76 基线: A2C 模式(纯策略梯度, 建议配 --update-epochs 1 --target-kl 0)")
     ap.add_argument("--run-tag", default=None,
                     help="稳定 run_id(无时间戳): 断点续训/矩阵幂等续跑用。给了它, checkpoint/输出用该名; "
                          "不给则沿用带时间戳的旧行为(每版留档)")
@@ -247,7 +249,7 @@ def main() -> None:
                     reward_scale=args.reward_scale,
                     normalise_returns=not args.no_return_norm,
                     kind_anchor_beta=args.kind_anchor_beta,
-                    bc_anchor_beta=args.bc_anchor_beta,
+                    bc_anchor_beta=args.bc_anchor_beta, a2c=args.a2c,
                     target_kl=(args.target_kl if args.target_kl > 0 else None))
     # D69 时机锚A: 冻结参照(逐状态 KL; 不训练、不进 optimizer)。D71: --anchor-ckpt 可指定参照
     # (如 best.pt = **移动信任域**: 围着当前最好的自己小步爬, 而不是围着起点打转)。

@@ -94,11 +94,12 @@ def main(argv) -> int:
     gameover = bool(int(argv[5])) if len(argv) > 5 else False   # D65(d): 入区堆积判负(与训练/评估口径一致)
     K = int(argv[6]) if len(argv) > 6 else 6
     control = argv[7] if len(argv) > 7 else "12"                # D67①: 默认只控客运(论文口径)
+    dirtag = argv[8] if len(argv) > 8 else ""                   # D76: 目录版本 tag(env 改版后防新旧数据混)
     from derbysim.learn.scenarios import operating_days
     days = operating_days(split)[:n_days]
     pols = ["signaller", "lookup", "greedy", "fcfs", "fsfs"]
     # 口径进目录名, 别和旧数据混(D65 go / D67 控制范围; 旧 offline_shards_train* 已作废)
-    suffix = (f"_c{control}" if control not in ("all", "") else "") + ("_go" if gameover else "")
+    suffix = (f"_c{control}" if control not in ("all", "") else "") + ("_go" if gameover else "") + dirtag
     outdir = config.ARTIFACTS / "dataset" / f"offline_shards_{split}{suffix}"
     outdir.mkdir(parents=True, exist_ok=True)
 
