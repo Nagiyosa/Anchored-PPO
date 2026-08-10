@@ -72,6 +72,10 @@ class DynTrain:
     # D67①: 背景车(无可观测目标的幽灵车 / 控制范围外的车)—— 不上面板, 由 env 照历史
     # route_chain/req_times 自动驾驶(真实占道的 AI 车, 如 RR); 不进分母、不进奖励账本。
     background: bool = False
+    # D73①: 死锁圈手术状态 —— 该车排队请求因成环被弹回的次数(>3 判负); 弹回的路在阻塞未变时不再提供
+    cycle_bounces: int = 0
+    bounce_rid: str | None = None
+    bounce_sig: frozenset | None = None
     pos: int = 0
     dwell_idx: int | None = None
     dwell_s: float = 0.0
@@ -198,6 +202,10 @@ class DynamicEngine:
             # 对信号员回放零影响。旧行为会在区边界端出区外 route, 让策略被引出区、卡在 TDBN 等区外死点。
             if not getattr(r, "in_scope", True):
                 continue
+            # D73①: 刚因死锁环被弹回的路, 阻塞未变时暂不提供(逼策略看别的选项; 阻塞变了恢复提供)
+            if (r.route_id == t.bounce_rid
+                    and self._route_blockers(r.route_id, t.train_id) == t.bounce_sig):
+                continue
             if self.reach.route_keeps_goal(r, t.goal, t.served_platform):
                 out.append(r.route_id)
         return out
@@ -276,6 +284,8 @@ class DynamicEngine:
             t.matched_reference_indices.add(ref_idx)
         commit_idx = len(t.actual_chain)
         t.actual_chain.append(route_id)
+        t.bounce_rid = None                          # D73①: 有实质进展 → 弹回掩码解除
+        t.bounce_sig = None
         for tc in r.tc_sequence:
             if not t.path or t.path[-1] != tc:
                 t.path.append(tc)
@@ -399,6 +409,50 @@ class DynamicEngine:
                    if t.pending_request is not None and not t.entered and not t.done
                    and not t.background)                     # D67①: 背景车走历史时机, 不计堆积
 
+    def _route_blockers(self, rid, train_id) -> frozenset:
+        """某进路 footprint 当前的他车持有者集合(= 该请求的阻塞签名)。"""
+        r = self.net.routes.get(rid)
+        if r is None:
+            return frozenset()
+        out = set()
+        for tc in self.res.footprint(r):
+            h = self.res.reserved.get(tc)
+            if h is not None and h[1] != train_id:
+                out.add(h)
+        return frozenset(out)
+
+    def _check_cycles(self) -> None:
+        """D73: 请求后查等待图环(**含背景车请求** —— 旧盲区: 只在面板 SET 后查, 背景闭环永不竖旗
+        → 09-28 静默僵死 2000 万延误)。**手术**: 环中含受控排队请求 → 弹回面板重选(同路在阻塞
+        未变时暂不提供, 逼策略看别的选项); 同车弹回 >3 次 / 环中无可弹回受控请求 → 显式死锁判负。"""
+        from derbysim.sim.deadlock import deadlock_cycle
+        cyc = deadlock_cycle(self.res)
+        if not cyc:
+            return
+        for tid in cyc:
+            t = self.trains.get(tid)
+            if (t is None or t.background or t.done
+                    or t.pending_request is None or t.cycle_bounces >= 3):
+                continue
+            rid = t.pending_request
+            if not self.res.cancel_queued(rid, t.train_id):
+                continue
+            t.cycle_bounces += 1
+            t.bounce_rid = rid                        # 阻塞没变就不再提供这条路
+            t.bounce_sig = self._route_blockers(rid, t.train_id)
+            t.pending_request = None
+            if t.blocked_since is not None:           # 排队等锁的时段结清(与 cancel 同规)
+                t.wait_time += self.now - t.blocked_since
+                t.blocked_since = None
+            if t.entered:
+                t.awaiting_decision = True
+            else:
+                t.awaiting_entry = True
+            t.cancel_sig = None
+            t.set_offer_sig = None                    # 面板立即重问
+            return
+        self._flag_deadlock()                         # 全背景环 / 受控全超限 → 真死锁
+
     def _maybe_tick(self) -> None:
         """D67③: 学习者的闹钟。有受控车在门口等(awaiting_entry 或入区 pending)且未到 horizon 时,
         排一个 now+tick_s 的 tick 事件 —— 保证面板每 tick_s 至少开一次(WAIT 不再"睡到下个事件"),
@@ -437,6 +491,8 @@ class DynamicEngine:
             else:
                 self.q.push(self.now, "try_advance", {"tr": t.train_id, "idx": t.pos})
             self._auto_drive(t)                              # 下一段可能同刻到点(链长 ≤6, 有守卫不失控)
+        else:
+            self._check_cycles()                             # D73⓪: 背景请求闭环也要被看见(旧盲区)
 
     def _build_options(self, awaiting, cancellable):
         opts = [PanelAction("wait")]
@@ -453,6 +509,9 @@ class DynamicEngine:
                 # D57 entry (a): 只提供**日志入区路**(选路固定), 决策 = 何时放行 / WAIT。
                 rid = t.route_chain[0] if t.route_chain else None
                 r = self.net.routes.get(rid) if rid else None
+                if (r is not None and rid == t.bounce_rid                  # D73①: 弹回的入区路
+                        and self._route_blockers(rid, t.train_id) == t.bounce_sig):
+                    r = None                                               # 阻塞未变 → 暂不提供(=WAIT)
                 if r and not would_create_deadlock(self.res, r, t.train_id):
                     opts.append(PanelAction("set", t.train_id, rid))
                     ref_idx = self._match_reference_index(t, {rid})
@@ -488,8 +547,7 @@ class DynamicEngine:
                 else:
                     self.q.push(self.now, "try_advance", {"tr": t.train_id, "idx": t.pos})
             # 若入区路 QUEUED(被占), pending_request 已置, 由 _wake 落锁后处理 not-entered → enter(见 _wake)。
-            if has_deadlock(self.res):
-                self._flag_deadlock()
+            self._check_cycles()                      # D73: 检测 + 手术(取代原 has_deadlock 直接判负)
         elif a.kind == "cancel" and t is not None:
             rid = t.pending_request
             if rid is not None and self.res.cancel_queued(rid, t.train_id):
