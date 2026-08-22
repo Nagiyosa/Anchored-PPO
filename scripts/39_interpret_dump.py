@@ -104,7 +104,8 @@ def train_rows(engine):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", required=True, choices=["cumgap", "trace", "leadtime", "permimport"])
+    ap.add_argument("--mode", required=True,
+                    choices=["cumgap", "trace", "leadtime", "permimport", "sensitivity"])
     ap.add_argument("--ckpt", default="artifacts/reports/ppo_d73_AB_s0_best.pt")
     ap.add_argument("--days", default="", help="逗号分隔日期(cumgap/trace 用)")
     ap.add_argument("--split", default="val", help="leadtime/permimport 用")
@@ -207,6 +208,84 @@ def main():
             print(f"  leadtime {date} done", flush=True)
         f = outdir / f"interpret_leadtime_{args.split}.json"
         f.write_text(json.dumps(out), encoding="utf-8")
+        print("[out]", f)
+
+    # ---------------- sensitivity(D79.3, 取代粗糙的置零) ----------------
+    # 方法学修正: 置零不是中性值(delay_min=0 = "正点", 是有含义的分布内值!)。改用**批内置换**
+    # (把该特征列在收集到的真实状态间随机重排 = 破坏该特征与状态的关联但保持边际分布)+
+    # **动作层敏感度**(argmax 翻转率 / 选中动作 logit 变化)—— 比终局延误敏感得多(环境冗余会吸收
+    # 小决策差, 造成"看不出效果"的假象)。
+    elif args.mode == "sensitivity":
+        assert "rl" in facs, "sensitivity 需要 rl 策略"
+        import torch
+        from derbysim.learn.panel import collate_panels
+        from derbysim.learn.panel_models import to_tensors
+        encs = []
+        days = operating_days(args.split)[:args.max_days]
+        rl_fac = facs["rl"]
+        for w in days:
+            env = envf()
+            act = rl_fac(env)
+            def on_dec(env_, enc, dec, idx, _e=encs):
+                if len(_e) < 6000:
+                    _e.append(enc)
+            run_instrumented(env, adapter, act, build_day_trains(w, inject=False),
+                             day_horizon(w), on_decision=on_dec)
+            if len(encs) >= 6000:
+                break
+        print(f"[sensitivity] 收集 {len(encs)} 个真实决策状态")
+        pol = rl_fac(None).policy if hasattr(rl_fac(None), "policy") else None
+        # TorchPanelDriver 持有 policy; 取其内部网络
+        drv = rl_fac(None)
+        net_pol = getattr(drv, "policy", None) or getattr(drv, "model", None)
+        assert net_pol is not None, "拿不到 driver 内部网络"
+        base_c = adapter.fz.n_groups + 6
+        groups = {
+            "lateness(dec0+panel0)": {"x_dec": [0], "x_panel": [0]},
+            "fine_time_v2(dec-1)": {"x_dec": [adapter.dec_dim - 1]},
+            "bg_foresight_v2(cand-1)": {"x_cand": [adapter.cand_dim - 1]},
+            "occupancy(occ+first)": {"x_cand": [base_c + 3, base_c + 4]},
+            "route_prior": {"x_cand": [base_c + 6]},
+            "tod(sin,cos)": {"x_dec": [1 + 8 + 7 + 1, 1 + 8 + 7 + 2]},
+        }
+        rng = np.random.default_rng(0)
+        B = 256
+        def logits_of(enc_list, cols=None, perm=None):
+            outs = []
+            for i0 in range(0, len(enc_list), B):
+                chunk = enc_list[i0:i0 + B]
+                if cols:
+                    chunk2 = []
+                    for j, e in enumerate(chunk):
+                        e2 = dict(e)
+                        for key, idxs in cols.items():
+                            src = enc_list[perm[i0 + j]][key]
+                            arr = np.array(e2[key], copy=True)
+                            sarr = np.asarray(src)
+                            for c in idxs:
+                                # 用置换来源状态该列的均值填充(行数可能不同 → 按均值移植)
+                                arr[..., c] = float(sarr[..., c].mean()) if sarr.size else 0.0
+                            e2[key] = arr
+                        chunk2.append(e2)
+                    chunk = chunk2
+                b = to_tensors(collate_panels(chunk), torch.device("cpu"))
+                with torch.no_grad():
+                    lg, _v, _aux = net_pol(b)
+                    lg = lg.masked_fill(b["opt_mask"] < 0.5, float("-inf"))
+                outs.append(lg)
+            return outs
+        base_out = logits_of(encs)
+        base_act = [int(l.argmax(dim=1)[j]) for l in base_out for j in range(l.shape[0])]
+        results = {}
+        for g, cols in groups.items():
+            perm = rng.permutation(len(encs))
+            out = logits_of(encs, cols, perm)
+            acts = [int(l.argmax(dim=1)[j]) for l in out for j in range(l.shape[0])]
+            flip = float(np.mean([a != b_ for a, b_ in zip(acts, base_act)]))
+            results[g] = {"flip_rate": flip}
+            print(f"  [{g}] argmax 翻转率 {flip:.3f}")
+        f = outdir / f"interpret_sensitivity_{args.split}.json"
+        f.write_text(json.dumps(results), encoding="utf-8")
         print("[out]", f)
 
     # ---------------- permimport ----------------

@@ -62,38 +62,63 @@ def grid(ax, axis="y"):
     ax.set_axisbelow(True)
 
 
-# ================= F1 收敛故事 =================
+# ================= F1 三面板递进(各自 0 起计, 加一个机制降一台阶) =================
 def f1():
     d69 = loadpt(glob.glob("/sessions/modest-focused-lamport/mnt/uploads/*ppo_8192_anchor_s0_last.pt")[0])["evals"]
     d72A = R("ppo_push_A_s0.json")["evals"]; d72B = R("ppo_push_AB_s0.json")["evals"]
-    d73A = R("ppo_d73_A_s0.json")["evals"]; d73B = R("ppo_d73_AB_s0.json")["evals"]
-    P1, P2, P3 = 0, 80, 185
-    fig, ax = plt.subplots(figsize=(7.2, 3.1))
-    ax.axvspan(P1 - 3, P2 - 3, color=M["band"], alpha=0.55, zorder=0)
-    ax.axvspan(P3 - 3, 290, color=M["band"], alpha=0.55, zorder=0)
-    h_sig, = ax.plot([e["iter"] + P1 for e in d69],
-                     [e["eval_weighted_secondary_delay_s"] / 1000 for e in d69], color=M["sig"], lw=1.5)
-    for evs, off in [(d72A, P2), (d73A, P3)]:
-        h_a, = ax.plot([e["iter"] + off for e in evs],
-                       [e["eval_weighted_secondary_delay_s"] / 1000 for e in evs], color=M["lite"], lw=1.2)
-    for evs, off in [(d72B, P2), (d73B, P3)]:
-        h_b, = ax.plot([e["iter"] + off for e in evs],
-                       [e["eval_weighted_secondary_delay_s"] / 1000 for e in evs], color=M["rl"], lw=1.7)
+    d73A = R("ppo_d73_A_s0.json")["evals"]
+    seeds = [R("ppo_d73_AB_s0.json")["evals"], R("ppo_d74_AB_s1.json")["evals"], R("ppo_d74_AB_s2.json")["evals"]]
+    fig, axes = plt.subplots(1, 3, figsize=(8.8, 3.2), sharey=True,
+                             gridspec_kw={"width_ratios": [0.8, 1.0, 1.0], "wspace": 0.06})
+    import matplotlib.transforms as mtransforms
+    for ax, ti, sub in zip(axes, ["Stage 1", "Stage 2", "Stage 3"],
+                           ["+ timing anchor", "+ moving trust region", "+ deadlock surgery, full-peak tiers"]):
+        _tr = mtransforms.blended_transform_factory(ax.transAxes, ax.transAxes)
+        ax.text(0.5, 1.10, ti, transform=_tr, ha="center", fontsize=10, fontweight="bold", color="#5A5A5A")
+        ax.text(0.5, 1.03, sub, transform=_tr, ha="center", fontsize=7, color="#8A8A8A")
+        for y, c in [(181.164, M["fcfs"]), (222.146, M["aset"])]:
+            ax.axhline(y, color=c, lw=0.9, ls=(0, (4, 3)))
+        ax.set_xlabel("iteration")
+        grid(ax)
+    # Stage 1: 单臂(= full method 的前身, 方法色)
+    ax = axes[0]
+    ax.plot([e["iter"] for e in d69], [e["eval_weighted_secondary_delay_s"] / 1000 for e in d69],
+            color=M["rl"], lw=1.7)
+    ax.scatter([49], [182.745], s=15, color=M["dark"], zorder=6)
+    ax.annotate("182.7k", (49, 182.745), xytext=(46, 168), fontsize=8, fontweight="bold", color=M["dark"])
+    ax.set_xlim(0, 78)
+    # Stage 2: 双臂
+    ax = axes[1]
+    h_a, = ax.plot([e["iter"] for e in d72A], [e["eval_weighted_secondary_delay_s"] / 1000 for e in d72A],
+                   color=M["lite"], lw=1.2)
+    h_b, = ax.plot([e["iter"] for e in d72B], [e["eval_weighted_secondary_delay_s"] / 1000 for e in d72B],
+                   color=M["rl"], lw=1.7)
+    ax.scatter([69], [154.788], s=15, color=M["dark"], zorder=6)
+    ax.annotate("154.8k", (69, 154.788), xytext=(64, 140), fontsize=8, fontweight="bold", color=M["dark"])
+    ax.set_xlim(0, 102)
+    # Stage 3: full = 三种子带; w/o foresight 单线
+    ax = axes[2]
+    ax.plot([e["iter"] for e in d73A], [e["eval_weighted_secondary_delay_s"] / 1000 for e in d73A],
+            color=M["lite"], lw=1.2)
+    per = [{e["iter"]: e["eval_weighted_secondary_delay_s"] / 1000 for e in evs} for evs in seeds]
+    common = sorted(set(per[0]) & set(per[1]) & set(per[2]))
+    mean = [np.mean([p[i] for p in per]) for i in common]
+    lo = [min(p[i] for p in per) for i in common]
+    hi = [max(p[i] for p in per) for i in common]
+    ax.fill_between(common, lo, hi, color=M["rl"], alpha=0.20, lw=0, zorder=2)
+    h_full, = ax.plot(common, mean, color=M["rl"], lw=1.7, zorder=4)
+    ax.scatter([74], [123.036], s=15, color=M["dark"], zorder=6)
+    ax.annotate("123.0k (−32% vs FCFS)", (74, 123.036), xytext=(18, 108),
+                fontsize=8, fontweight="bold", color=M["dark"])
+    ax.set_xlim(0, 102)
     for y, lab, c in [(181.164, "FCFS 181k", M["fcfs"]), (222.146, "always-set 222k", M["aset"])]:
-        ax.axhline(y, color=c, lw=0.8, ls=(0, (4, 3)))
-        ax.text(288, y + 3, lab, color=c, fontsize=7, ha="right")
-    for x, y, s in [(49, 182.745, "182.7k"), (149, 154.788, "154.8k"), (259, 123.036, "123.0k  (−32% vs FCFS)")]:
-        ax.scatter([x], [y], s=14, color=M["dark"], zorder=5)
-        ax.annotate(s, (x, y), xytext=(x + 4, y - 13), fontsize=7.5, fontweight="bold", color=M["dark"])
-    for x, s in [(30, "Stage 1\ntiming anchor"), (125, "Stage 2\nmoving trust region"),
-                 (228, "Stage 3\ndeadlock surgery → full-peak training")]:
-        ax.text(x, 236, s, fontsize=7, ha="center", color="#6B6B6B")
-    ax.legend([h_b, h_a, h_sig], ["full method (with foresight)", "w/o foresight (ablation arm)", "stage-1 run"],
-              fontsize=7, loc="center left", bbox_to_anchor=(0.315, 0.70))
-    ax.set_ylim(100, 245); ax.set_xlim(-4, 290)
-    ax.set_xlabel("training iteration (stage-sequential)")
-    ax.set_ylabel("validation delay (×10³ s)")
-    grid(ax)
+        ax.text(100, y + 2.5, lab, color=c, fontsize=7, ha="right")
+    ax.legend([h_full, h_a], ["full method (Stage-3: 3-seed mean ± min–max)", "− foresight"],
+              fontsize=7.2, loc="upper right")
+    axes[0].set_ylim(100, 245)
+    axes[0].set_ylabel("validation delay (×10³ s)")
+    fig.text(0.5, -0.03, "each stage is a separate run, re-initialised from the previous stage's best checkpoint (iterations restart at 0)",
+             ha="center", fontsize=6.8, color="#8A8A8A")
     save(fig, "F1_convergence")
 
 
@@ -122,18 +147,27 @@ def f2():
 
 # ================= F3 消融(小=好, full 置顶加粗, 去题注) =================
 def f3():
-    abl = [("Full method", 122.492, M["rl"]), ("− foresight features", 128.428, "#B58A84"),
-           ("− routing anchor", 134.188, "#BFA39E"), ("− curriculum", 136.098, "#C9B6B0"),
-           ("BC only (no RL)", 199.266, M["bc"]), ("Vanilla PPO (none)", 216.364, M["vppo"])]
-    fig, ax = plt.subplots(figsize=(5.0, 2.5))
+    # 与 F1 组件命名一一对应(用户定); † = 阶段历史证据(build-up 序列, 非最终阶段同预算拆除),
+    # 无 † = 受控同预算 knockout。数值均为 val 延误 best。
+    abl = [("Full method",                                122.492, M["rl"],   False),
+           ("− foresight features",                     128.428, "#B58A84", False),
+           ("− routing anchor",                         134.188, "#BFA39E", False),
+           ("− curriculum",                             136.098, "#C9B6B0", False),
+           ("− deadlock surgery, full-peak tiers",    154.788, "#C9B6B0", False),
+           ("− moving trust region (static anchor)",  182.745, "#D3C4BE", False),
+           ("BC only (no RL)",                            199.266, M["bc"],   False),
+           ("− timing anchor",                        203.956, "#D3C4BE", False),
+           ("Vanilla PPO (none of the above)",            216.364, M["vppo"], False)]
+    fig, ax = plt.subplots(figsize=(5.6, 3.1))
     ys = np.arange(len(abl))[::-1]
-    for y, (n, v, c) in zip(ys, abl):
-        ax.barh(y, v, color=c, height=0.6, zorder=3)
-        pct = "" if v == 122.492 else f"  +{(v-122.492)/122.492*100:.1f}%"
+    for y, (n, v, c, hist) in zip(ys, abl):
+        ax.barh(y, v, color=c, height=0.6, zorder=3, alpha=0.55 if hist else 1.0,
+                edgecolor=c if hist else "none", lw=0.9)
+        pct = "" if v == 122.492 else f"  +{(v-122.492)/122.492*100:.0f}%"
         ax.text(v + 4, y, f"{v:.0f}k{pct}", va="center", fontsize=7, color=M["dark"])
     ax.set_yticks(ys); ax.set_yticklabels([a[0] for a in abl], fontsize=7.5)
     ax.get_yticklabels()[0].set_fontweight("bold")
-    ax.set_xlim(0, 265); ax.set_xlabel("validation delay (×10³ s; lower is better)")
+    ax.set_xlim(0, 268); ax.set_xlabel("validation delay (×10³ s; lower is better)")
     grid(ax, "x")
     save(fig, "F3_ablation")
 
@@ -143,9 +177,9 @@ def f4():
     import os
     if os.path.exists("artifacts/reports/interpret_cumgap_busiest.json"):
         cg = R("interpret_cumgap_busiest.json")
-        meta = [("2023-10-23", "a  train split — busiest day (2023-10-23)"),
-                ("2023-11-15", "b  validation split — busiest day (2023-11-15)"),
-                ("2023-11-18", "c  test split — busiest day (2023-11-18)")]
+        meta = [("2023-10-23", "a  train, 2023-10-23 (busiest)"),
+                ("2023-11-15", "b  validation, 2023-11-15 (busiest)"),
+                ("2023-11-18", "c  test, 2023-11-18 (busiest)")]
     else:
         cg = R("interpret_cumgap_main.json")
         meta = [("2023-10-23", "a  train split — busiest day (2023-10-23)"),
@@ -194,10 +228,9 @@ def f5():
     save(fig, "F5_adaptive_patience")
 
 
-# ================= F6 冲突归因: 均值条 + 受影响车 Δ 箱线 =================
+# ================= F6 冲突归因(原版两面板: 均值条) =================
 def f6():
-    fig, axes = plt.subplots(1, 3, figsize=(8.6, 2.7),
-                             gridspec_kw={"width_ratios": [1.6, 2.4, 2.2]})
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 2.6))
     for ax, sp, ti in [(axes[0], "val", "a  validation, mean per train"),
                        (axes[1], "test", "b  sealed test, mean per train")]:
         ca = R(f"conflict_analysis_{sp}.json")
@@ -211,7 +244,13 @@ def f6():
         grid(ax)
     axes[0].set_ylabel("weighted delay per train (s)")
     axes[0].legend(fontsize=6.8)
-    # c: test 受影响车(|Δ|>1s)逐箱 Δ 箱线
+    for ax in axes:
+        ax.set_xlabel("contention (co-present controlled trains)")
+    save(fig, "F6_conflict_attribution")
+
+
+# ================= F11 逐车 Δ 分布(小提琴+箱线, 独立图) =================
+def f11():
     ca = R("conflict_analysis_test.json")
     pt = ca["per_train"]
     labels, data = [], []
@@ -219,18 +258,26 @@ def f6():
         v = [r["d"] for r in pt if lo <= r["contention"] <= hi and abs(r["d"]) > 1]
         if v:
             labels.append(f"{lab}\nn={len(v)}"); data.append(v)
-    ax = axes[2]
-    bp = ax.boxplot(data, showfliers=False, widths=0.5, patch_artist=True,
-                    medianprops=dict(color=M["dark"], lw=1.1),
-                    boxprops=dict(facecolor="#E7DAD6", edgecolor=M["rl"], lw=0.9),
+    fig, ax = plt.subplots(figsize=(5.2, 3.0))
+    vp = ax.violinplot(data, showextrema=False, widths=0.85)
+    for b in vp["bodies"]:
+        b.set_facecolor("#E7DAD6"); b.set_edgecolor(M["rl"]); b.set_alpha(0.85); b.set_linewidth(0.8)
+    bp = ax.boxplot(data, showfliers=False, widths=0.22, patch_artist=True,
+                    medianprops=dict(color="white", lw=1.2),
+                    boxprops=dict(facecolor=M["rl"], edgecolor=M["rl"], lw=0.8),
                     whiskerprops=dict(color=M["rl"], lw=0.9), capprops=dict(color=M["rl"], lw=0.9))
-    ax.axhline(0, color="#8A8A8A", lw=0.7, ls=(0, (3, 2)))
-    ax.set_xticklabels(labels, fontsize=6.8)
-    ax.set_title("c  test, per-train Δ(RL−FCFS), affected trains", loc="left", fontsize=7.6, fontweight="bold")
-    ax.set_ylabel("Δ weighted delay (s)")
+    ax.axhline(0, color="#8A8A8A", lw=0.8, ls=(0, (3, 2)))
+    for i, v in enumerate(data):
+        ax.scatter([i + 1], [np.mean(v)], marker="D", s=13, color=M["dark"], zorder=5)
+    ax.set_xticks(range(1, len(labels) + 1)); ax.set_xticklabels(labels, fontsize=7)
+    ax.set_ylabel("per-train Δ weighted delay, RL − FCFS (s)")
     ax.set_xlabel("contention (co-present controlled trains)")
+    ax.set_title("Sealed test, affected trains (|Δ| > 1 s): distribution shifts down as contention grows",
+                 loc="left", fontsize=7.6, fontweight="bold")
+    ax.text(0.98, 0.04, "diamond = mean; white line = median; below 0 = RL saves",
+            transform=ax.transAxes, fontsize=6.6, ha="right", color="#6B6B6B")
     grid(ax)
-    save(fig, "F6_conflict_attribution")
+    save(fig, "F11_delta_distribution")
 
 
 # ================= F7 特征置零 =================
@@ -341,22 +388,152 @@ def f10():
     save(fig, "F10_all_methods_convergence")
 
 
+
+
+# ================= F12 主方法三种子误差带(独立图) =================
+def f12():
+    seeds = [R("ppo_d73_AB_s0.json")["evals"], R("ppo_d74_AB_s1.json")["evals"], R("ppo_d74_AB_s2.json")["evals"]]
+    per = [{e["iter"]: e["eval_weighted_secondary_delay_s"] / 1000 for e in evs} for evs in seeds]
+    common = sorted(set(per[0]) & set(per[1]) & set(per[2]))
+    mean = [np.mean([p[i] for p in per]) for i in common]
+    lo = [min(p[i] for p in per) for i in common]
+    hi = [max(p[i] for p in per) for i in common]
+    fig, ax = plt.subplots(figsize=(5.6, 3.2))
+    ax.fill_between(common, lo, hi, color=M["rl"], alpha=0.20, lw=0, zorder=2, label="seed min–max (n=3)")
+    ax.plot(common, mean, color=M["rl"], lw=1.9, zorder=4, label="full method, 3-seed mean")
+    for y, lab, c in [(181.164, "FCFS (best rule)", M["fcfs"]),
+                      (199.266, "BC (imitation)", M["bc"]),
+                      (222.146, "always-set", M["aset"])]:
+        ax.axhline(y, color=c, lw=1.0, ls=(0, (4, 3)))
+        ax.text(2, y + 2.5, f"{lab}  {y:.0f}k", color=c, fontsize=7.5, ha="left")
+    ax.annotate("best 123.0k (seed mean 126.7k ± 5.6k)", (74, 123.0), xytext=(30, 108),
+                fontsize=8, fontweight="bold", color=M["dark"],
+                arrowprops=dict(arrowstyle="->", lw=0.7, color="#8A8A8A"))
+    ax.set_ylim(100, 235); ax.set_xlim(0, 100)
+    ax.set_xlabel("training iteration")
+    ax.set_ylabel("validation delay (×10³ s)")
+    ax.legend(fontsize=7.5, loc="upper right")
+    grid(ax)
+    save(fig, "F12_seed_band")
+
+
+
+
+# ================= F13 课程四档 × 三种子(小多联, 档位底纹渐深) =================
+def f13():
+    tags = [("ppo_d73_AB_s0.json", "seed 0"), ("ppo_d74_AB_s1.json", "seed 1"), ("ppo_d74_AB_s2.json", "seed 2")]
+    tier_shades = ["#F5F1EC", "#EDE6DD", "#E4DACC", "#DACDBB"]      # 档1→4 渐深
+    fig, axes = plt.subplots(1, 3, figsize=(8.8, 2.9), sharey=True)
+    for ax, (f, ti) in zip(axes, tags):
+        evs = R(f)["evals"]
+        iters = [e["iter"] for e in evs]
+        tiers = [e.get("tier", 0) for e in evs]
+        ys = [e["eval_weighted_secondary_delay_s"] / 1000 for e in evs]
+        # 档位区间: 该档第一次出现的 eval iter → 下一档第一次出现
+        bounds = []
+        for t in range(4):
+            fs = [i for i, tt in zip(iters, tiers) if tt == t]
+            if fs:
+                bounds.append((t, min(fs)))
+        bounds.sort(key=lambda x: x[1])
+        xmax = max(iters) + 4
+        import matplotlib.transforms as mtransforms
+        _tr = mtransforms.blended_transform_factory(ax.transData, ax.transAxes)
+        tl = ["T1", "T2", "T3", "Tier 4"]
+        for j, (t, b) in enumerate(bounds):
+            e = bounds[j + 1][1] if j + 1 < len(bounds) else xmax
+            x0 = b - 4 if j == 0 else b
+            ax.axvspan(x0, e, color=tier_shades[t], zorder=0)
+            yl = 1.04 if (t == 3 or t % 2 == 0) else 1.12      # 窄档高低交错防重叠
+            ax.text((x0 + e) / 2, yl, tl[t], transform=_tr,
+                    ha="center", fontsize=6.8, color="#6B6B6B")
+        for y, c in [(181.164, M["fcfs"]), (199.266, M["bc"]), (222.146, M["aset"])]:
+            ax.axhline(y, color=c, lw=0.9, ls=(0, (4, 3)))
+        ax.plot(iters, ys, color=M["rl"], lw=1.6, marker="o", ms=2.2, zorder=4)
+        ax.set_title(ti, loc="left", fontsize=8, fontweight="bold", y=1.12)
+        ax.set_xlabel("training iteration")
+        ax.set_xlim(0, xmax)
+        grid(ax)
+    axes[0].set_ylabel("validation delay (×10³ s)")
+    axes[0].set_ylim(100, 235)
+    for y, lab, c in [(181.164, "FCFS 181k", M["fcfs"]), (199.266, "BC 199k", M["bc"]),
+                      (222.146, "always-set 222k", M["aset"])]:
+        axes[2].text(axes[2].get_xlim()[1] * 0.98, y + 2.5, lab, color=c, fontsize=6.8, ha="right")
+    save(fig, "F13_curriculum_tiers")
+
+
+
+
+# ================= F7b 特征敏感度(置换+动作翻转率; 数据到了才画) =================
+def f7b():
+    import os
+    if not os.path.exists("artifacts/reports/interpret_sensitivity_val.json"):
+        print("F7b 跳过: interpret_sensitivity_val.json 未到"); return
+    d = R("interpret_sensitivity_val.json")
+    names = {"lateness(dec0+panel0)": "lateness features", "fine_time_v2(dec-1)": "fine time-to-plan (v2)",
+             "bg_foresight_v2(cand-1)": "background foresight (v2)", "occupancy(occ+first)": "occupancy",
+             "route_prior": "route prior", "tod(sin,cos)": "time of day"}
+    ks = [k for k in d if k in names]
+    vals = [d[k]["flip_rate"] * 100 for k in ks]
+    order = np.argsort(vals)
+    fig, ax = plt.subplots(figsize=(4.8, 2.5))
+    ys = np.arange(len(ks))
+    for y, i in zip(ys, order):
+        ax.barh(y, vals[i], color=M["rl"], height=0.58, zorder=3)
+        ax.text(vals[i] + max(vals) * 0.02, y, f"{vals[i]:.1f}%", va="center", fontsize=7, color=M["dark"])
+    ax.set_yticks(ys); ax.set_yticklabels([names[ks[i]] for i in order], fontsize=7.5)
+    ax.set_xlabel("decisions whose argmax action flips when the feature group is permuted (%)")
+    grid(ax, "x")
+    save(fig, "F7_feature_sensitivity")
+
+
+# ================= F14 四编码器 BC 闭环(数据到了才画) =================
+def f14():
+    import os
+    if not os.path.exists("artifacts/reports/bc_encoders_closedloop.json"):
+        print("F14 跳过: bc_encoders_closedloop.json 未到"); return
+    d = R("bc_encoders_closedloop.json")
+    names = {"gnn": "GNN", "deepsets": "DeepSets", "settransformer": "Set Transformer", "mlp": "MLP"}
+    rows = sorted(d.items(), key=lambda kv: kv[1]["eval_weighted_secondary_delay_s"])
+    fig, ax = plt.subplots(figsize=(4.6, 2.1))
+    ys = np.arange(len(rows))[::-1]
+    for y, (k, v) in zip(ys, rows):
+        dv = v["eval_weighted_secondary_delay_s"] / 1000
+        ax.barh(y, dv, color=M["bc"] if k != "gnn" else M["rl"], height=0.58, zorder=3)
+        ax.text(dv + 3, y, f"{dv:.0f}k   completion {v['eval_completion_rate']:.3f}",
+                va="center", fontsize=7, color=M["dark"])
+    ax.set_yticks(ys); ax.set_yticklabels([names.get(k, k) for k, _ in rows], fontsize=7.5)
+    ax.set_xlabel("closed-loop validation delay of the BC policy (×10³ s)")
+    ax.set_xlim(0, max(v["eval_weighted_secondary_delay_s"] for _, v in rows) / 1000 * 1.45)
+    grid(ax, "x")
+    save(fig, "F14_bc_encoders")
+    md = ["| Encoder | Completion | Val delay (×10³ s) | Reward |", "|---|---|---|---|"]
+    for k, v in rows:
+        md.append(f"| {names.get(k,k)} | {v['eval_completion_rate']:.4f} | "
+                  f"{v['eval_weighted_secondary_delay_s']/1000:.1f} | {v['eval_episode_reward']:.0f} |")
+    open("figures/pub/bc_encoders_table.md", "w").write("\n".join(md))
+    print("saved bc_encoders_table.md")
+
+
 # ================= 消融表(论文用, 取代 F3 也可) =================
 def ablation_table():
-    rows = [("Full method (Anchored PPO + foresight + curriculum)", 122.492, "—"),
-            ("w/o foresight features", 128.428, "+4.4%"),
-            ("w/o routing anchor", 134.188, "+9.1%"),
-            ("w/o curriculum", 136.098, "+11.1%"),
-            ("w/o timing anchor", "drift → plateau collapse", "(D70)"),
-            ("BC only (no RL)", 199.266, "+62.7%"),
-            ("Vanilla PPO (no warm start, no anchors, no curriculum)", 216.364, "+76.6%")]
-    md = ["| Configuration | Val delay (×10³ s) | vs full |", "|---|---|---|"]
-    for n, v, p in rows:
-        md.append(f"| {n} | {v if isinstance(v,str) else f'{v:.1f}'} | {p} |")
+    rows = [("Full method (Anchored PPO + foresight + curriculum)", "122.5", "—", ""),
+            ("− foresight features", "128.4", "+4.4%", ""),
+            ("− routing anchor", "134.2", "+9.1%", ""),
+            ("− curriculum", "136.1", "+11.1%", ""),
+            ("− deadlock surgery, full-peak tiers", "154.8", "+26.4%", "stage evidence"),
+            ("− moving trust region (static anchor)", "182.7", "+49.2%", "stage evidence"),
+            ("BC only (no RL)", "199.3", "+62.7%", ""),
+            ("− timing anchor", "204.0", "+66.5%", "stage evidence"),
+            ("Vanilla PPO (none of the above)", "216.4", "+76.6%", "")]
+    md = ["| Configuration | Val delay (×10³ s) | vs full | evidence |", "|---|---|---|---|",
+          *[f"| {n} | {v} | {p} | {e or 'same-budget knockout'} |" for n, v, p, e in rows],
+          "",
+          "note: the − timing anchor run additionally exhibits drift/instability (D70)."]
     open("figures/pub/ablation_table.md", "w").write("\n".join(md))
     print("saved ablation_table.md")
 
 
 if __name__ == "__main__":
-    for fn in [f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, ablation_table]:
+    for fn in [f1, f2, f3, f4, f5, f6, f7, f7b, f8, f9, f10, f11, f12, f13, f14, ablation_table]:
         fn()
