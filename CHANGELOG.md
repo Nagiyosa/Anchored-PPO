@@ -20,6 +20,26 @@ Design in `docs/M12_DESIGN.md`. Core = maskable PPO (KL-to-BC + no-prior BC warm
 counterfactual environment with M10 rewards; discrete actions + event-driven SMDP (D24); the value
 anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 
+### D81 — Pre-writing audit: 31 questions answered against code/JSON + F1/F10 data-path fix (2026-08-23, user)
+- The user's writing session audited a **stale D41-era copy** of the project; the local folder is fully
+  current (HEAD `5eece3e`, scripts/17–41 tracked). Written answers with paths/line numbers/values in
+  **`_老对话的回答_31问.md`**. Key confirmations: delay metric excludes background trains (reward.py L74);
+  the bounded −50 penalty is reward-only, evaluation still charges stranded trains to the horizon;
+  sealed-test day-by-day recount = **18 W / 1 T / 2 L** (supersedes the loose "19/21 wins").
+  Found a mixed baseline in F3/ablation_table (123.036 vs 122.492) and a byD value for
+  "− moving trust region" (byR = 183,700.5@89); unification proposed, awaiting the user's decision.
+- Code fix: `scripts/40_pub_figures.py` f1/f10 now read `artifacts/reports/ppo_8192_anchor_s0_last.pt`
+  locally instead of a dead session-uploads glob; F1/F10 regenerate cleanly (loadpt needs no torch).
+
+### D81.1 — Ablation v2 alongside v1 (user: "make a separate one, keep both") (2026-08-23)
+- New `scripts/42_ablation_v2.py` → `figures/pub/F3_ablation_v2.*` + `ablation_table_v2.md`; F3/v1 untouched.
+- v2: all nine rows selected **by validation reward** (deployment rule; Full = 123,035.5@74, − moving
+  trust region = 183,700.5@89); the deadlock-surgery row switches to the **AB arm** `ppo_push_AB_s0`
+  = 157,245.0@84 (+27.8%) — the v1 A-arm run also lacked foresight features, conflating two removals.
+  No shading distinction (user); provenance lives in the table's source-run column. Values read live
+  from result files. Recommendation: cite v2 in the paper body; v1 only where aligning with F1's 154.8k
+  stage annotation.
+
 ### D58 — Evaluation metric suite + reward redesigned to mirror Rail Route (per-train terminal); branch point resolved (2026-08-07, user)
 - **Branch point resolved**: the TD-occupation validation (`scripts/28`, `occupation_vs_td_20260807-184618.json`)
   showed all three modes drift 40–78s median from TD (reactive most centered at bias 0 — but that is a

@@ -64,7 +64,8 @@ def grid(ax, axis="y"):
 
 # ================= F1 三面板递进(各自 0 起计, 加一个机制降一台阶) =================
 def f1():
-    d69 = loadpt(glob.glob("/sessions/modest-focused-lamport/mnt/uploads/*ppo_8192_anchor_s0_last.pt")[0])["evals"]
+    # D81: 该 run 无 .json(只有 ckpt 内嵌 evals); 从本地 artifacts 读, 不再依赖已失效的会话 uploads 目录
+    d69 = loadpt("artifacts/reports/ppo_8192_anchor_s0_last.pt")["evals"]
     d72A = R("ppo_push_A_s0.json")["evals"]; d72B = R("ppo_push_AB_s0.json")["evals"]
     d73A = R("ppo_d73_A_s0.json")["evals"]
     seeds = [R("ppo_d73_AB_s0.json")["evals"], R("ppo_d74_AB_s1.json")["evals"], R("ppo_d74_AB_s2.json")["evals"]]
@@ -354,7 +355,7 @@ def f9():
 
 # ================= F10 全方法收敛 =================
 def f10():
-    d69 = loadpt(glob.glob("/sessions/modest-focused-lamport/mnt/uploads/*ppo_8192_anchor_s0_last.pt")[0])["evals"]
+    d69 = loadpt("artifacts/reports/ppo_8192_anchor_s0_last.pt")["evals"]  # D81 同上
     ours = [(e["iter"], e["eval_weighted_secondary_delay_s"]) for e in d69]
     ours += [(e["iter"] + 80, e["eval_weighted_secondary_delay_s"]) for e in R("ppo_push_AB_s0.json")["evals"]]
     ours += [(e["iter"] + 185, e["eval_weighted_secondary_delay_s"]) for e in R("ppo_d73_AB_s0.json")["evals"]]
