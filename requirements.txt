@@ -1,0 +1,21 @@
+# Derby junction dispatching — simulation-to-policy pipeline
+# Python >= 3.10 (developed on 3.10/3.11). Install: pip install -r requirements.txt
+# Version floors match pyproject.toml; tested with the versions current as of 2026-08.
+
+# --- core (data pipeline + simulator) ---
+numpy>=1.24
+pandas>=2.0
+pyarrow>=14.0        # parquet intermediates (decision datasets, day tables)
+scipy>=1.10          # calibration (constrained optimisation)
+
+# --- learning (BC / Anchored PPO / baselines; CPU build is sufficient) ---
+torch>=2.1
+
+# --- figures (scripts/40-45, publication figure suite) ---
+matplotlib>=3.7
+
+# --- interactive demo (demo/app.py, Rail Route-style playback) ---
+flask>=3.0
+
+# --- development / tests ---
+pytest>=7.4
