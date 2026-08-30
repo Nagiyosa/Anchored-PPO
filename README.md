@@ -52,7 +52,8 @@ derbysim/            core library
   sim/               simulator: engine, interlocking, blocking-time env, rewards
   learn/             features, encoders, BC, PPO/A2C, IQL, rollout, baselines
 scripts/             numbered pipeline steps (01 data build → 42 figures), one per stage
-notebooks/           server-side training/eval notebooks (72-core parallel runs)
+notebooks/           server-side training/eval launchers (72-core parallel runs; d84_sens_rerun.ipynb
+                     is the hyperparameter-sensitivity sweep, resumable via --resume)
 artifacts/           processed datasets, calibration, checkpoints, result JSONs
 figures/pub/         publication figures F1–F14 + system overview (SVG/PDF/PNG)
 demo/                Rail Route-style playback web demo (Flask + SVG board)

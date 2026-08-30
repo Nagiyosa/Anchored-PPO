@@ -25,3 +25,8 @@ __pycache__/
 .tmp_*/
 .idea/
 .vscode/
+
+# 放行 notebooks(D84 提交)与项目说明文件
+!*.ipynb
+!README.md
+!requirements.txt
