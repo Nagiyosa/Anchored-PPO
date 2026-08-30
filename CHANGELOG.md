@@ -31,6 +31,14 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 - Code fix: `scripts/40_pub_figures.py` f1/f10 now read `artifacts/reports/ppo_8192_anchor_s0_last.pt`
   locally instead of a dead session-uploads glob; F1/F10 regenerate cleanly (loadpt needs no torch).
 
+### D83.1 — Range fix (4 more runs → 17) + six-panel grid figure (2026-08-24, user)
+- For the planned 2×3 six-parameter figure, two ranges had the operating point at an endpoint
+  (steps/iter and promote-delay-k → one-sided curves). Added `sens_sp16384_s0` (16384×25, equal env
+  steps), `sens_pk09_s0` (k=0.9), `sens_lr2e4_s0` (high-lr degradation side), `sens_fp200_s0`
+  (uniform 4 points per panel). New group-D launch cell in the d83 notebook (re-upload if already
+  uploaded). New `scripts/45_sensitivity_grid.py` → **F17_sensitivity_grid** (smoke-tested; skips
+  missing files); F15/F16 remain available individually.
+
 ### D83 — Full hyperparameter sensitivity sweep, merging D82 (13 runs) (2026-08-24, user)
 - D82's five β runs were never launched; merged into one notebook **`d83_hparam_sensitivity.ipynb`**
   (supersedes the d82 one) and extended with 8 runs: lr {2e-5, 1e-4}, steps/iter {2048×200, 4096×100}
