@@ -1,6 +1,6 @@
-"""D83: 其余超参敏感性图 —— lr / steps-per-iter / promote-delay-k / fail-penalty 四面板。
-数据 = notebooks/d83_hparam_sensitivity.ipynb 的 sens_*_s0.json(服务器跑完拷回);
-中心点 = ppo_d73_AB_s0 前 50 轮 byR(同预算, 不另跑)。β 双锚见 scripts/43(F15)。
+"""D84: 其余超参敏感性图(lr 日程对齐版, _i100 数据) —— lr / steps-per-iter / promote-delay-k / fail-penalty 四面板。
+数据 = notebooks/d84_sens_rerun.ipynb 的 *_i100.json; 中心 = ppo_d73_AB_s0 全程 byR(123.0k, 同 headline)。
+课程阈值面板为可证明平线(k 不生效, 各 k 的 run 逐位相同)。β 双锚见 scripts/43(F15)。
 产出: figures/pub/F16_hparam_sensitivity.{svg,pdf,png}; 缺文件自动跳过对应点。
 用法: python scripts/44_hparam_sensitivity.py
 """
@@ -29,29 +29,33 @@ def by_reward(path, max_iter=None):
     return b["eval_weighted_secondary_delay_s"] / 1000
 
 
-CENTER = by_reward(f"{REP}/ppo_d73_AB_s0.json", max_iter=50)
+CENTER = by_reward(f"{REP}/ppo_d73_AB_s0.json")
 
 # (面板题, x 轴标签, [(刻度标签, 文件 or None=中心)])
 panels = [
     ("learning rate", "lr", [
-        ("2e-5", f"{REP}/sens_lr2e5_s0.json"),
+        ("2e-5", f"{REP}/sens_lr2e5_i100.json"),
         ("5e-5\n(ours)", None),
-        ("1e-4", f"{REP}/sens_lr1e4_s0.json"),
+        ("1e-4", f"{REP}/sens_lr1e4_i100.json"),
+        ("2e-4", f"{REP}/sens_lr2e4_i100.json"),
     ]),
     ("batch size", "steps per iteration (equal total env steps)", [
-        ("2048", f"{REP}/sens_sp2048_s0.json"),
-        ("4096", f"{REP}/sens_sp4096_s0.json"),
+        ("2048", f"{REP}/sens_sp2048_i100.json"),
+        ("4096", f"{REP}/sens_sp4096_i100.json"),
         ("8192\n(ours)", None),
+        ("16384", f"{REP}/sens_sp16384_i100.json"),
     ]),
     ("curriculum promotion", r"promotion threshold $k$ (delay $\leq k\times$FCFS)", [
+        ("0.9", None),
         ("1.0\n(ours)", None),
-        ("1.1", f"{REP}/sens_pk11_s0.json"),
-        ("1.25", f"{REP}/sens_pk125_s0.json"),
+        ("1.1", None),
+        ("1.25", None),   # 阈值不生效: 各 k 的 run 逐位相同(D84), 平线为可证明结果
     ]),
     ("stranding penalty", r"$K_{fail}$", [
-        ("25", f"{REP}/sens_fp25_s0.json"),
+        ("25", f"{REP}/sens_fp25_i100.json"),
         ("50\n(ours)", None),
-        ("100", f"{REP}/sens_fp100_s0.json"),
+        ("100", f"{REP}/sens_fp100_i100.json"),
+        ("200", f"{REP}/sens_fp200_i100.json"),
     ]),
 ]
 
@@ -60,7 +64,8 @@ for ax, (title, xlabel, pts) in zip(axes, panels):
     xs, ys, labs, ours_i = [], [], [], None
     for lab, path in pts:
         if path is None:
-            v = CENTER; ours_i = len(xs)
+            v = CENTER
+            if "(ours)" in lab: ours_i = len(xs)
         elif os.path.exists(path):
             v = by_reward(path)
         else:
@@ -80,7 +85,7 @@ for ax, (title, xlabel, pts) in zip(axes, panels):
     ax.grid(axis="y", color=M["grid"], lw=0.5); ax.set_axisbelow(True)
     if xs:
         ax.set_xlim(min(xs) - 0.4, max(xs) + 0.4)
-axes[0].set_ylabel("validation delay (×10³ s)\nequal budget, best by reward", fontsize=8)
+axes[0].set_ylabel("validation delay (×10³ s)\nequal schedule (100 iters), best by reward", fontsize=8)
 axes[3].text(0.98, 181.164, "FCFS", transform=axes[3].get_yaxis_transform(),
              ha="right", va="bottom", fontsize=7, color=M["fcfs"])
 fig.tight_layout()

@@ -1,7 +1,6 @@
-"""D82: β 敏感性图 —— 延误 vs β_r(routing anchor)/ β_t(timing anchor)。
-数据 = notebooks/d82_beta_sensitivity.ipynb 的 5 个 sens_*_s0.json(服务器跑完拷回)
-     + 已有点: 中心 = ppo_d73_AB_s0 前 50 轮 byR(同预算), β_r=0 端点 = abl_noroute_s0。
-口径与 abl_* 消融一致: d73_AB 配置、前 50 轮预算、单种子、best-by-reward 选择。
+"""D84: β 敏感性图(lr 日程对齐版, _i100 数据) —— 延误 vs β_r(routing anchor)/ β_t(timing anchor)。
+数据 = notebooks/d84_sens_rerun.ipynb 的 *_i100.json; 中心 = ppo_d73_AB_s0 全程 byR(123.0k, 同 headline);
+β_r=0 端点 = abl_noroute_i100。口径: 全部 100 轮同日程、单种子、best-by-reward。
 产出: figures/pub/F15_beta_sensitivity.{svg,pdf,png}; 缺文件则跳过对应点并提示。
 用法: python scripts/43_beta_sensitivity.py
 """
@@ -31,21 +30,21 @@ def by_reward(path, max_iter=None):
     return b["eval_weighted_secondary_delay_s"] / 1000
 
 
-CENTER = by_reward(f"{REP}/ppo_d73_AB_s0.json", max_iter=50)          # 123.6k @44(同预算中心)
+CENTER = by_reward(f"{REP}/ppo_d73_AB_s0.json")            # 123.0k(全程 byR, 与 headline 同数)
 
 # (β 值, 数据来源, 备注)   None 路径 = 用中心点
 panels = [
     ("routing anchor", r"$\beta_r$  (timing anchor fixed at 0.01)", [
-        (0.0,   f"{REP}/abl_noroute_s0.json", "0\n(no anchor)"),
-        (0.01,  f"{REP}/sens_br001_s0.json",  "0.01"),
+        (0.0,   f"{REP}/abl_noroute_i100.json", "0\n(no anchor)"),
+        (0.01,  f"{REP}/sens_br001_i100.json",  "0.01"),
         (0.03,  None,                          "0.03\n(ours)"),
-        (0.1,   f"{REP}/sens_br01_s0.json",   "0.1"),
+        (0.1,   f"{REP}/sens_br01_i100.json",   "0.1"),
     ]),
     ("timing anchor", r"$\beta_t$  (routing anchor fixed at 0.03)", [
-        (0.0,   f"{REP}/sens_bt0_s0.json",    "0\n(no anchor)"),
-        (0.005, f"{REP}/sens_bt0005_s0.json", "0.005"),
+        (0.0,   f"{REP}/sens_bt0_i100.json",    "0\n(no anchor)"),
+        (0.005, f"{REP}/sens_bt0005_i100.json", "0.005"),
         (0.01,  None,                          "0.01\n(ours)"),
-        (0.02,  f"{REP}/sens_bt002_s0.json",  "0.02"),
+        (0.02,  f"{REP}/sens_bt002_i100.json",  "0.02"),
     ]),
 ]
 
@@ -72,7 +71,7 @@ for ax, (title, xlabel, pts) in zip(axes, panels):
     ax.set_xlabel(xlabel, fontsize=8.5)
     ax.set_title(title, fontsize=9.5, color=M["dark"])
     ax.grid(axis="y", color=M["grid"], lw=0.5); ax.set_axisbelow(True)
-axes[0].set_ylabel("validation delay (×10³ s)\n50-iteration budget, best by reward", fontsize=8)
+axes[0].set_ylabel("validation delay (×10³ s)\nequal schedule (100 iters), best by reward", fontsize=8)
 axes[1].text(0.98, 181.164, "FCFS", transform=axes[1].get_yaxis_transform(),
              ha="right", va="bottom", fontsize=7, color=M["fcfs"])
 fig.tight_layout()

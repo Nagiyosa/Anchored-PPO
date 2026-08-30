@@ -60,10 +60,13 @@ it, v = by_reward(R("ppo_d73_AB_s0.json")["evals"])
 rows.append(("Full method", it, v, "ppo_d73_AB_s0", M["rl"]))
 it, v = by_reward(R("ppo_d73_A_s0.json")["evals"])
 rows.append(("− foresight features", it, v, "ppo_d73_A_s0", "#B58A84"))
-it, v = by_reward(R("abl_noroute_s0.json")["evals"])
-rows.append(("− routing anchor", it, v, "abl_noroute_s0", "#BFA39E"))
-it, v = by_reward(R("abl_nocur_s0.json")["evals"])
-rows.append(("− curriculum", it, v, "abl_nocur_s0", "#C9B6B0"))
+import os as _os
+_f = "abl_noroute_i100.json" if _os.path.exists(f"artifacts/reports/abl_noroute_i100.json") else "abl_noroute_s0.json"
+it, v = by_reward(R(_f)["evals"])
+rows.append(("− routing anchor", it, v, _f[:-5], "#BFA39E"))
+_f = "abl_nocur_i100.json" if _os.path.exists(f"artifacts/reports/abl_nocur_i100.json") else "abl_nocur_s0.json"
+it, v = by_reward(R(_f)["evals"])
+rows.append(("− curriculum", it, v, _f[:-5], "#C9B6B0"))
 it, v = by_reward(R("ppo_push_AB_s0.json")["evals"])                      # D81.1: AB 臂(v1 用 A 臂)
 rows.append(("− deadlock surgery, full-peak tiers", it, v, "ppo_push_AB_s0", "#C9B6B0"))
 it, v = by_reward(loadpt("artifacts/reports/ppo_8192_anchor_s0_last.pt")["evals"])

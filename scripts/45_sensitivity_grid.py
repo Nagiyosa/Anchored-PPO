@@ -1,6 +1,6 @@
-"""D83.1: 六参数敏感性 2×3 大图(β_r / β_t / lr / batch / 课程阈值 / 搁浅罚)。
-数据 = d83 notebook 的 17 个 sens_*_s0.json + 中心(ppo_d73_AB_s0 前 50 轮 byR)
-     + β_r=0 端点(abl_noroute_s0)。口径: 同预算、单种子、byR、单变量。
+"""D84: 六参数敏感性(lr 日程对齐版, _i100 数据) 2×3 大图(β_r / β_t / lr / batch / 课程阈值 / 搁浅罚)。
+数据 = d84 notebook 的 16 个 *_i100.json + 中心(ppo_d73_AB_s0 前 50 轮 byR)
+     + β_r=0 端点(abl_noroute_i100)。口径: 同预算、单种子、byR、单变量。
 产出: figures/pub/F17_sensitivity_grid.{svg,pdf,png}; 缺文件自动跳过对应点。
 用法: python scripts/45_sensitivity_grid.py
 """
@@ -29,40 +29,40 @@ def by_reward(path, max_iter=None):
     return b["eval_weighted_secondary_delay_s"] / 1000
 
 
-CENTER = by_reward(f"{REP}/ppo_d73_AB_s0.json", max_iter=50)
+CENTER = by_reward(f"{REP}/ppo_d73_AB_s0.json")            # 123.0k, 与 headline 同数
 
 # (面板题, x 轴标签, [(刻度标签, 文件 or None=中心)])
 panels = [
     ("routing anchor", r"$\beta_r$", [
-        ("0", f"{REP}/abl_noroute_s0.json"),
-        ("0.01", f"{REP}/sens_br001_s0.json"),
+        ("0", f"{REP}/abl_noroute_i100.json"),
+        ("0.01", f"{REP}/sens_br001_i100.json"),
         ("0.03\n(ours)", None),
-        ("0.1", f"{REP}/sens_br01_s0.json")]),
+        ("0.1", f"{REP}/sens_br01_i100.json")]),
     ("timing anchor", r"$\beta_t$", [
-        ("0", f"{REP}/sens_bt0_s0.json"),
-        ("0.005", f"{REP}/sens_bt0005_s0.json"),
+        ("0", f"{REP}/sens_bt0_i100.json"),
+        ("0.005", f"{REP}/sens_bt0005_i100.json"),
         ("0.01\n(ours)", None),
-        ("0.02", f"{REP}/sens_bt002_s0.json")]),
+        ("0.02", f"{REP}/sens_bt002_i100.json")]),
     ("learning rate", "lr", [
-        ("2e-5", f"{REP}/sens_lr2e5_s0.json"),
+        ("2e-5", f"{REP}/sens_lr2e5_i100.json"),
         ("5e-5\n(ours)", None),
-        ("1e-4", f"{REP}/sens_lr1e4_s0.json"),
-        ("2e-4", f"{REP}/sens_lr2e4_s0.json")]),
+        ("1e-4", f"{REP}/sens_lr1e4_i100.json"),
+        ("2e-4", f"{REP}/sens_lr2e4_i100.json")]),
     ("batch size", "steps per iteration (equal total env steps)", [
-        ("2048", f"{REP}/sens_sp2048_s0.json"),
-        ("4096", f"{REP}/sens_sp4096_s0.json"),
+        ("2048", f"{REP}/sens_sp2048_i100.json"),
+        ("4096", f"{REP}/sens_sp4096_i100.json"),
         ("8192\n(ours)", None),
-        ("16384", f"{REP}/sens_sp16384_s0.json")]),
+        ("16384", f"{REP}/sens_sp16384_i100.json")]),
     ("curriculum promotion", r"threshold $k$ (delay $\leq k\times$FCFS)", [
-        ("0.9", f"{REP}/sens_pk09_s0.json"),
+        ("0.9", None),
         ("1.0\n(ours)", None),
-        ("1.1", f"{REP}/sens_pk11_s0.json"),
-        ("1.25", f"{REP}/sens_pk125_s0.json")]),
+        ("1.1", None),
+        ("1.25", None)]),   # 阈值不生效(D84): 各 k 逐位同 run, 平线为可证明结果
     ("stranding penalty", r"$K_{fail}$", [
-        ("25", f"{REP}/sens_fp25_s0.json"),
+        ("25", f"{REP}/sens_fp25_i100.json"),
         ("50\n(ours)", None),
-        ("100", f"{REP}/sens_fp100_s0.json"),
-        ("200", f"{REP}/sens_fp200_s0.json")]),
+        ("100", f"{REP}/sens_fp100_i100.json"),
+        ("200", f"{REP}/sens_fp200_i100.json")]),
 ]
 
 fig, axes = plt.subplots(2, 3, figsize=(8.6, 4.6), sharey=True)
@@ -70,7 +70,8 @@ for ax, (title, xlabel, pts) in zip(axes.flat, panels):
     xs, ys, labs, ours_i = [], [], [], None
     for lab, path in pts:
         if path is None:
-            v = CENTER; ours_i = len(xs)
+            v = CENTER
+            if "(ours)" in lab: ours_i = len(xs)
         elif os.path.exists(path):
             v = by_reward(path)
         else:

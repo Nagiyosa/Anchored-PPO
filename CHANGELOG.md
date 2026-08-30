@@ -31,6 +31,20 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 - Code fix: `scripts/40_pub_figures.py` f1/f10 now read `artifacts/reports/ppo_8192_anchor_s0_last.pt`
   locally instead of a dead session-uploads glob; F1/F10 regenerate cleanly (loadpt needs no torch).
 
+### D84 — Sweep results audit: lr-schedule confound found → full 100-iter rerun (2026-08-24, user)
+- All 17 d83 runs healthy (completion 1.000, no deadlocks), but: ① **promote-delay-k is non-binding
+  at stage 3** — pk09/pk11/pk125 are bit-identical (strong init clears every promotion gate for
+  k∈[0.9,1.25]); the panel is a provably flat line, no reruns needed. ② **lr-schedule confound** —
+  the pk triplet doubles as a no-op rerun of the centre config at the 50-iter schedule (byR 138,590
+  vs the centre's first-50 byR 123,562, a 15k handicap), because `--iters` also sets the lr-anneal
+  span. All 50-iter runs carry it, including D76's abl_noroute/abl_nocur, inflating the v2 ablation
+  rows (+9.1%/+10.6%).
+- Decision (user): schedule-matched rerun. `notebooks/d84_sens_rerun.ipynb`: 16 runs, all
+  `--iters 100`, new `_i100` tags (nothing overwritten); centre = full 123,035.5; batch group at
+  equal total env steps 819,200. Includes repair reruns abl_noroute_i100/abl_nocur_i100.
+  Scripts 43/44/45 now read `_i100` with the full-run centre; script 42 auto-prefers the `_i100`
+  ablation rows when present. d83's sens_*_s0.json remain as process records only — not for the paper.
+
 ### D83.1 — Range fix (4 more runs → 17) + six-panel grid figure (2026-08-24, user)
 - For the planned 2×3 six-parameter figure, two ranges had the operating point at an endpoint
   (steps/iter and promote-delay-k → one-sided curves). Added `sens_sp16384_s0` (16384×25, equal env
