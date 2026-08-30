@@ -31,6 +31,28 @@ anchor is closed-loop quality vs the signaller, not the BC match rate (D23).
 - Code fix: `scripts/40_pub_figures.py` f1/f10 now read `artifacts/reports/ppo_8192_anchor_s0_last.pt`
   locally instead of a dead session-uploads glob; F1/F10 regenerate cleanly (loadpt needs no torch).
 
+### D83 — Full hyperparameter sensitivity sweep, merging D82 (13 runs) (2026-08-24, user)
+- D82's five β runs were never launched; merged into one notebook **`d83_hparam_sensitivity.ipynb`**
+  (supersedes the d82 one) and extended with 8 runs: lr {2e-5, 1e-4}, steps/iter {2048×200, 4096×100}
+  (equal total env steps), promote-delay-k {1.1, 1.25}, fail_penalty {25, 100}. Same protocol
+  (d73_AB config, equal budget, single seed, one-at-a-time, byR; centre 123,561.5@44 reused).
+  Not swept, stated in the paper instead: γ=1 (design argument), standard PPO constants, encoder
+  (validated at BC level), seeds (3 already).
+- The notebook includes a **preflight cell** (verifies new-version markers in env_dynamic/scripts13/
+  ppo.py and the init ckpt; refuses to launch otherwise) to guard against stale server copies.
+  New `scripts/44_hparam_sensitivity.py` → F16 four-panel figure (smoke-tested; skips missing files);
+  F15 (β) remains with scripts/43.
+
+### D82 — β sensitivity sweep for both anchors (2026-08-24, user)
+- Final-generation evidence for β_r/β_t was on/off only; β_r=0.03 came from a manual loosening (D66),
+  and the old-generation β_r sweep predates the D67/D73 env fixes. New sweep, strictly matching the
+  `abl_*` protocol (d73_AB config, first-50-iteration budget, single seed, best-by-reward): 5 runs —
+  β_r {0.01, 0.1} at β_t=0.01, and β_t {0, 0.005, 0.02} at β_r=0.03. Curve centre = d73_AB byR within
+  50 iters (123,561.5@44); the β_r=0 endpoint reuses `abl_noroute_s0` (134,188).
+- Deliverables: `notebooks/d82_beta_sensitivity.ipynb` (parallel nohup launch/monitor/summary) and
+  `scripts/43_beta_sensitivity.py` → `figures/pub/F15_beta_sensitivity.*` (two panels; skips missing
+  files; smoke-tested locally).
+
 ### D81.1 — Ablation v2 alongside v1 (user: "make a separate one, keep both") (2026-08-23)
 - New `scripts/42_ablation_v2.py` → `figures/pub/F3_ablation_v2.*` + `ablation_table_v2.md`; F3/v1 untouched.
 - v2: all nine rows selected **by validation reward** (deployment rule; Full = 123,035.5@74, − moving
