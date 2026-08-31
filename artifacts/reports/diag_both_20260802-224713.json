@@ -1,0 +1,236 @@
+{
+  "mode": "both",
+  "days": [
+    "2023-11-05",
+    "2023-11-06",
+    "2023-11-07",
+    "2023-11-08"
+  ],
+  "results": {
+    "overlap=0  信号员": {
+      "completion": 1.0,
+      "n_reached": 815,
+      "n_completable": 815,
+      "delay": 18809.5,
+      "profile": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "overlap=0  有路就办": {
+      "completion": 0.39631901840490796,
+      "n_reached": 323,
+      "n_completable": 815,
+      "delay": 68893301.25,
+      "profile": [
+        0.71,
+        0.41,
+        0.42,
+        0.37,
+        0.23,
+        0.31
+      ]
+    },
+    "overlap=1  信号员": {
+      "completion": 1.0,
+      "n_reached": 815,
+      "n_completable": 815,
+      "delay": 23411.5,
+      "profile": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "overlap=1  有路就办": {
+      "completion": 0.35337423312883437,
+      "n_reached": 288,
+      "n_completable": 815,
+      "delay": 74487757.75,
+      "profile": [
+        0.67,
+        0.36,
+        0.41,
+        0.34,
+        0.2,
+        0.16
+      ]
+    },
+    "overlap=2  信号员": {
+      "completion": 1.0,
+      "n_reached": 815,
+      "n_completable": 815,
+      "delay": 162271.25,
+      "profile": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "overlap=2  有路就办": {
+      "completion": 0.2883435582822086,
+      "n_reached": 235,
+      "n_completable": 815,
+      "delay": 86789670.25,
+      "profile": [
+        0.53,
+        0.23,
+        0.24,
+        0.22,
+        0.23,
+        0.41
+      ]
+    },
+    "时机=first            选路=first": {
+      "completion": 0.35337423312883437,
+      "n_reached": 288,
+      "n_completable": 815,
+      "delay": 74487757.75,
+      "profile": [
+        0.67,
+        0.36,
+        0.41,
+        0.34,
+        0.2,
+        0.16
+      ]
+    },
+    "时机=first            选路=lookup": {
+      "completion": 0.3006134969325153,
+      "n_reached": 245,
+      "n_completable": 815,
+      "delay": 81709447.0,
+      "profile": [
+        0.51,
+        0.3,
+        0.26,
+        0.31,
+        0.22,
+        0.24
+      ]
+    },
+    "时机=fifo             选路=first": {
+      "completion": 0.35337423312883437,
+      "n_reached": 288,
+      "n_completable": 815,
+      "delay": 74487757.75,
+      "profile": [
+        0.67,
+        0.36,
+        0.41,
+        0.34,
+        0.2,
+        0.16
+      ]
+    },
+    "时机=fifo             选路=lookup": {
+      "completion": 0.3006134969325153,
+      "n_reached": 245,
+      "n_completable": 815,
+      "delay": 81709447.0,
+      "profile": [
+        0.51,
+        0.3,
+        0.26,
+        0.31,
+        0.22,
+        0.24
+      ]
+    },
+    "时机=most_delayed     选路=first": {
+      "completion": 0.35337423312883437,
+      "n_reached": 288,
+      "n_completable": 815,
+      "delay": 74487757.75,
+      "profile": [
+        0.67,
+        0.36,
+        0.41,
+        0.34,
+        0.2,
+        0.16
+      ]
+    },
+    "时机=most_delayed     选路=lookup": {
+      "completion": 0.3006134969325153,
+      "n_reached": 245,
+      "n_completable": 815,
+      "delay": 81709447.0,
+      "profile": [
+        0.51,
+        0.3,
+        0.26,
+        0.31,
+        0.22,
+        0.24
+      ]
+    },
+    "时机=priority         选路=first": {
+      "completion": 0.35337423312883437,
+      "n_reached": 288,
+      "n_completable": 815,
+      "delay": 74487757.75,
+      "profile": [
+        0.67,
+        0.36,
+        0.41,
+        0.34,
+        0.2,
+        0.16
+      ]
+    },
+    "时机=priority         选路=lookup": {
+      "completion": 0.3006134969325153,
+      "n_reached": 245,
+      "n_completable": 815,
+      "delay": 81709447.0,
+      "profile": [
+        0.51,
+        0.3,
+        0.26,
+        0.31,
+        0.22,
+        0.24
+      ]
+    },
+    "时机=fewest_remaining 选路=first": {
+      "completion": 0.35337423312883437,
+      "n_reached": 288,
+      "n_completable": 815,
+      "delay": 74487757.75,
+      "profile": [
+        0.67,
+        0.36,
+        0.41,
+        0.34,
+        0.2,
+        0.16
+      ]
+    },
+    "时机=fewest_remaining 选路=lookup": {
+      "completion": 0.3006134969325153,
+      "n_reached": 245,
+      "n_completable": 815,
+      "delay": 81709447.0,
+      "profile": [
+        0.51,
+        0.3,
+        0.26,
+        0.31,
+        0.22,
+        0.24
+      ]
+    }
+  },
+  "elapsed_s": 123.74751448631287
+}

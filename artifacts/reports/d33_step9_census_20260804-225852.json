@@ -1,0 +1,1625 @@
+{
+  "audit": "D33 step 9 census: branching (exp1/2 sizing) + greedy stuck funnel (exp3)",
+  "created_at": "2026-08-04T22:58:52+0100",
+  "split": "trainval",
+  "n_days": 75,
+  "days": [
+    "2023-09-02",
+    "2023-09-03",
+    "2023-09-04",
+    "2023-09-05",
+    "2023-09-06",
+    "2023-09-07",
+    "2023-09-08",
+    "2023-09-09",
+    "2023-09-10",
+    "2023-09-11",
+    "2023-09-12",
+    "2023-09-13",
+    "2023-09-14",
+    "2023-09-15",
+    "2023-09-16",
+    "2023-09-17",
+    "2023-09-18",
+    "2023-09-19",
+    "2023-09-20",
+    "2023-09-21",
+    "2023-09-22",
+    "2023-09-23",
+    "2023-09-24",
+    "2023-09-25",
+    "2023-09-26",
+    "2023-09-27",
+    "2023-09-28",
+    "2023-09-29",
+    "2023-09-30",
+    "2023-10-01",
+    "2023-10-02",
+    "2023-10-03",
+    "2023-10-04",
+    "2023-10-05",
+    "2023-10-06",
+    "2023-10-07",
+    "2023-10-08",
+    "2023-10-09",
+    "2023-10-10",
+    "2023-10-11",
+    "2023-10-12",
+    "2023-10-13",
+    "2023-10-14",
+    "2023-10-15",
+    "2023-10-16",
+    "2023-10-17",
+    "2023-10-18",
+    "2023-10-19",
+    "2023-10-20",
+    "2023-10-21",
+    "2023-10-22",
+    "2023-10-23",
+    "2023-10-24",
+    "2023-10-25",
+    "2023-10-26",
+    "2023-10-27",
+    "2023-10-28",
+    "2023-10-29",
+    "2023-10-30",
+    "2023-10-31",
+    "2023-11-01",
+    "2023-11-02",
+    "2023-11-03",
+    "2023-11-04",
+    "2023-11-05",
+    "2023-11-06",
+    "2023-11-07",
+    "2023-11-08",
+    "2023-11-09",
+    "2023-11-10",
+    "2023-11-11",
+    "2023-11-12",
+    "2023-11-13",
+    "2023-11-14",
+    "2023-11-15"
+  ],
+  "elapsed_s": 295.5915095806122,
+  "signaller_totals": {
+    "n_panels": 42473,
+    "n_set": 41628,
+    "n_wait": 845,
+    "n_branchable": 31090,
+    "n_set_panels": 41628
+  },
+  "setopt_hist": {
+    "1": 10538,
+    "2": 11880,
+    "3": 7142,
+    "4": 4848,
+    "5": 1065,
+    "6": 146,
+    "7": 48,
+    "9": 88,
+    "10": 278,
+    "11": 5402,
+    "12": 171,
+    "13": 22
+  },
+  "baseline_completion_pooled": 1.0,
+  "n_completable": 17022,
+  "n_reached": 17022,
+  "greedy_stuck_totals": {
+    "awaiting_rows": 61883,
+    "no_geometry": 33920,
+    "goal_filtered": 0,
+    "deadlock_filtered": 0,
+    "has_set": 27963,
+    "n_panels": 30491
+  },
+  "per_day": [
+    {
+      "day": "2023-09-02",
+      "signaller": {
+        "n_panels": 208,
+        "n_set": 206,
+        "n_wait": 2,
+        "n_branchable": 160,
+        "n_set_panels": 206
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 4939.25,
+      "greedy_stuck": {
+        "awaiting_rows": 507,
+        "no_geometry": 247,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 260,
+        "n_panels": 269
+      }
+    },
+    {
+      "day": "2023-09-03",
+      "signaller": {
+        "n_panels": 344,
+        "n_set": 344,
+        "n_wait": 0,
+        "n_branchable": 254,
+        "n_set_panels": 344
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 1987.5,
+      "greedy_stuck": {
+        "awaiting_rows": 591,
+        "no_geometry": 301,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 290,
+        "n_panels": 314
+      }
+    },
+    {
+      "day": "2023-09-04",
+      "signaller": {
+        "n_panels": 728,
+        "n_set": 709,
+        "n_wait": 19,
+        "n_branchable": 532,
+        "n_set_panels": 709
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 12110.5,
+      "greedy_stuck": {
+        "awaiting_rows": 1437,
+        "no_geometry": 720,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 717,
+        "n_panels": 747
+      }
+    },
+    {
+      "day": "2023-09-05",
+      "signaller": {
+        "n_panels": 702,
+        "n_set": 689,
+        "n_wait": 13,
+        "n_branchable": 523,
+        "n_set_panels": 689
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 8855.5,
+      "greedy_stuck": {
+        "awaiting_rows": 253,
+        "no_geometry": 139,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 114,
+        "n_panels": 145
+      }
+    },
+    {
+      "day": "2023-09-06",
+      "signaller": {
+        "n_panels": 719,
+        "n_set": 705,
+        "n_wait": 14,
+        "n_branchable": 527,
+        "n_set_panels": 705
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 10665.5,
+      "greedy_stuck": {
+        "awaiting_rows": 1336,
+        "no_geometry": 729,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 607,
+        "n_panels": 625
+      }
+    },
+    {
+      "day": "2023-09-07",
+      "signaller": {
+        "n_panels": 712,
+        "n_set": 693,
+        "n_wait": 19,
+        "n_branchable": 519,
+        "n_set_panels": 693
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 17561.0,
+      "greedy_stuck": {
+        "awaiting_rows": 974,
+        "no_geometry": 491,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 483,
+        "n_panels": 506
+      }
+    },
+    {
+      "day": "2023-09-08",
+      "signaller": {
+        "n_panels": 742,
+        "n_set": 713,
+        "n_wait": 29,
+        "n_branchable": 536,
+        "n_set_panels": 713
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 10572.5,
+      "greedy_stuck": {
+        "awaiting_rows": 976,
+        "no_geometry": 522,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 454,
+        "n_panels": 554
+      }
+    },
+    {
+      "day": "2023-09-09",
+      "signaller": {
+        "n_panels": 606,
+        "n_set": 590,
+        "n_wait": 16,
+        "n_branchable": 413,
+        "n_set_panels": 590
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 12476.5,
+      "greedy_stuck": {
+        "awaiting_rows": 396,
+        "no_geometry": 203,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 193,
+        "n_panels": 218
+      }
+    },
+    {
+      "day": "2023-09-10",
+      "signaller": {
+        "n_panels": 364,
+        "n_set": 356,
+        "n_wait": 8,
+        "n_branchable": 268,
+        "n_set_panels": 356
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 2709.0,
+      "greedy_stuck": {
+        "awaiting_rows": 749,
+        "no_geometry": 367,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 382,
+        "n_panels": 395
+      }
+    },
+    {
+      "day": "2023-09-11",
+      "signaller": {
+        "n_panels": 701,
+        "n_set": 682,
+        "n_wait": 19,
+        "n_branchable": 512,
+        "n_set_panels": 682
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 16310.75,
+      "greedy_stuck": {
+        "awaiting_rows": 1038,
+        "no_geometry": 534,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 504,
+        "n_panels": 545
+      }
+    },
+    {
+      "day": "2023-09-12",
+      "signaller": {
+        "n_panels": 656,
+        "n_set": 644,
+        "n_wait": 12,
+        "n_branchable": 481,
+        "n_set_panels": 644
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 8819.25,
+      "greedy_stuck": {
+        "awaiting_rows": 832,
+        "no_geometry": 414,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 418,
+        "n_panels": 430
+      }
+    },
+    {
+      "day": "2023-09-13",
+      "signaller": {
+        "n_panels": 669,
+        "n_set": 643,
+        "n_wait": 26,
+        "n_branchable": 478,
+        "n_set_panels": 643
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 21015.25,
+      "greedy_stuck": {
+        "awaiting_rows": 1125,
+        "no_geometry": 627,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 498,
+        "n_panels": 643
+      }
+    },
+    {
+      "day": "2023-09-14",
+      "signaller": {
+        "n_panels": 654,
+        "n_set": 643,
+        "n_wait": 11,
+        "n_branchable": 492,
+        "n_set_panels": 643
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 9524.75,
+      "greedy_stuck": {
+        "awaiting_rows": 795,
+        "no_geometry": 457,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 338,
+        "n_panels": 478
+      }
+    },
+    {
+      "day": "2023-09-15",
+      "signaller": {
+        "n_panels": 667,
+        "n_set": 656,
+        "n_wait": 11,
+        "n_branchable": 487,
+        "n_set_panels": 656
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 12814.25,
+      "greedy_stuck": {
+        "awaiting_rows": 605,
+        "no_geometry": 304,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 301,
+        "n_panels": 312
+      }
+    },
+    {
+      "day": "2023-09-16",
+      "signaller": {
+        "n_panels": 598,
+        "n_set": 588,
+        "n_wait": 10,
+        "n_branchable": 404,
+        "n_set_panels": 588
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 5173.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1276,
+        "no_geometry": 648,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 628,
+        "n_panels": 653
+      }
+    },
+    {
+      "day": "2023-09-17",
+      "signaller": {
+        "n_panels": 300,
+        "n_set": 300,
+        "n_wait": 0,
+        "n_branchable": 219,
+        "n_set_panels": 300
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 5203.25,
+      "greedy_stuck": {
+        "awaiting_rows": 634,
+        "no_geometry": 323,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 311,
+        "n_panels": 333
+      }
+    },
+    {
+      "day": "2023-09-18",
+      "signaller": {
+        "n_panels": 649,
+        "n_set": 644,
+        "n_wait": 5,
+        "n_branchable": 487,
+        "n_set_panels": 644
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 8585.75,
+      "greedy_stuck": {
+        "awaiting_rows": 553,
+        "no_geometry": 271,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 282,
+        "n_panels": 299
+      }
+    },
+    {
+      "day": "2023-09-19",
+      "signaller": {
+        "n_panels": 654,
+        "n_set": 647,
+        "n_wait": 7,
+        "n_branchable": 492,
+        "n_set_panels": 647
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 6824.5,
+      "greedy_stuck": {
+        "awaiting_rows": 453,
+        "no_geometry": 230,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 223,
+        "n_panels": 237
+      }
+    },
+    {
+      "day": "2023-09-20",
+      "signaller": {
+        "n_panels": 638,
+        "n_set": 624,
+        "n_wait": 14,
+        "n_branchable": 478,
+        "n_set_panels": 624
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 10431.25,
+      "greedy_stuck": {
+        "awaiting_rows": 784,
+        "no_geometry": 398,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 386,
+        "n_panels": 403
+      }
+    },
+    {
+      "day": "2023-09-21",
+      "signaller": {
+        "n_panels": 667,
+        "n_set": 648,
+        "n_wait": 19,
+        "n_branchable": 502,
+        "n_set_panels": 648
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 13995.5,
+      "greedy_stuck": {
+        "awaiting_rows": 541,
+        "no_geometry": 279,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 262,
+        "n_panels": 284
+      }
+    },
+    {
+      "day": "2023-09-22",
+      "signaller": {
+        "n_panels": 654,
+        "n_set": 635,
+        "n_wait": 19,
+        "n_branchable": 486,
+        "n_set_panels": 635
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 13471.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1263,
+        "no_geometry": 799,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 464,
+        "n_panels": 482
+      }
+    },
+    {
+      "day": "2023-09-23",
+      "signaller": {
+        "n_panels": 598,
+        "n_set": 593,
+        "n_wait": 5,
+        "n_branchable": 421,
+        "n_set_panels": 593
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 7616.0,
+      "greedy_stuck": {
+        "awaiting_rows": 683,
+        "no_geometry": 353,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 330,
+        "n_panels": 359
+      }
+    },
+    {
+      "day": "2023-09-24",
+      "signaller": {
+        "n_panels": 356,
+        "n_set": 354,
+        "n_wait": 2,
+        "n_branchable": 266,
+        "n_set_panels": 354
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 1522.5,
+      "greedy_stuck": {
+        "awaiting_rows": 545,
+        "no_geometry": 280,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 265,
+        "n_panels": 285
+      }
+    },
+    {
+      "day": "2023-09-25",
+      "signaller": {
+        "n_panels": 649,
+        "n_set": 633,
+        "n_wait": 16,
+        "n_branchable": 471,
+        "n_set_panels": 633
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 14029.75,
+      "greedy_stuck": {
+        "awaiting_rows": 640,
+        "no_geometry": 386,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 254,
+        "n_panels": 264
+      }
+    },
+    {
+      "day": "2023-09-26",
+      "signaller": {
+        "n_panels": 611,
+        "n_set": 603,
+        "n_wait": 8,
+        "n_branchable": 451,
+        "n_set_panels": 603
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 6272.25,
+      "greedy_stuck": {
+        "awaiting_rows": 826,
+        "no_geometry": 418,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 408,
+        "n_panels": 423
+      }
+    },
+    {
+      "day": "2023-09-27",
+      "signaller": {
+        "n_panels": 628,
+        "n_set": 618,
+        "n_wait": 10,
+        "n_branchable": 465,
+        "n_set_panels": 618
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 10392.75,
+      "greedy_stuck": {
+        "awaiting_rows": 1339,
+        "no_geometry": 678,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 661,
+        "n_panels": 683
+      }
+    },
+    {
+      "day": "2023-09-28",
+      "signaller": {
+        "n_panels": 590,
+        "n_set": 580,
+        "n_wait": 10,
+        "n_branchable": 436,
+        "n_set_panels": 580
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 10233.25,
+      "greedy_stuck": {
+        "awaiting_rows": 545,
+        "no_geometry": 274,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 271,
+        "n_panels": 284
+      }
+    },
+    {
+      "day": "2023-09-29",
+      "signaller": {
+        "n_panels": 499,
+        "n_set": 484,
+        "n_wait": 15,
+        "n_branchable": 348,
+        "n_set_panels": 484
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 17399.75,
+      "greedy_stuck": {
+        "awaiting_rows": 1391,
+        "no_geometry": 957,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 434,
+        "n_panels": 662
+      }
+    },
+    {
+      "day": "2023-09-30",
+      "signaller": {
+        "n_panels": 19,
+        "n_set": 19,
+        "n_wait": 0,
+        "n_branchable": 16,
+        "n_set_panels": 19
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 1049.0,
+      "greedy_stuck": {
+        "awaiting_rows": 30,
+        "no_geometry": 13,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 17,
+        "n_panels": 18
+      }
+    },
+    {
+      "day": "2023-10-01",
+      "signaller": {
+        "n_panels": 361,
+        "n_set": 357,
+        "n_wait": 4,
+        "n_branchable": 268,
+        "n_set_panels": 357
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 2455.0,
+      "greedy_stuck": {
+        "awaiting_rows": 857,
+        "no_geometry": 428,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 429,
+        "n_panels": 438
+      }
+    },
+    {
+      "day": "2023-10-02",
+      "signaller": {
+        "n_panels": 636,
+        "n_set": 627,
+        "n_wait": 9,
+        "n_branchable": 469,
+        "n_set_panels": 627
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 6385.25,
+      "greedy_stuck": {
+        "awaiting_rows": 758,
+        "no_geometry": 386,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 372,
+        "n_panels": 400
+      }
+    },
+    {
+      "day": "2023-10-03",
+      "signaller": {
+        "n_panels": 671,
+        "n_set": 658,
+        "n_wait": 13,
+        "n_branchable": 494,
+        "n_set_panels": 658
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 15863.25,
+      "greedy_stuck": {
+        "awaiting_rows": 244,
+        "no_geometry": 129,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 115,
+        "n_panels": 141
+      }
+    },
+    {
+      "day": "2023-10-04",
+      "signaller": {
+        "n_panels": 69,
+        "n_set": 69,
+        "n_wait": 0,
+        "n_branchable": 52,
+        "n_set_panels": 69
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 286.0,
+      "greedy_stuck": {
+        "awaiting_rows": 164,
+        "no_geometry": 77,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 87,
+        "n_panels": 88
+      }
+    },
+    {
+      "day": "2023-10-05",
+      "signaller": {
+        "n_panels": 653,
+        "n_set": 641,
+        "n_wait": 12,
+        "n_branchable": 479,
+        "n_set_panels": 641
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 7934.75,
+      "greedy_stuck": {
+        "awaiting_rows": 1334,
+        "no_geometry": 663,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 671,
+        "n_panels": 684
+      }
+    },
+    {
+      "day": "2023-10-06",
+      "signaller": {
+        "n_panels": 664,
+        "n_set": 655,
+        "n_wait": 9,
+        "n_branchable": 488,
+        "n_set_panels": 655
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 11110.75,
+      "greedy_stuck": {
+        "awaiting_rows": 547,
+        "no_geometry": 278,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 269,
+        "n_panels": 286
+      }
+    },
+    {
+      "day": "2023-10-07",
+      "signaller": {
+        "n_panels": 549,
+        "n_set": 540,
+        "n_wait": 9,
+        "n_branchable": 375,
+        "n_set_panels": 540
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 4168.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1422,
+        "no_geometry": 848,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 574,
+        "n_panels": 598
+      }
+    },
+    {
+      "day": "2023-10-08",
+      "signaller": {
+        "n_panels": 378,
+        "n_set": 373,
+        "n_wait": 5,
+        "n_branchable": 284,
+        "n_set_panels": 373
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 4541.0,
+      "greedy_stuck": {
+        "awaiting_rows": 634,
+        "no_geometry": 318,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 316,
+        "n_panels": 334
+      }
+    },
+    {
+      "day": "2023-10-09",
+      "signaller": {
+        "n_panels": 705,
+        "n_set": 681,
+        "n_wait": 24,
+        "n_branchable": 504,
+        "n_set_panels": 681
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 13687.75,
+      "greedy_stuck": {
+        "awaiting_rows": 1104,
+        "no_geometry": 555,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 549,
+        "n_panels": 572
+      }
+    },
+    {
+      "day": "2023-10-10",
+      "signaller": {
+        "n_panels": 699,
+        "n_set": 683,
+        "n_wait": 16,
+        "n_branchable": 519,
+        "n_set_panels": 683
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 8108.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1454,
+        "no_geometry": 1036,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 418,
+        "n_panels": 598
+      }
+    },
+    {
+      "day": "2023-10-11",
+      "signaller": {
+        "n_panels": 655,
+        "n_set": 640,
+        "n_wait": 15,
+        "n_branchable": 503,
+        "n_set_panels": 640
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 11040.25,
+      "greedy_stuck": {
+        "awaiting_rows": 700,
+        "no_geometry": 393,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 307,
+        "n_panels": 338
+      }
+    },
+    {
+      "day": "2023-10-12",
+      "signaller": {
+        "n_panels": 658,
+        "n_set": 647,
+        "n_wait": 11,
+        "n_branchable": 491,
+        "n_set_panels": 647
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 12731.25,
+      "greedy_stuck": {
+        "awaiting_rows": 1488,
+        "no_geometry": 925,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 563,
+        "n_panels": 585
+      }
+    },
+    {
+      "day": "2023-10-13",
+      "signaller": {
+        "n_panels": 671,
+        "n_set": 657,
+        "n_wait": 14,
+        "n_branchable": 506,
+        "n_set_panels": 657
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 10355.5,
+      "greedy_stuck": {
+        "awaiting_rows": 395,
+        "no_geometry": 202,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 193,
+        "n_panels": 213
+      }
+    },
+    {
+      "day": "2023-10-14",
+      "signaller": {
+        "n_panels": 629,
+        "n_set": 614,
+        "n_wait": 15,
+        "n_branchable": 430,
+        "n_set_panels": 614
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 7748.75,
+      "greedy_stuck": {
+        "awaiting_rows": 850,
+        "no_geometry": 504,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 346,
+        "n_panels": 509
+      }
+    },
+    {
+      "day": "2023-10-15",
+      "signaller": {
+        "n_panels": 414,
+        "n_set": 409,
+        "n_wait": 5,
+        "n_branchable": 311,
+        "n_set_panels": 409
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 4235.0,
+      "greedy_stuck": {
+        "awaiting_rows": 546,
+        "no_geometry": 277,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 269,
+        "n_panels": 285
+      }
+    },
+    {
+      "day": "2023-10-16",
+      "signaller": {
+        "n_panels": 698,
+        "n_set": 681,
+        "n_wait": 17,
+        "n_branchable": 508,
+        "n_set_panels": 681
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 7116.5,
+      "greedy_stuck": {
+        "awaiting_rows": 521,
+        "no_geometry": 269,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 252,
+        "n_panels": 274
+      }
+    },
+    {
+      "day": "2023-10-17",
+      "signaller": {
+        "n_panels": 667,
+        "n_set": 653,
+        "n_wait": 14,
+        "n_branchable": 506,
+        "n_set_panels": 653
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 11872.75,
+      "greedy_stuck": {
+        "awaiting_rows": 378,
+        "no_geometry": 189,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 189,
+        "n_panels": 210
+      }
+    },
+    {
+      "day": "2023-10-18",
+      "signaller": {
+        "n_panels": 690,
+        "n_set": 677,
+        "n_wait": 13,
+        "n_branchable": 513,
+        "n_set_panels": 677
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 6992.75,
+      "greedy_stuck": {
+        "awaiting_rows": 517,
+        "no_geometry": 265,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 252,
+        "n_panels": 276
+      }
+    },
+    {
+      "day": "2023-10-19",
+      "signaller": {
+        "n_panels": 702,
+        "n_set": 689,
+        "n_wait": 13,
+        "n_branchable": 519,
+        "n_set_panels": 689
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 9051.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1230,
+        "no_geometry": 744,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 486,
+        "n_panels": 504
+      }
+    },
+    {
+      "day": "2023-10-20",
+      "signaller": {
+        "n_panels": 189,
+        "n_set": 189,
+        "n_wait": 0,
+        "n_branchable": 145,
+        "n_set_panels": 189
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 11538.75,
+      "greedy_stuck": {
+        "awaiting_rows": 410,
+        "no_geometry": 203,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 207,
+        "n_panels": 226
+      }
+    },
+    {
+      "day": "2023-10-21",
+      "signaller": {
+        "n_panels": 80,
+        "n_set": 80,
+        "n_wait": 0,
+        "n_branchable": 62,
+        "n_set_panels": 80
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 5144.0,
+      "greedy_stuck": {
+        "awaiting_rows": 185,
+        "no_geometry": 93,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 92,
+        "n_panels": 100
+      }
+    },
+    {
+      "day": "2023-10-22",
+      "signaller": {
+        "n_panels": 189,
+        "n_set": 189,
+        "n_wait": 0,
+        "n_branchable": 133,
+        "n_set_panels": 189
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 3887.5,
+      "greedy_stuck": {
+        "awaiting_rows": 427,
+        "no_geometry": 213,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 214,
+        "n_panels": 218
+      }
+    },
+    {
+      "day": "2023-10-23",
+      "signaller": {
+        "n_panels": 771,
+        "n_set": 751,
+        "n_wait": 20,
+        "n_branchable": 568,
+        "n_set_panels": 751
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 15000.25,
+      "greedy_stuck": {
+        "awaiting_rows": 2055,
+        "no_geometry": 1261,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 794,
+        "n_panels": 852
+      }
+    },
+    {
+      "day": "2023-10-24",
+      "signaller": {
+        "n_panels": 703,
+        "n_set": 689,
+        "n_wait": 14,
+        "n_branchable": 522,
+        "n_set_panels": 689
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 9496.5,
+      "greedy_stuck": {
+        "awaiting_rows": 1474,
+        "no_geometry": 734,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 740,
+        "n_panels": 761
+      }
+    },
+    {
+      "day": "2023-10-25",
+      "signaller": {
+        "n_panels": 640,
+        "n_set": 625,
+        "n_wait": 15,
+        "n_branchable": 461,
+        "n_set_panels": 625
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 11687.75,
+      "greedy_stuck": {
+        "awaiting_rows": 853,
+        "no_geometry": 428,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 425,
+        "n_panels": 444
+      }
+    },
+    {
+      "day": "2023-10-26",
+      "signaller": {
+        "n_panels": 653,
+        "n_set": 636,
+        "n_wait": 17,
+        "n_branchable": 473,
+        "n_set_panels": 636
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 9770.25,
+      "greedy_stuck": {
+        "awaiting_rows": 760,
+        "no_geometry": 380,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 380,
+        "n_panels": 396
+      }
+    },
+    {
+      "day": "2023-10-27",
+      "signaller": {
+        "n_panels": 659,
+        "n_set": 653,
+        "n_wait": 6,
+        "n_branchable": 488,
+        "n_set_panels": 653
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 8663.25,
+      "greedy_stuck": {
+        "awaiting_rows": 1431,
+        "no_geometry": 1005,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 426,
+        "n_panels": 606
+      }
+    },
+    {
+      "day": "2023-10-28",
+      "signaller": {
+        "n_panels": 586,
+        "n_set": 575,
+        "n_wait": 11,
+        "n_branchable": 409,
+        "n_set_panels": 575
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 7501.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1686,
+        "no_geometry": 1062,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 624,
+        "n_panels": 644
+      }
+    },
+    {
+      "day": "2023-10-29",
+      "signaller": {
+        "n_panels": 412,
+        "n_set": 409,
+        "n_wait": 3,
+        "n_branchable": 315,
+        "n_set_panels": 409
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 4640.5,
+      "greedy_stuck": {
+        "awaiting_rows": 861,
+        "no_geometry": 549,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 312,
+        "n_panels": 328
+      }
+    },
+    {
+      "day": "2023-10-30",
+      "signaller": {
+        "n_panels": 666,
+        "n_set": 654,
+        "n_wait": 12,
+        "n_branchable": 496,
+        "n_set_panels": 654
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 7837.0,
+      "greedy_stuck": {
+        "awaiting_rows": 365,
+        "no_geometry": 189,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 176,
+        "n_panels": 200
+      }
+    },
+    {
+      "day": "2023-10-31",
+      "signaller": {
+        "n_panels": 627,
+        "n_set": 624,
+        "n_wait": 3,
+        "n_branchable": 480,
+        "n_set_panels": 624
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 7356.75,
+      "greedy_stuck": {
+        "awaiting_rows": 264,
+        "no_geometry": 142,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 122,
+        "n_panels": 147
+      }
+    },
+    {
+      "day": "2023-11-01",
+      "signaller": {
+        "n_panels": 631,
+        "n_set": 617,
+        "n_wait": 14,
+        "n_branchable": 465,
+        "n_set_panels": 617
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 13616.5,
+      "greedy_stuck": {
+        "awaiting_rows": 415,
+        "no_geometry": 215,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 200,
+        "n_panels": 220
+      }
+    },
+    {
+      "day": "2023-11-02",
+      "signaller": {
+        "n_panels": 632,
+        "n_set": 607,
+        "n_wait": 25,
+        "n_branchable": 448,
+        "n_set_panels": 607
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 13229.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1008,
+        "no_geometry": 509,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 499,
+        "n_panels": 517
+      }
+    },
+    {
+      "day": "2023-11-03",
+      "signaller": {
+        "n_panels": 579,
+        "n_set": 565,
+        "n_wait": 14,
+        "n_branchable": 430,
+        "n_set_panels": 565
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 11657.0,
+      "greedy_stuck": {
+        "awaiting_rows": 936,
+        "no_geometry": 478,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 458,
+        "n_panels": 486
+      }
+    },
+    {
+      "day": "2023-11-04",
+      "signaller": {
+        "n_panels": 546,
+        "n_set": 529,
+        "n_wait": 17,
+        "n_branchable": 361,
+        "n_set_panels": 529
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 9755.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1214,
+        "no_geometry": 624,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 590,
+        "n_panels": 640
+      }
+    },
+    {
+      "day": "2023-11-05",
+      "signaller": {
+        "n_panels": 372,
+        "n_set": 371,
+        "n_wait": 1,
+        "n_branchable": 275,
+        "n_set_panels": 371
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 1411.0,
+      "greedy_stuck": {
+        "awaiting_rows": 716,
+        "no_geometry": 366,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 350,
+        "n_panels": 380
+      }
+    },
+    {
+      "day": "2023-11-06",
+      "signaller": {
+        "n_panels": 568,
+        "n_set": 557,
+        "n_wait": 11,
+        "n_branchable": 412,
+        "n_set_panels": 557
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 9869.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1087,
+        "no_geometry": 553,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 534,
+        "n_panels": 558
+      }
+    },
+    {
+      "day": "2023-11-07",
+      "signaller": {
+        "n_panels": 521,
+        "n_set": 514,
+        "n_wait": 7,
+        "n_branchable": 377,
+        "n_set_panels": 514
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 5411.0,
+      "greedy_stuck": {
+        "awaiting_rows": 798,
+        "no_geometry": 403,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 395,
+        "n_panels": 408
+      }
+    },
+    {
+      "day": "2023-11-08",
+      "signaller": {
+        "n_panels": 505,
+        "n_set": 498,
+        "n_wait": 7,
+        "n_branchable": 365,
+        "n_set_panels": 498
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 9045.5,
+      "greedy_stuck": {
+        "awaiting_rows": 1110,
+        "no_geometry": 559,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 551,
+        "n_panels": 564
+      }
+    },
+    {
+      "day": "2023-11-09",
+      "signaller": {
+        "n_panels": 612,
+        "n_set": 597,
+        "n_wait": 15,
+        "n_branchable": 450,
+        "n_set_panels": 597
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 13425.75,
+      "greedy_stuck": {
+        "awaiting_rows": 550,
+        "no_geometry": 279,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 271,
+        "n_panels": 285
+      }
+    },
+    {
+      "day": "2023-11-10",
+      "signaller": {
+        "n_panels": 605,
+        "n_set": 590,
+        "n_wait": 15,
+        "n_branchable": 445,
+        "n_set_panels": 590
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 11871.75,
+      "greedy_stuck": {
+        "awaiting_rows": 1456,
+        "no_geometry": 959,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 497,
+        "n_panels": 513
+      }
+    },
+    {
+      "day": "2023-11-11",
+      "signaller": {
+        "n_panels": 607,
+        "n_set": 594,
+        "n_wait": 13,
+        "n_branchable": 423,
+        "n_set_panels": 594
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 8153.0,
+      "greedy_stuck": {
+        "awaiting_rows": 270,
+        "no_geometry": 154,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 116,
+        "n_panels": 159
+      }
+    },
+    {
+      "day": "2023-11-12",
+      "signaller": {
+        "n_panels": 376,
+        "n_set": 375,
+        "n_wait": 1,
+        "n_branchable": 282,
+        "n_set_panels": 375
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 3910.0,
+      "greedy_stuck": {
+        "awaiting_rows": 647,
+        "no_geometry": 321,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 326,
+        "n_panels": 337
+      }
+    },
+    {
+      "day": "2023-11-13",
+      "signaller": {
+        "n_panels": 679,
+        "n_set": 661,
+        "n_wait": 18,
+        "n_branchable": 499,
+        "n_set_panels": 661
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 8897.75,
+      "greedy_stuck": {
+        "awaiting_rows": 1030,
+        "no_geometry": 520,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 510,
+        "n_panels": 537
+      }
+    },
+    {
+      "day": "2023-11-14",
+      "signaller": {
+        "n_panels": 635,
+        "n_set": 624,
+        "n_wait": 11,
+        "n_branchable": 468,
+        "n_set_panels": 624
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 12267.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1172,
+        "no_geometry": 647,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 525,
+        "n_panels": 545
+      }
+    },
+    {
+      "day": "2023-11-15",
+      "signaller": {
+        "n_panels": 679,
+        "n_set": 661,
+        "n_wait": 18,
+        "n_branchable": 495,
+        "n_set_panels": 661
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 16011.75,
+      "greedy_stuck": {
+        "awaiting_rows": 443,
+        "no_geometry": 226,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 217,
+        "n_panels": 237
+      }
+    }
+  ],
+  "headline": {
+    "exp1_injection_points": 31090,
+    "exp2_wait_candidates": 41628,
+    "exp3_greedy_no_set_rows": 33920,
+    "exp3_greedy_awaiting_rows": 61883,
+    "exp3_no_set_frac": 0.5481311507199069
+  }
+}

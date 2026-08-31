@@ -1,0 +1,59 @@
+{
+  "held_vs_concurrency_corr": 0.68,
+  "held_by_concurrency": {
+    "独占": {
+      "n": 10095,
+      "median": 2.0,
+      "frac_gt30s": 0.147
+    },
+    "1-2": {
+      "n": 15600,
+      "median": 2.0,
+      "frac_gt30s": 0.11
+    },
+    "3-4": {
+      "n": 3123,
+      "median": 3.0,
+      "frac_gt30s": 0.114
+    },
+    "5+": {
+      "n": 180,
+      "median": 7.5,
+      "frac_gt30s": 0.211
+    }
+  },
+  "platform_pressure": {
+    "1": {
+      "median_headway_s": 1635.0,
+      "frac_lt120s": 0.047,
+      "n": 1867
+    },
+    "2": {
+      "median_headway_s": 1865.0,
+      "frac_lt120s": 0.014,
+      "n": 1804
+    },
+    "3": {
+      "median_headway_s": 708.0,
+      "frac_lt120s": 0.129,
+      "n": 4019
+    },
+    "4": {
+      "median_headway_s": 720.0,
+      "frac_lt120s": 0.072,
+      "n": 3926
+    },
+    "5": {
+      "median_headway_s": 1006.0,
+      "frac_lt120s": 0.023,
+      "n": 3640
+    },
+    "6": {
+      "median_headway_s": 971.0,
+      "frac_lt120s": 0.012,
+      "n": 4600
+    }
+  },
+  "decision_points_with_real_choice": "25/35",
+  "conclusion": "延误与并发相关 0.68(拥堵驱动=可控信号); 站台3/4最挤(紧headway占比高); 25/35 决策点真有多路由选择。可控杠杆在**站台层+高并发时段**, 非咽喉TC排队。修正: 前述'98%外生'过强, 那是最窄定义(紧邻TC); 广义拥堵效应真实存在。"
+}

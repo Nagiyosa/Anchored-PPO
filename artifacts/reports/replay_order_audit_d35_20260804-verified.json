@@ -1,0 +1,35 @@
+{
+  "audit": "D33 step 5 Panel_Request order versus observed traversal",
+  "status": "verified from complete local runs on 2026-08-04",
+  "pre_step5_head": "7a7b308",
+  "rule": "unique route ids; every route has an observed exclusive TC; accept only when physical discontinuities strictly decrease",
+  "reports": [
+    {
+      "scope": "BC natural days (98 raw days)",
+      "trains": 22023,
+      "raw_decisions": 57876,
+      "raw_discontinuous": 3424,
+      "d31_segments": 27424,
+      "d31_decisions": 52151,
+      "position_components": 25804,
+      "position_decisions": 53763,
+      "reordered_trains": 773,
+      "reordered_routes": 1848,
+      "recovered_decisions": 1614
+    },
+    {
+      "scope": "RL complete operating days (03:00 cut)",
+      "trains": 21963,
+      "raw_decisions": 57790,
+      "raw_discontinuous": 3407,
+      "d31_segments": 27304,
+      "d31_decisions": 52124,
+      "position_components": 25735,
+      "position_decisions": 53684,
+      "reordered_trains": 751,
+      "reordered_routes": 1801,
+      "recovered_decisions": 1562
+    }
+  ],
+  "interpretation": "The old D31 request-order split mistook a material set of downstream presets for physical breaks. The previous BC fingerprint is therefore superseded; repeated or under-observed movements remain unsorted rather than guessed."
+}

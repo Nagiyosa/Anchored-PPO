@@ -1,0 +1,10 @@
+{
+  "window": "2023-09-04 07:00:00 ~ 2023-09-04 08:00:00",
+  "n_requests": 57,
+  "n_locked": 57,
+  "n_deferred": 14,
+  "persistent_conflicts": 0,
+  "interlocking_violations": 0,
+  "n_sim_occupations": 302,
+  "trains_order_consistent": "12/15"
+}

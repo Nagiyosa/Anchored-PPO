@@ -1,0 +1,28 @@
+{
+  "audit": "D33 step 9 wait scan summary",
+  "mode": "wait",
+  "created_at": "2026-08-05T19:37:14+0100",
+  "n_files": 1,
+  "n_points": 41628,
+  "delta_delay_s": {
+    "mean": 469.2629299990391,
+    "median": 147.0,
+    "p05": 3.0,
+    "p95": 2008.0,
+    "p99": 3549.730000000003,
+    "min": -808.0,
+    "max": 50244.0,
+    "n_worsened": 40692,
+    "n_improved": 42,
+    "frac_worsened": 0.9775151340443932,
+    "total_worsening_s": 19541165.75
+  },
+  "completion": {
+    "n_with_drop": 82,
+    "frac_with_drop": 0.001969828000384357
+  },
+  "safety": {
+    "n_collisions": 0,
+    "n_deadlocks": 0
+  }
+}

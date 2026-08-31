@@ -1,0 +1,29 @@
+{
+  "calib_split": [
+    "2023-09-01",
+    "2023-10-31"
+  ],
+  "holdout_split": [
+    "2023-11-01",
+    "2023-12-07"
+  ],
+  "n_route_pairs_calib": 53814,
+  "n_tc_params": 129,
+  "n_platform_dwell": 6,
+  "dwell_medians_s": {
+    "3": 260.0,
+    "5": 172.0,
+    "6": 168.0,
+    "4": 260.0,
+    "2": 217.0,
+    "1": 308.5
+  },
+  "occ_MAE_s_mean": 72.72,
+  "occ_median_abs_s": 2.0,
+  "occ_median_bias_s": 0.0,
+  "occ_p90_s": 9.0,
+  "occ_p95_s": 14.0,
+  "within_10s_frac": 0.911,
+  "within_20s_frac": 0.972,
+  "gt60s_frac_midroute_waits": 0.004
+}

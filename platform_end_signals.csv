@@ -1,0 +1,13 @@
+platform_id,direction,signal_id,note
+1,N,5061,North end of Platform 1 (towards Duffield); equiv to DC5061 in TD
+1,S,5301,South end of Platform 1 (towards Burton); equiv to DW5301 in TD
+2,N,5062,equiv to DC5062 in TD
+2,S,5302,equiv to DW5302 in TD
+3,N,5063,equiv to DC5063 in TD
+3,S,5053,equiv to TD5053 in TD
+4,N,5064,equiv to DC5064 in TD
+4,S,5054,equiv to TD5054 in TD
+5,N,5065,equiv to DC5065 in TD
+5,S,5055,equiv to TD5055 in TD
+6,N,5066,equiv to DC5066 in TD
+6,S,5056,equiv to TD5056 in TD

@@ -1,0 +1,14 @@
+{
+  "total_bs_records": 445510,
+  "n_derby_uids": 4081,
+  "n_derby_layers": 9629,
+  "stp_counts_derby_uids": {
+    "P": 2916,
+    "C": 1447,
+    "O": 3851,
+    "N": 1415
+  },
+  "n_calls_derby_layers": 7409,
+  "n_headcodes": 990,
+  "cif_parquet": "/sessions/beautiful-dazzling-babbage/mnt/final_project/artifacts/subset/cif_schedules.parquet"
+}

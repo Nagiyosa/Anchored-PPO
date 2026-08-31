@@ -1,0 +1,726 @@
+{
+  "audit": "D33 route budget and BC invariance baseline",
+  "created_at": "2026-08-04T16:39:37+0100",
+  "source_git_head": "7a7b308e02ce47e0c30d61b2caf73a2fb8d8a48c",
+  "split": "train",
+  "n_operating_days": 64,
+  "first_day": "2023-09-02 03:00:00",
+  "last_day": "2023-11-04 03:00:00",
+  "operating_day_coverage": {
+    "source_min": "2023-09-01 14:51:11",
+    "source_max": "2023-12-07 06:25:16",
+    "n_days": 64,
+    "n_partial_boundary_days": 0,
+    "partial_boundary_days": [],
+    "daily_train_counts": [
+      {
+        "start": "2023-09-02 03:00:00",
+        "end": "2023-09-03 03:00:00",
+        "n_trains": 154,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-03 03:00:00",
+        "end": "2023-09-04 03:00:00",
+        "n_trains": 185,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-04 03:00:00",
+        "end": "2023-09-05 03:00:00",
+        "n_trains": 302,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-05 03:00:00",
+        "end": "2023-09-06 03:00:00",
+        "n_trains": 305,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-06 03:00:00",
+        "end": "2023-09-07 03:00:00",
+        "n_trains": 306,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-07 03:00:00",
+        "end": "2023-09-08 03:00:00",
+        "n_trains": 302,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-08 03:00:00",
+        "end": "2023-09-09 03:00:00",
+        "n_trains": 308,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-09 03:00:00",
+        "end": "2023-09-10 03:00:00",
+        "n_trains": 267,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-10 03:00:00",
+        "end": "2023-09-11 03:00:00",
+        "n_trains": 185,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-11 03:00:00",
+        "end": "2023-09-12 03:00:00",
+        "n_trains": 312,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-12 03:00:00",
+        "end": "2023-09-13 03:00:00",
+        "n_trains": 283,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-13 03:00:00",
+        "end": "2023-09-14 03:00:00",
+        "n_trains": 302,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-14 03:00:00",
+        "end": "2023-09-15 03:00:00",
+        "n_trains": 294,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-15 03:00:00",
+        "end": "2023-09-16 03:00:00",
+        "n_trains": 293,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-16 03:00:00",
+        "end": "2023-09-17 03:00:00",
+        "n_trains": 259,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-17 03:00:00",
+        "end": "2023-09-18 03:00:00",
+        "n_trains": 187,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-18 03:00:00",
+        "end": "2023-09-19 03:00:00",
+        "n_trains": 294,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-19 03:00:00",
+        "end": "2023-09-20 03:00:00",
+        "n_trains": 280,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-20 03:00:00",
+        "end": "2023-09-21 03:00:00",
+        "n_trains": 265,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-21 03:00:00",
+        "end": "2023-09-22 03:00:00",
+        "n_trains": 297,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-22 03:00:00",
+        "end": "2023-09-23 03:00:00",
+        "n_trains": 286,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-23 03:00:00",
+        "end": "2023-09-24 03:00:00",
+        "n_trains": 268,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-24 03:00:00",
+        "end": "2023-09-25 03:00:00",
+        "n_trains": 182,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-25 03:00:00",
+        "end": "2023-09-26 03:00:00",
+        "n_trains": 287,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-26 03:00:00",
+        "end": "2023-09-27 03:00:00",
+        "n_trains": 268,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-27 03:00:00",
+        "end": "2023-09-28 03:00:00",
+        "n_trains": 274,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-28 03:00:00",
+        "end": "2023-09-29 03:00:00",
+        "n_trains": 257,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-29 03:00:00",
+        "end": "2023-09-30 03:00:00",
+        "n_trains": 327,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-09-30 03:00:00",
+        "end": "2023-10-01 03:00:00",
+        "n_trains": 15,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-01 03:00:00",
+        "end": "2023-10-02 03:00:00",
+        "n_trains": 183,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-02 03:00:00",
+        "end": "2023-10-03 03:00:00",
+        "n_trains": 279,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-03 03:00:00",
+        "end": "2023-10-04 03:00:00",
+        "n_trains": 304,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-04 03:00:00",
+        "end": "2023-10-05 03:00:00",
+        "n_trains": 32,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-05 03:00:00",
+        "end": "2023-10-06 03:00:00",
+        "n_trains": 285,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-06 03:00:00",
+        "end": "2023-10-07 03:00:00",
+        "n_trains": 302,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-07 03:00:00",
+        "end": "2023-10-08 03:00:00",
+        "n_trains": 239,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-08 03:00:00",
+        "end": "2023-10-09 03:00:00",
+        "n_trains": 187,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-09 03:00:00",
+        "end": "2023-10-10 03:00:00",
+        "n_trains": 299,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-10 03:00:00",
+        "end": "2023-10-11 03:00:00",
+        "n_trains": 308,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-11 03:00:00",
+        "end": "2023-10-12 03:00:00",
+        "n_trains": 321,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-12 03:00:00",
+        "end": "2023-10-13 03:00:00",
+        "n_trains": 295,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-13 03:00:00",
+        "end": "2023-10-14 03:00:00",
+        "n_trains": 293,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-14 03:00:00",
+        "end": "2023-10-15 03:00:00",
+        "n_trains": 294,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-15 03:00:00",
+        "end": "2023-10-16 03:00:00",
+        "n_trains": 204,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-16 03:00:00",
+        "end": "2023-10-17 03:00:00",
+        "n_trains": 291,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-17 03:00:00",
+        "end": "2023-10-18 03:00:00",
+        "n_trains": 289,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-18 03:00:00",
+        "end": "2023-10-19 03:00:00",
+        "n_trains": 303,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-19 03:00:00",
+        "end": "2023-10-20 03:00:00",
+        "n_trains": 287,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-20 03:00:00",
+        "end": "2023-10-21 03:00:00",
+        "n_trains": 157,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-21 03:00:00",
+        "end": "2023-10-22 03:00:00",
+        "n_trains": 99,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-22 03:00:00",
+        "end": "2023-10-23 03:00:00",
+        "n_trains": 187,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-23 03:00:00",
+        "end": "2023-10-24 03:00:00",
+        "n_trains": 348,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-24 03:00:00",
+        "end": "2023-10-25 03:00:00",
+        "n_trains": 302,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-25 03:00:00",
+        "end": "2023-10-26 03:00:00",
+        "n_trains": 279,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-26 03:00:00",
+        "end": "2023-10-27 03:00:00",
+        "n_trains": 289,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-27 03:00:00",
+        "end": "2023-10-28 03:00:00",
+        "n_trains": 294,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-28 03:00:00",
+        "end": "2023-10-29 03:00:00",
+        "n_trains": 277,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-29 03:00:00",
+        "end": "2023-10-30 03:00:00",
+        "n_trains": 204,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-30 03:00:00",
+        "end": "2023-10-31 03:00:00",
+        "n_trains": 303,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-10-31 03:00:00",
+        "end": "2023-11-01 03:00:00",
+        "n_trains": 282,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-11-01 03:00:00",
+        "end": "2023-11-02 03:00:00",
+        "n_trains": 287,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-11-02 03:00:00",
+        "end": "2023-11-03 03:00:00",
+        "n_trains": 282,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-11-03 03:00:00",
+        "end": "2023-11-04 03:00:00",
+        "n_trains": 259,
+        "source_covers_start": true,
+        "source_covers_end": true
+      },
+      {
+        "start": "2023-11-04 03:00:00",
+        "end": "2023-11-05 03:00:00",
+        "n_trains": 243,
+        "source_covers_start": true,
+        "source_covers_end": true
+      }
+    ]
+  },
+  "excluded_partial_operating_days": [
+    {
+      "start": "2023-09-01 03:00:00",
+      "end": "2023-09-02 03:00:00",
+      "n_trains": null,
+      "source_covers_start": false,
+      "source_covers_end": true
+    },
+    {
+      "start": "2023-12-07 03:00:00",
+      "end": "2023-12-08 03:00:00",
+      "n_trains": null,
+      "source_covers_start": true,
+      "source_covers_end": false
+    }
+  ],
+  "route_chains": {
+    "n_trains": 16631,
+    "route_count_including_entry": {
+      "n": 16631,
+      "min": 1,
+      "max": 6,
+      "p50": 4.0,
+      "p90": 4.0,
+      "p95": 4.0,
+      "p99": 4.0
+    },
+    "agent_route_count_excluding_entry": {
+      "n": 16631,
+      "min": 0,
+      "max": 5,
+      "p50": 3.0,
+      "p90": 3.0,
+      "p95": 3.0,
+      "p99": 3.0
+    },
+    "by_service_class": {
+      "*": {
+        "n": 4,
+        "min": 1,
+        "max": 2,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "0": {
+        "n": 415,
+        "min": 1,
+        "max": 4,
+        "p50": 1.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "1": {
+        "n": 8905,
+        "min": 1,
+        "max": 5,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "2": {
+        "n": 2247,
+        "min": 1,
+        "max": 4,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "3": {
+        "n": 168,
+        "min": 1,
+        "max": 6,
+        "p50": 2.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.660000000000025
+      },
+      "4": {
+        "n": 164,
+        "min": 1,
+        "max": 4,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "5": {
+        "n": 3906,
+        "min": 1,
+        "max": 4,
+        "p50": 1.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "6": {
+        "n": 773,
+        "min": 1,
+        "max": 4,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "7": {
+        "n": 12,
+        "min": 1,
+        "max": 4,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "8": {
+        "n": 2,
+        "min": 2,
+        "max": 4,
+        "p50": 3.0,
+        "p90": 3.8,
+        "p95": 3.9,
+        "p99": 3.98
+      },
+      "B": {
+        "n": 1,
+        "min": 1,
+        "max": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "F": {
+        "n": 3,
+        "min": 1,
+        "max": 2,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "O": {
+        "n": 11,
+        "min": 1,
+        "max": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "P": {
+        "n": 11,
+        "min": 1,
+        "max": 2,
+        "p50": 1.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "S": {
+        "n": 9,
+        "min": 1,
+        "max": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      }
+    },
+    "by_goal_kind": {
+      "exit": {
+        "n": 13175,
+        "min": 1,
+        "max": 6,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "terminal_platform": {
+        "n": 1360,
+        "min": 1,
+        "max": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "unresolved": {
+        "n": 2096,
+        "min": 1,
+        "max": 3,
+        "p50": 1.0,
+        "p90": 2.0,
+        "p95": 3.0,
+        "p99": 3.0
+      }
+    },
+    "chains_with_repeated_body_tc_descriptive_only": 2718,
+    "chains_with_repeated_route_id": 1,
+    "repeated_route_id_examples": [
+      {
+        "train_id": "3Q10",
+        "route_count": 6,
+        "route_ids": [
+          "RTD5049C(M)"
+        ]
+      }
+    ],
+    "chains_with_repeated_start_signal": 3,
+    "repeated_start_signal_examples": [
+      {
+        "train_id": "3Z03@1",
+        "route_count": 6,
+        "signals": [
+          "5054"
+        ]
+      },
+      {
+        "train_id": "3Q10",
+        "route_count": 6,
+        "signals": [
+          "5049",
+          "5054"
+        ]
+      },
+      {
+        "train_id": "1V62",
+        "route_count": 5,
+        "signals": [
+          "5080"
+        ]
+      }
+    ],
+    "missing_route_ids": {},
+    "budget_candidates_including_entry": {
+      "train_p99_ceil": 4,
+      "two_times_train_p99": 8,
+      "three_times_train_p99": 12,
+      "max_observed": 6,
+      "recommended_total_actual_route_cap": 12,
+      "recommendation_basis": "global train-only 3*ceil(p99), including the non-agent entry route; a conservative safety bound, not a success criterion"
+    }
+  },
+  "bc_dataset": "E:\\Claude\\final_project\\artifacts\\dataset\\bc_dataset_all_d31.parquet",
+  "bc_fingerprint": {
+    "n_rows": 52294,
+    "split_counts": {
+      "holdout": 19967,
+      "train": 32327
+    },
+    "sha256_labels": "6b4307f2f9d0e4123b6165f9f8f8d5076b358b2354679a01342204a612d2508f",
+    "sha256_legal_masks": "6fbd9beb01e6b32fe3d21846537962391e21e8167eb4ac7ced8cd8f236000d42",
+    "sha256_observations": "d814172aa3c8ff2122666262c3f01b8ba2fab047fb004b00b298cd34f72710e9",
+    "sha256_combined": "aa8672584a4bf8915145fac92910ad3e1ba0befb5b23c5a0f5ea0933f6e21a84"
+  }
+}

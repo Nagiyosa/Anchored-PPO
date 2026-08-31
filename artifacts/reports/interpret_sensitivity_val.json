@@ -1,0 +1,1 @@
+{"lateness(dec0+panel0)": {"flip_rate": 0.0008333333333333334}, "fine_time_v2(dec-1)": {"flip_rate": 0.0005}, "bg_foresight_v2(cand-1)": {"flip_rate": 0.0003333333333333333}, "occupancy(occ+first)": {"flip_rate": 0.0095}, "route_prior": {"flip_rate": 0.0013333333333333333}, "tod(sin,cos)": {"flip_rate": 0.00016666666666666666}}

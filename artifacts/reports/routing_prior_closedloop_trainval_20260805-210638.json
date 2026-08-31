@@ -1,0 +1,53 @@
+{
+  "audit": "routing-prior closed-loop (corrected engine, operating days, D35)",
+  "split": "trainval",
+  "n_days": 75,
+  "created_at": "2026-08-05T21:06:38+0100",
+  "lookup_signals": 34,
+  "results": {
+    "signaller_replay(选路100%,上界)": {
+      "completion": 1.0,
+      "delay_s": 689299.0,
+      "reward": 2220.609999999999,
+      "n_reached": 17022.0,
+      "n_completable": 17022.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.01989499211263626,
+      "frac_set": 0.9801050078873638
+    },
+    "lookup_most_frequent(BC代理,典型路)": {
+      "completion": 0.9983550699095288,
+      "delay_s": 709070.25,
+      "reward": 1473.897500000001,
+      "n_reached": 16994.0,
+      "n_completable": 17022.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.020862532454104726,
+      "frac_set": 0.9791374675458953
+    },
+    "greedy_first_legal(无先验)": {
+      "completion": 0.9933615321348843,
+      "delay_s": 1013222.25,
+      "reward": -3305.6225000000013,
+      "n_reached": 16909.0,
+      "n_completable": 17022.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.029519979464362113,
+      "frac_set": 0.9704800205356379
+    },
+    "random_legal(下界)": {
+      "completion": 0.9072376923980731,
+      "delay_s": 50604280.75,
+      "reward": -530850.2074999999,
+      "n_reached": 15443.0,
+      "n_completable": 17022.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.3393350930115636,
+      "frac_set": 0.6260788503435563
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "n_signals_total": 113,
+  "n_signals_in_scope": 48,
+  "n_routes_total": 272,
+  "n_routes_in_scope": 184,
+  "n_track_circuits": 249,
+  "n_platforms": 6,
+  "n_decision_points_derived": 35,
+  "decision_points_match_const": true,
+  "dp_in_const_not_derived": [],
+  "dp_derived_not_in_const": [],
+  "top_selectivity": [
+    [
+      12,
+      5488
+    ],
+    [
+      12,
+      5486
+    ],
+    [
+      12,
+      5076
+    ],
+    [
+      12,
+      5045
+    ],
+    [
+      8,
+      5475
+    ],
+    [
+      8,
+      5054
+    ]
+  ],
+  "isolated_in_scope_signals": [],
+  "n_boundary_exit_routes": 38
+}

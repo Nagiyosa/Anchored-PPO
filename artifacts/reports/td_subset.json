@@ -1,0 +1,31 @@
+{
+  "td_total_rows": 3867742,
+  "td_kept_rows": 1834288,
+  "kept_fraction": 0.4743,
+  "type_counts_total": {
+    "Track": 2169426,
+    "Signal": 637728,
+    "CA": 488085,
+    "Route": 180134,
+    "Panel_Request": 180112,
+    "CC": 116497,
+    "CB": 59550,
+    "TRTS": 36210
+  },
+  "kept_type_counts": {
+    "Track": 1247661,
+    "Signal": 185931,
+    "CA": 149009,
+    "Route": 92547,
+    "Panel_Request": 92534,
+    "TRTS": 36210,
+    "CC": 28473,
+    "CB": 1923
+  },
+  "n_region_trains": 1276,
+  "n_panel_requests_kept": 92534,
+  "n_distinct_decision_routes": 167,
+  "berth_adjacency_edges": 304,
+  "td_parquet": "/sessions/beautiful-dazzling-babbage/mnt/final_project/artifacts/subset/td_events.parquet",
+  "adjacency_parquet": "/sessions/beautiful-dazzling-babbage/mnt/final_project/artifacts/subset/berth_adjacency.parquet"
+}

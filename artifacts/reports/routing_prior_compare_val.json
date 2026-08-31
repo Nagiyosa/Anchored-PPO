@@ -1,0 +1,26 @@
+{
+  "signaller_replay(\u9009\u8def 100%)": {
+    "completion": 1.0,
+    "delay": 635.700000041061,
+    "reward": 5.365222221811612,
+    "deadlocks": 0
+  },
+  "lookup_most_frequent(\u22480.80)": {
+    "completion": 0.8828541828541829,
+    "delay": 67127.02222241957,
+    "reward": -733.3257777797514,
+    "deadlocks": 0
+  },
+  "greedy_first_legal(\u968f\u4fbf\u6311)": {
+    "completion": 0.7372109849529206,
+    "delay": 144184.95555594895,
+    "reward": -1593.0717777817117,
+    "deadlocks": 0
+  },
+  "random_legal(\u4e0b\u754c)": {
+    "completion": 0.37644075160204193,
+    "delay": 403072.4333339863,
+    "reward": -4400.7798888954185,
+    "deadlocks": 0
+  }
+}

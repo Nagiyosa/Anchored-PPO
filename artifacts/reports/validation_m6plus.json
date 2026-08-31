@@ -1,0 +1,21 @@
+{
+  "run_time_validation": "见 M6 validation_holdout: 分段(计时点间)占用时刻 中位~2s, 标准做法",
+  "interlocking_and_reactive": "见 tests/test_reactive.py: 被占则等, 次生延误因果涌现(B等A 13s), 联锁0双占",
+  "held_time_distribution_holdout": {
+    "n": 33039,
+    "median_s": 2.0,
+    "mean_s": 35.6,
+    "p90_s": 36.0,
+    "p99_s": 161.6,
+    "frac_gt30s": 0.12,
+    "frac_gt60s": 0.049
+  },
+  "hold_attribution_peak_week": {
+    "n_holds_gt30s": 4137,
+    "tc_conflict_induced": 91,
+    "tc_conflict_frac": 0.022,
+    "exogenous": 4046,
+    "exogenous_frac": 0.978
+  },
+  "conclusion": "区域内被扣时间中位 2.0s, 12% 超30s; 其中仅 2% 由TC冲突引起(仿真器可复现), 98% 为外生(仿真器不生成, 属输入)。"
+}

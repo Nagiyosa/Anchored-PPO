@@ -1,0 +1,9 @@
+{
+  "n_tc_params": 156,
+  "validation_tc_occupations": 3639,
+  "occ_time_MAE_s": 6.83,
+  "occ_time_median_err_s": 2.0,
+  "within_10s_frac": 0.885,
+  "within_20s_frac": 0.947,
+  "params_json": "/sessions/beautiful-dazzling-babbage/mnt/final_project/artifacts/calib/tc_params.json"
+}

@@ -1,0 +1,45 @@
+{
+  "_meta": {
+    "script": "scripts/28_validate_occupation_vs_td.py",
+    "generated": "2026-08-07T18:46:18",
+    "n_days": 3,
+    "elapsed_s": 23.2,
+    "metric": "err = sim_occ[tc] - real TD occ_first[tc] (s), over (train,TC) both occupied",
+    "note": "faithful anchor = lowest |err| vs raw TD occupation"
+  },
+  "by_mode": {
+    "reactive": {
+      "n": 10334,
+      "median_abs_s": 41.0,
+      "MAE_s": 129.9,
+      "median_bias_s": 0.0,
+      "p90_abs_s": 351.5,
+      "p95_abs_s": 519.0,
+      "frac_within_5s": 0.2662,
+      "frac_within_30s": 0.4524,
+      "completion_rate": 1.0
+    },
+    "proactive_narrow": {
+      "n": 10334,
+      "median_abs_s": 77.75,
+      "MAE_s": 177.4,
+      "median_bias_s": -23.0,
+      "p90_abs_s": 445.0,
+      "p95_abs_s": 705.1,
+      "frac_within_5s": 0.2433,
+      "frac_within_30s": 0.4057,
+      "completion_rate": 1.0
+    },
+    "proactive_wide": {
+      "n": 10334,
+      "median_abs_s": 76.0,
+      "MAE_s": 116.0,
+      "median_bias_s": -42.0,
+      "p90_abs_s": 195.7,
+      "p95_abs_s": 285.7,
+      "frac_within_5s": 0.218,
+      "frac_within_30s": 0.3363,
+      "completion_rate": 1.0
+    }
+  }
+}

@@ -1,0 +1,381 @@
+{
+  "audit": "D33 route budget and BC invariance baseline",
+  "created_at": "2026-08-04T12:42:10+0100",
+  "source_git_head": "0bff12010c7ba726625fc7c40f1ebf8fbca41011",
+  "split": "train",
+  "n_operating_days": 65,
+  "first_day": "2023-09-01 03:00:00",
+  "last_day": "2023-11-04 03:00:00",
+  "route_chains": {
+    "n_trains": 17600,
+    "route_count_including_entry": {
+      "n": 17600,
+      "min": 1,
+      "max": 6,
+      "p50": 4.0,
+      "p90": 4.0,
+      "p95": 4.0,
+      "p99": 4.0
+    },
+    "agent_route_count_excluding_entry": {
+      "n": 17600,
+      "min": 0,
+      "max": 5,
+      "p50": 3.0,
+      "p90": 3.0,
+      "p95": 3.0,
+      "p99": 3.0
+    },
+    "by_service_class": {
+      "*": {
+        "n": 4,
+        "min": 1,
+        "max": 2,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "0": {
+        "n": 436,
+        "min": 1,
+        "max": 4,
+        "p50": 1.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "1": {
+        "n": 9500,
+        "min": 1,
+        "max": 5,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "2": {
+        "n": 2359,
+        "min": 1,
+        "max": 4,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "3": {
+        "n": 175,
+        "min": 1,
+        "max": 6,
+        "p50": 2.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.519999999999982
+      },
+      "4": {
+        "n": 198,
+        "min": 1,
+        "max": 4,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "5": {
+        "n": 4003,
+        "min": 1,
+        "max": 4,
+        "p50": 1.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "6": {
+        "n": 876,
+        "min": 1,
+        "max": 4,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "7": {
+        "n": 12,
+        "min": 1,
+        "max": 4,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "8": {
+        "n": 2,
+        "min": 2,
+        "max": 4,
+        "p50": 3.0,
+        "p90": 3.8,
+        "p95": 3.9,
+        "p99": 3.98
+      },
+      "B": {
+        "n": 1,
+        "min": 1,
+        "max": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "F": {
+        "n": 3,
+        "min": 1,
+        "max": 2,
+        "p50": 2.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "O": {
+        "n": 11,
+        "min": 1,
+        "max": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "P": {
+        "n": 11,
+        "min": 1,
+        "max": 2,
+        "p50": 1.0,
+        "p90": 2.0,
+        "p95": 2.0,
+        "p99": 2.0
+      },
+      "S": {
+        "n": 9,
+        "min": 1,
+        "max": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      }
+    },
+    "by_goal_kind": {
+      "exit": {
+        "n": 13186,
+        "min": 1,
+        "max": 6,
+        "p50": 4.0,
+        "p90": 4.0,
+        "p95": 4.0,
+        "p99": 4.0
+      },
+      "terminal_platform": {
+        "n": 1615,
+        "min": 1,
+        "max": 1,
+        "p50": 1.0,
+        "p90": 1.0,
+        "p95": 1.0,
+        "p99": 1.0
+      },
+      "unresolved": {
+        "n": 2799,
+        "min": 1,
+        "max": 3,
+        "p50": 1.0,
+        "p90": 2.0,
+        "p95": 3.0,
+        "p99": 3.0
+      }
+    },
+    "non_adjacent_repeated_tc_chains": 2695,
+    "repeated_tc_examples": [
+      {
+        "train_id": "0S00@2",
+        "route_count": 2,
+        "repeated_tc": [
+          "TECM",
+          "TECR",
+          "TECS"
+        ]
+      },
+      {
+        "train_id": "5A98",
+        "route_count": 2,
+        "repeated_tc": [
+          "TECR",
+          "TECS"
+        ]
+      },
+      {
+        "train_id": "5D21@1",
+        "route_count": 2,
+        "repeated_tc": [
+          "TECR",
+          "TECS"
+        ]
+      },
+      {
+        "train_id": "5D90",
+        "route_count": 2,
+        "repeated_tc": [
+          "TECR",
+          "TECS"
+        ]
+      },
+      {
+        "train_id": "1C09",
+        "route_count": 4,
+        "repeated_tc": [
+          "TDMZ",
+          "TDPA",
+          "TDPB",
+          "TDPF"
+        ]
+      },
+      {
+        "train_id": "1D00",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M64",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M67",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M73",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M75",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M83@0",
+        "route_count": 2,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M94",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M95",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M98",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA"
+        ]
+      },
+      {
+        "train_id": "1M99",
+        "route_count": 4,
+        "repeated_tc": [
+          "TRKA",
+          "TRKB"
+        ]
+      },
+      {
+        "train_id": "5A57",
+        "route_count": 2,
+        "repeated_tc": [
+          "TECR",
+          "TECS"
+        ]
+      },
+      {
+        "train_id": "5B02",
+        "route_count": 4,
+        "repeated_tc": [
+          "TDPB",
+          "TDPE",
+          "TFMW",
+          "TFMY",
+          "TNGM",
+          "TRKA",
+          "TRKB"
+        ]
+      },
+      {
+        "train_id": "5B10#0",
+        "route_count": 4,
+        "repeated_tc": [
+          "TDPB",
+          "TDPE",
+          "TFMW",
+          "TFMY",
+          "TRKA",
+          "TRKB"
+        ]
+      },
+      {
+        "train_id": "5B10#1",
+        "route_count": 2,
+        "repeated_tc": [
+          "TECR",
+          "TECS"
+        ]
+      },
+      {
+        "train_id": "5D51",
+        "route_count": 2,
+        "repeated_tc": [
+          "TECR",
+          "TECS"
+        ]
+      }
+    ],
+    "missing_route_ids": {},
+    "budget_candidates_including_entry": {
+      "train_p99_ceil": 4,
+      "two_times_train_p99": 8,
+      "three_times_train_p99": 12,
+      "max_observed": 6
+    }
+  },
+  "bc_dataset": "E:\\Claude\\final_project\\artifacts\\dataset\\bc_dataset_all_d31.parquet",
+  "bc_fingerprint": {
+    "n_rows": 52294,
+    "split_counts": {
+      "holdout": 19967,
+      "train": 32327
+    },
+    "sha256_labels": "6b4307f2f9d0e4123b6165f9f8f8d5076b358b2354679a01342204a612d2508f",
+    "sha256_legal_masks": "6fbd9beb01e6b32fe3d21846537962391e21e8167eb4ac7ced8cd8f236000d42",
+    "sha256_observations": "d814172aa3c8ff2122666262c3f01b8ba2fab047fb004b00b298cd34f72710e9",
+    "sha256_combined": "aa8672584a4bf8915145fac92910ad3e1ba0befb5b23c5a0f5ea0933f6e21a84"
+  }
+}

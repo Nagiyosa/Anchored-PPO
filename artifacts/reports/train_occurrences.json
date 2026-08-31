@@ -1,0 +1,14 @@
+{
+  "n_occurrences": 26079,
+  "n_multi_run_days": 759,
+  "n_matched_cif": 22940,
+  "n_matched_trust": 25005,
+  "n_matched_all_three": 22779,
+  "n_cif_reliable": 20705,
+  "n_with_decisions": 25445,
+  "n_stp_overlaid": 34,
+  "cif_time_gap_le2min_frac": 0.24,
+  "platform_check_n": 20621,
+  "platform_agree_td_vs_cif": 19137,
+  "occurrences_parquet": "/sessions/beautiful-dazzling-babbage/mnt/final_project/artifacts/subset/train_occurrences.parquet"
+}

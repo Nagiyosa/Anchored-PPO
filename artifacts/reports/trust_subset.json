@@ -1,0 +1,22 @@
+{
+  "trust_total_rows": 79935,
+  "event_types": {
+    "DEPARTURE": 53789,
+    "ARRIVAL": 26146
+  },
+  "variation_status": {
+    "LATE": 42007,
+    "EARLY": 21268,
+    "ON TIME": 16256,
+    "OFF ROUTE": 404
+  },
+  "n_valid": 79531,
+  "n_invalid": 404,
+  "n_offroute": 404,
+  "n_derby_station_rows": 49906,
+  "signed_variation_min": -340.0,
+  "signed_variation_max": 362.0,
+  "median_lateness_of_late": 4.0,
+  "n_distinct_headcodes": 1128,
+  "trust_parquet": "/sessions/beautiful-dazzling-babbage/mnt/final_project/artifacts/subset/trust_moves.parquet"
+}

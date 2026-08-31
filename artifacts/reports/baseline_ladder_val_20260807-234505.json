@@ -1,0 +1,67 @@
+{
+  "_meta": {
+    "script": "scripts/32_baseline_ladder.py",
+    "generated": "2026-08-07T23:45:05",
+    "split": "val",
+    "n_days": 4,
+    "env": "proactive narrow",
+    "elapsed_s": 51.2,
+    "note": "signaller=参照非靶子; lookup 表 held-out(train)拟合; 闭环性能在新环境重测(旧+8.7%已作废 D47)"
+  },
+  "ladder": {
+    "signaller": {
+      "completion_rate": 1.0,
+      "weighted_secondary_delay_s": 13909.5,
+      "unscheduled_stops": 139,
+      "ppm_le_60s": 0.2135,
+      "ppm_le_300s": 0.5581,
+      "n_collisions": 0,
+      "n_deadlocks": 0
+    },
+    "lookup": {
+      "completion_rate": 0.4392,
+      "weighted_secondary_delay_s": 56371525.0,
+      "unscheduled_stops": 136,
+      "ppm_le_60s": 0.0698,
+      "ppm_le_300s": 0.222,
+      "n_collisions": 0,
+      "n_deadlocks": 0
+    },
+    "fcfs": {
+      "completion_rate": 0.4392,
+      "weighted_secondary_delay_s": 56371525.0,
+      "unscheduled_stops": 135,
+      "ppm_le_60s": 0.0698,
+      "ppm_le_300s": 0.222,
+      "n_collisions": 0,
+      "n_deadlocks": 0
+    },
+    "fsfs": {
+      "completion_rate": 0.4392,
+      "weighted_secondary_delay_s": 56371525.0,
+      "unscheduled_stops": 136,
+      "ppm_le_60s": 0.0698,
+      "ppm_le_300s": 0.222,
+      "n_collisions": 0,
+      "n_deadlocks": 0
+    },
+    "greedy": {
+      "completion_rate": 0.3424,
+      "weighted_secondary_delay_s": 67237367.0,
+      "unscheduled_stops": 168,
+      "ppm_le_60s": 0.055,
+      "ppm_le_300s": 0.1882,
+      "n_collisions": 0,
+      "n_deadlocks": 0
+    },
+    "random_legal": {
+      "completion_rate": 0.294,
+      "weighted_secondary_delay_s": 74223600.2,
+      "unscheduled_stops": 488,
+      "ppm_le_60s": 0.0275,
+      "ppm_le_300s": 0.0634,
+      "n_collisions": 0,
+      "n_deadlocks": 0
+    }
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "encoder": "gnn",
+  "epochs": 15,
+  "dims": [
+    117,
+    8,
+    21
+  ],
+  "holdout_macro_signal_acc": 0.7145237379337381,
+  "holdout_overall_acc": 0.9112886272861047,
+  "holdout_longtail_acc": 0.1320754716981132,
+  "per_priority_acc": {
+    "1": 0.9477510990869125,
+    "5": 0.7386895475819033,
+    "6": 0.789873417721519,
+    "other": 0.7408906882591093,
+    "2": 0.9865038560411311,
+    "3": 0.7333333333333333
+  },
+  "val_macro_signal_acc": 0.8120122398661073,
+  "val_overall_acc": 0.9110266159695818,
+  "n_multi_holdout": 9514,
+  "baselines": {
+    "most_frequent_macro": 0.6499397935571002,
+    "random_legal_expected": 0.3067871157292118
+  },
+  "dataset": "bc_dataset_all_d35.parquet",
+  "val_frac": 0.15,
+  "route_weight": true,
+  "early_stop_on": "overall",
+  "history": [
+    {
+      "epoch": 0,
+      "train_loss": 0.1349,
+      "val_overall_acc": 0.9076,
+      "val_macro_acc": 0.7587
+    },
+    {
+      "epoch": 1,
+      "train_loss": 0.1338,
+      "val_overall_acc": 0.9095,
+      "val_macro_acc": 0.7735
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.1331,
+      "val_overall_acc": 0.9072,
+      "val_macro_acc": 0.7778
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.131,
+      "val_overall_acc": 0.911,
+      "val_macro_acc": 0.812
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.1275,
+      "val_overall_acc": 0.9042,
+      "val_macro_acc": 0.8073
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.1241,
+      "val_overall_acc": 0.884,
+      "val_macro_acc": 0.7874
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.1202,
+      "val_overall_acc": 0.8764,
+      "val_macro_acc": 0.7759
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.1185,
+      "val_overall_acc": 0.8684,
+      "val_macro_acc": 0.7633
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.1157,
+      "val_overall_acc": 0.8669,
+      "val_macro_acc": 0.7768
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.1144,
+      "val_overall_acc": 0.8692,
+      "val_macro_acc": 0.7807
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "encoder": "settransformer",
+  "epochs": 30,
+  "dims": [
+    117,
+    8,
+    21
+  ],
+  "holdout_macro_signal_acc": 0.75091719196395,
+  "holdout_overall_acc": 0.8957207693970175,
+  "holdout_longtail_acc": 0.21153846153846154,
+  "per_priority_acc": {
+    "1": 0.9488911988911989,
+    "5": 0.7189014539579968,
+    "6": 0.8,
+    "other": 0.56,
+    "2": 0.93717277486911,
+    "3": 0.5517241379310345
+  },
+  "val_macro_signal_acc": 0.8123020326951339,
+  "val_overall_acc": 0.8969391708640062,
+  "n_multi_holdout": 9254,
+  "baselines": {
+    "most_frequent_macro": 0.6503470146510176,
+    "random_legal_expected": 0.3061080407957434
+  },
+  "dataset": "bc_dataset_all_d31.parquet",
+  "val_frac": 0.15,
+  "history": [
+    {
+      "epoch": 0,
+      "train_loss": 0.1517,
+      "val_macro_acc": 0.7854
+    },
+    {
+      "epoch": 1,
+      "train_loss": 0.1502,
+      "val_macro_acc": 0.7845
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.149,
+      "val_macro_acc": 0.7777
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.1472,
+      "val_macro_acc": 0.7968
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.1439,
+      "val_macro_acc": 0.8123
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.1392,
+      "val_macro_acc": 0.7985
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.1356,
+      "val_macro_acc": 0.7898
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.1345,
+      "val_macro_acc": 0.7947
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.132,
+      "val_macro_acc": 0.7571
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.1309,
+      "val_macro_acc": 0.7937
+    },
+    {
+      "epoch": 10,
+      "train_loss": 0.131,
+      "val_macro_acc": 0.7953
+    }
+  ]
+}

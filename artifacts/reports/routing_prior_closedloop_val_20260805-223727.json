@@ -1,0 +1,75 @@
+{
+  "audit": "routing-prior closed-loop (corrected engine, operating days, D35)",
+  "split": "val",
+  "n_days": 11,
+  "created_at": "2026-08-05T22:37:27+0100",
+  "lookup_signals": 34,
+  "results": {
+    "signaller_replay(选路100%,上界)": {
+      "completion": 1.0,
+      "delay_s": 100273.5,
+      "reward": 101.26499999999997,
+      "n_reached": 2487.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.018996590355577204,
+      "frac_set": 0.9810034096444228
+    },
+    "lookup_most_frequent(BC代理,典型路)": {
+      "completion": 0.9971853638922397,
+      "delay_s": 109015.75,
+      "reward": -122.15750000000003,
+      "n_reached": 2480.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.020803782505910164,
+      "frac_set": 0.9791962174940898
+    },
+    "greedy_first_legal(无先验)": {
+      "completion": 0.991556091676719,
+      "delay_s": 139795.5,
+      "reward": -704.955,
+      "n_reached": 2466.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.025217519539890872,
+      "frac_set": 0.9747824804601092
+    },
+    "random_legal(下界)": {
+      "completion": 0.9071170084439083,
+      "delay_s": 7389183.5,
+      "reward": -77722.835,
+      "n_reached": 2256.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.3392691124937424,
+      "frac_set": 0.6269756132446542
+    },
+    "bc_noprior(no-prior)": {
+      "completion": 0.9014877362283876,
+      "delay_s": 232216.5,
+      "reward": -6293.165,
+      "n_reached": 2242.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.05545979924972118,
+      "frac_set": 0.9445402007502788
+    },
+    "bc_prior(含先验)": {
+      "completion": 0.8942501005227181,
+      "delay_s": 201576.75,
+      "reward": -6327.7675,
+      "n_reached": 2224.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.04087249006217511,
+      "frac_set": 0.9591275099378249
+    }
+  }
+}

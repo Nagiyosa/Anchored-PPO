@@ -1,0 +1,93 @@
+{
+  "encoder": "gnn",
+  "epochs": 15,
+  "dims": [
+    117,
+    8,
+    21
+  ],
+  "holdout_macro_signal_acc": 0.5248883911922113,
+  "holdout_overall_acc": 0.6125709480765188,
+  "holdout_longtail_acc": 0.16981132075471697,
+  "per_priority_acc": {
+    "1": 0.60128508623605,
+    "5": 0.6599063962558502,
+    "6": 0.5088607594936709,
+    "other": 0.4089068825910931,
+    "2": 0.6908740359897172,
+    "3": 0.4083333333333333
+  },
+  "val_macro_signal_acc": 0.5800521537926233,
+  "val_overall_acc": 0.603041825095057,
+  "n_multi_holdout": 9514,
+  "baselines": {
+    "most_frequent_macro": 0.6499397935571002,
+    "random_legal_expected": 0.3067871157292118
+  },
+  "dataset": "bc_dataset_all_d35.parquet",
+  "val_frac": 0.15,
+  "route_weight": true,
+  "early_stop_on": "overall",
+  "history": [
+    {
+      "epoch": 0,
+      "train_loss": 0.135,
+      "val_overall_acc": 0.4768,
+      "val_macro_acc": 0.4746
+    },
+    {
+      "epoch": 1,
+      "train_loss": 0.1344,
+      "val_overall_acc": 0.5662,
+      "val_macro_acc": 0.5597
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.1342,
+      "val_overall_acc": 0.5973,
+      "val_macro_acc": 0.5691
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.133,
+      "val_overall_acc": 0.603,
+      "val_macro_acc": 0.5801
+    },
+    {
+      "epoch": 4,
+      "train_loss": 0.1313,
+      "val_overall_acc": 0.5996,
+      "val_macro_acc": 0.5862
+    },
+    {
+      "epoch": 5,
+      "train_loss": 0.129,
+      "val_overall_acc": 0.5935,
+      "val_macro_acc": 0.583
+    },
+    {
+      "epoch": 6,
+      "train_loss": 0.1258,
+      "val_overall_acc": 0.5882,
+      "val_macro_acc": 0.5875
+    },
+    {
+      "epoch": 7,
+      "train_loss": 0.1241,
+      "val_overall_acc": 0.5863,
+      "val_macro_acc": 0.5872
+    },
+    {
+      "epoch": 8,
+      "train_loss": 0.122,
+      "val_overall_acc": 0.5932,
+      "val_macro_acc": 0.5848
+    },
+    {
+      "epoch": 9,
+      "train_loss": 0.1207,
+      "val_overall_acc": 0.589,
+      "val_macro_acc": 0.5807
+    }
+  ]
+}

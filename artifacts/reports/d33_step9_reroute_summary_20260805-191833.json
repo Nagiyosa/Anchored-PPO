@@ -1,0 +1,28 @@
+{
+  "audit": "D33 step 9 reroute scan summary",
+  "mode": "reroute",
+  "created_at": "2026-08-05T19:18:33+0100",
+  "n_files": 8,
+  "n_points": 31129,
+  "delta_delay_s": {
+    "mean": 1491704.1200568601,
+    "median": 0.0,
+    "p05": 0.0,
+    "p95": 8382814.999999999,
+    "p99": 13093023.060000004,
+    "min": -658.0,
+    "max": 29206270.5,
+    "n_worsened": 13215,
+    "n_improved": 556,
+    "frac_worsened": 0.42452375598316683,
+    "total_worsening_s": 46435290730.5
+  },
+  "completion": {
+    "n_with_drop": 17273,
+    "frac_with_drop": 0.554884512833692
+  },
+  "safety": {
+    "n_collisions": 0,
+    "n_deadlocks": 0
+  }
+}

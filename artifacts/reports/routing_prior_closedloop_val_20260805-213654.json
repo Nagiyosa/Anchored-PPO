@@ -1,0 +1,75 @@
+{
+  "audit": "routing-prior closed-loop (corrected engine, operating days, D35)",
+  "split": "val",
+  "n_days": 11,
+  "created_at": "2026-08-05T21:36:54+0100",
+  "lookup_signals": 34,
+  "results": {
+    "signaller_replay(选路100%,上界)": {
+      "completion": 1.0,
+      "delay_s": 100273.5,
+      "reward": 101.26500000000001,
+      "n_reached": 2487.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.018996590355577204,
+      "frac_set": 0.9810034096444228
+    },
+    "lookup_most_frequent(BC代理,典型路)": {
+      "completion": 0.9971853638922397,
+      "delay_s": 109015.75,
+      "reward": -122.15749999999997,
+      "n_reached": 2480.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.020803782505910164,
+      "frac_set": 0.9791962174940898
+    },
+    "greedy_first_legal(无先验)": {
+      "completion": 0.991556091676719,
+      "delay_s": 139795.5,
+      "reward": -704.9549999999999,
+      "n_reached": 2466.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.025217519539890872,
+      "frac_set": 0.9747824804601092
+    },
+    "random_legal(下界)": {
+      "completion": 0.9071170084439083,
+      "delay_s": 7389183.5,
+      "reward": -77722.835,
+      "n_reached": 2256.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.3392691124937424,
+      "frac_set": 0.6269756132446542
+    },
+    "bc_noprior(no-prior)": {
+      "completion": 0.8974668275030157,
+      "delay_s": 112426.25,
+      "reward": -5266.2625,
+      "n_reached": 2232.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.012983918999404407,
+      "frac_set": 0.9870160810005956
+    },
+    "bc_prior(含先验)": {
+      "completion": 0.8970647366304785,
+      "delay_s": 110681.0,
+      "reward": -5268.8099999999995,
+      "n_reached": 2231.0,
+      "n_completable": 2487.0,
+      "deadlocks": 0,
+      "invariants": 0.0,
+      "frac_wait": 0.01335240820219361,
+      "frac_set": 0.9866475917978064
+    }
+  }
+}

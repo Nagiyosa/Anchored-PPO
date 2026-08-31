@@ -1,0 +1,229 @@
+{
+  "_meta": {
+    "script": "scripts/27_overlap_sensitivity_replay.py",
+    "generated": "2026-08-07T00:50:42",
+    "split": "val",
+    "n_days": 11,
+    "elapsed_s": 48.8,
+    "policy": "signaller_replay (valid, bit-deterministic; engine locks ~147s ahead at req_time)",
+    "note": "depth-0 = no overlap held (~RR/user intuition); depth-1 = conservative default; depth-2 = more conservative"
+  },
+  "by_depth": [
+    {
+      "overlap_depth": 0,
+      "n_completable": 2487,
+      "n_reached": 2487,
+      "completion_rate": 1.0,
+      "every_day_completion_one": true,
+      "weighted_secondary_delay_s": 85906.5,
+      "delay_per_train_s": 34.54,
+      "n_steps": 6162,
+      "frac_wait": 0.0195,
+      "n_collisions": 0,
+      "n_deadlocks": 0,
+      "n_truncated": 0,
+      "per_day": [
+        {
+          "day": "2023-11-05 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 1372.0
+        },
+        {
+          "day": "2023-11-06 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 8034.0
+        },
+        {
+          "day": "2023-11-07 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 4506.0
+        },
+        {
+          "day": "2023-11-08 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 6599.5
+        },
+        {
+          "day": "2023-11-09 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 12144.8
+        },
+        {
+          "day": "2023-11-10 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 11349.2
+        },
+        {
+          "day": "2023-11-11 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 8337.0
+        },
+        {
+          "day": "2023-11-12 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 2880.5
+        },
+        {
+          "day": "2023-11-13 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 7127.8
+        },
+        {
+          "day": "2023-11-14 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 11905.5
+        },
+        {
+          "day": "2023-11-15 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 11650.2
+        }
+      ],
+      "delay_vs_depth1_pct": -14.33
+    },
+    {
+      "overlap_depth": 1,
+      "n_completable": 2487,
+      "n_reached": 2487,
+      "completion_rate": 1.0,
+      "every_day_completion_one": true,
+      "weighted_secondary_delay_s": 100273.5,
+      "delay_per_train_s": 40.32,
+      "n_steps": 6159,
+      "frac_wait": 0.019,
+      "n_collisions": 0,
+      "n_deadlocks": 0,
+      "n_truncated": 0,
+      "per_day": [
+        {
+          "day": "2023-11-05 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 1411.0
+        },
+        {
+          "day": "2023-11-06 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 9869.0
+        },
+        {
+          "day": "2023-11-07 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 5411.0
+        },
+        {
+          "day": "2023-11-08 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 9045.5
+        },
+        {
+          "day": "2023-11-09 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 13425.8
+        },
+        {
+          "day": "2023-11-10 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 11871.8
+        },
+        {
+          "day": "2023-11-11 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 8153.0
+        },
+        {
+          "day": "2023-11-12 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 3910.0
+        },
+        {
+          "day": "2023-11-13 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 8897.8
+        },
+        {
+          "day": "2023-11-14 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 12267.0
+        },
+        {
+          "day": "2023-11-15 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 16011.8
+        }
+      ],
+      "delay_vs_depth1_pct": 0.0
+    },
+    {
+      "overlap_depth": 2,
+      "n_completable": 2487,
+      "n_reached": 2487,
+      "completion_rate": 1.0,
+      "every_day_completion_one": true,
+      "weighted_secondary_delay_s": 650571.8,
+      "delay_per_train_s": 261.59,
+      "n_steps": 6315,
+      "frac_wait": 0.0432,
+      "n_collisions": 0,
+      "n_deadlocks": 0,
+      "n_truncated": 0,
+      "per_day": [
+        {
+          "day": "2023-11-05 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 29658.5
+        },
+        {
+          "day": "2023-11-06 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 52583.0
+        },
+        {
+          "day": "2023-11-07 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 55248.2
+        },
+        {
+          "day": "2023-11-08 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 45531.5
+        },
+        {
+          "day": "2023-11-09 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 67837.2
+        },
+        {
+          "day": "2023-11-10 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 70070.8
+        },
+        {
+          "day": "2023-11-11 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 58170.5
+        },
+        {
+          "day": "2023-11-12 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 16523.0
+        },
+        {
+          "day": "2023-11-13 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 76991.8
+        },
+        {
+          "day": "2023-11-14 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 100043.5
+        },
+        {
+          "day": "2023-11-15 03:00:00",
+          "completion": 1.0,
+          "wdelay_s": 77913.8
+        }
+      ],
+      "delay_vs_depth1_pct": 548.8
+    }
+  ]
+}

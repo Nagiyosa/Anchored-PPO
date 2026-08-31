@@ -1,0 +1,89 @@
+{
+  "audit": "D33 step 9 census: branching (exp1/2 sizing) + greedy stuck funnel (exp3)",
+  "created_at": "2026-08-04T22:52:20+0100",
+  "split": "val",
+  "n_days": 2,
+  "days": [
+    "2023-11-05",
+    "2023-11-06"
+  ],
+  "elapsed_s": 10.194580554962158,
+  "signaller_totals": {
+    "n_panels": 940,
+    "n_set": 928,
+    "n_wait": 12,
+    "n_branchable": 687,
+    "n_set_panels": 928
+  },
+  "setopt_hist": {
+    "1": 241,
+    "2": 273,
+    "3": 163,
+    "4": 106,
+    "5": 17,
+    "6": 5,
+    "10": 6,
+    "11": 112,
+    "12": 5
+  },
+  "baseline_completion_pooled": 1.0,
+  "n_completable": 386,
+  "n_reached": 386,
+  "greedy_stuck_totals": {
+    "awaiting_rows": 1803,
+    "no_geometry": 919,
+    "goal_filtered": 0,
+    "deadlock_filtered": 0,
+    "has_set": 884,
+    "n_panels": 938
+  },
+  "per_day": [
+    {
+      "day": "2023-11-05",
+      "signaller": {
+        "n_panels": 372,
+        "n_set": 371,
+        "n_wait": 1,
+        "n_branchable": 275,
+        "n_set_panels": 371
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 1411.0,
+      "greedy_stuck": {
+        "awaiting_rows": 716,
+        "no_geometry": 366,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 350,
+        "n_panels": 380
+      }
+    },
+    {
+      "day": "2023-11-06",
+      "signaller": {
+        "n_panels": 568,
+        "n_set": 557,
+        "n_wait": 11,
+        "n_branchable": 412,
+        "n_set_panels": 557
+      },
+      "baseline_completion": 1.0,
+      "baseline_delay_s": 9869.0,
+      "greedy_stuck": {
+        "awaiting_rows": 1087,
+        "no_geometry": 553,
+        "goal_filtered": 0,
+        "deadlock_filtered": 0,
+        "has_set": 534,
+        "n_panels": 558
+      }
+    }
+  ],
+  "headline": {
+    "exp1_injection_points": 687,
+    "exp2_wait_candidates": 928,
+    "exp3_greedy_no_set_rows": 919,
+    "exp3_greedy_awaiting_rows": 1803,
+    "exp3_no_set_frac": 0.509706045479756
+  }
+}
