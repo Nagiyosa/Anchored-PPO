@@ -1,0 +1,668 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" version="1.1" width="1520" height="557" viewBox="1400 0 1520 557">
+  <metadata id="license">
+    <rdf:RDF>
+      <rdf:Description rdf:title="Track Diagram" rdf:publisher="OpenTrainTimes Ltd." rdf:date="2024-01-14" rdf:format="image/svg+xml" rdf:language="en" />
+    </rdf:RDF>
+  </metadata>
+  <defs>
+    <marker id="arrow_l">
+      </marker>
+  </defs>
+  <style type="text/css">svg { background: rgba(0,0,0,0); }
+.berth { font-size:1.15em;fill:#ffff00;font-family:monospace }
+.track { stroke:#000;fill:none;stroke-width:4px; }
+.semaphore.stop { fill:#c00000;fill-opacity:1;stroke:none }
+.semaphore.stop.band { fill:#ffffff;fill-opacity:1;stroke:none }
+.semaphore.distant { stroke:#000;fill:none;stroke-width:4px; }
+.lx { fill:#e000e0;fill-opacity:0.5;stroke:none }
+.stem { stroke:#000;fill:none;stroke-width:2px; }
+.sig_id { font-size:10px;font-family:sans-serif;text-anchor:middle }
+.text { font-style:normal;font-family:sans-serif;text-anchor:middle }
+.feature { font-size:12px;font-weight:bold;fill:#0000ff }
+.station { font-size:16px;font-weight:bold;fill:#0000ff }
+.map_link { fill-opacity:0;stroke:none }
+.map_link_active { fill-opacity:0;stroke:blue }
+.link { font-size:10px;fill:#000000 }
+.label { font-size:10px;font-weight:bold;fill:#000000 }
+.portal { stroke:#808080;stroke-width:4px;fill:none }
+.platform { stroke:none;fill:#40c040;fill-opacity:1 }
+.platform_id { font-size:10px;font-weight:bold;fill:#ffffff }
+.divide { fill:none;stroke:#000000;stroke-width:2;stroke-dasharray:2,2;stroke-opacity:1 }
+.divide_text { font-size:14px;font-weight:bold;fill:#0000e0 }
+.line_label { font-size:10px;font-weight:bold;fill:#000000 }
+.marker .fg { stroke:#ffffff;stroke-width:1;fill:#e0e000 }
+.marker .bg { stroke:#0000e0;stroke-width:2;fill:#0000e0 }
+.los { stroke:none;fill:#ff0000 }
+.shunt .fg { stroke:#ffffff;stroke-width:1;fill:none }
+.shunt .bg { stroke:#000000;stroke-width:1;fill:#e000e0 }
+.clear .fg { fill:#e00000 }
+.clear .bg { stroke:#000000;stroke-width:1;fill:#ffffff }
+.arrow_l { marker-end:url(#arrow_l) }
+.arrow_r { marker-end:url(#arrow_l) }
+.tc { stroke:#ffff00;stroke-width:2;fill:none;stroke-dasharray:2;stroke-opacity:1 }
+.aspect { stroke:#000000;fill:#ffffff;stroke-width:1; }
+.aspect .green { fill:#008800 }
+.aspect .yellow { fill:#ffff00 }
+.aspect .red { fill:#ff0000 }
+.route { stroke:#00ff00;stroke-width:2;fill:none;visibility:hidden }
+.route .callon { stroke-dasharray:3,1 }
+.route .warner { stroke-dasharray:3,3 }
+.route .shunt { stroke-dasharray:5,1 }
+.route .called { visibility:visible }
+.indication .graphic { stroke:#000000;stroke-width:1;fill:#888888 }
+.indication .graphic .on { fill:#ff0000 }
+.indication .graphic .off { fill:#ffffff }
+.indication .text { font-size:10px;fill:#ff0000;font-weight:bold }
+.indication .text .on { visibility:visible }
+.indication .text .off { visibility:hidden }</style>
+  <g id="layers">
+    <g id="tracks" class="track">
+      <path d="M 2060,208 2000,328 1970,388" />
+      <path d="M 1760,418 2045,418 2105,298 2475,298 2505,238 2580,238 2610,298 2790,298 2820,358 3185,358" />
+      <path d="M 3185,508 3100,508 3055,418 2895,418 2865,358" />
+      <path d="M 2445,178 2430,208 1720,208 1690,148" />
+      <path d="M 2945,148 2930,178 1750,178 1735,148" />
+      <path d="M 85,148 5100,148" />
+      <path d="M 85,118 5100,118" />
+      <path d="M 1485,148 1440,238 1190,238" />
+      <path d="M 1610,358 1595,388" />
+      <path d="M 1640,358 1625,328 1545,328" />
+      <path d="M 1820,358 1835,388" />
+      <path d="M 1955,298 1849,298" />
+      <path d="M 1895,238 1985,238 2000,208" />
+      <path d="M 2075,178 2090,208" />
+      <path d="M 2090,178 2075,208" />
+      <path d="M 2045,178 1970,328 1925,328 1910,358" />
+      <path d="M 85,358 2015,358 2075,238 2445,238 2475,178" />
+      <path d="M 85,388 2030,388 2090,268 2460,268 2490,208 2945,208 2960,178 3395,178 3410,148" />
+      <path d="M 1955,478 2165,478 2240,328 2430,328 2445,298" />
+      <path d="M 2505,178 2520,208" />
+      <path d="M 2550,208 2565,238" />
+      <path d="M 2805,268 2850,358" />
+      <path d="M 3185,268 2595,268" />
+      <path d="M 2225,358 2210,388" />
+      <path d="M 2225,298 2135,478" />
+      <path d="M 1955,448 2120,448 2195,298" />
+      <path d="M 1940,388 1955,418" />
+      <path d="M 1940,298 1955,328" />
+      <path d="M 1865,388 1850,418" />
+      <path d="M 1895,238 1985,238 2000,208" />
+      <path d="M 2045,118 2030,148" />
+      <path d="M 1825,118 1840,88 2140,88" />
+      <path d="M 1960,88 1975,58 2045,58 2060,88" />
+      <path d="M 1765,178 1780,208" />
+      <path d="M 1705,118 1720,148" />
+      <path d="M 1520,118 1505,148" />
+      <path d="M 1487,118 1472,88 1294,88 1279,118" />
+      <path d="M 1455,148 1440,178 1185,178 1170,148" />
+      <path d="M 2915,148 2900,178" />
+      <path d="M 2915,178 2900,208" />
+      <path d="M 2535,208 2520,238" />
+      </g>
+    <g id="portals" class="portal">
+      </g>
+    <g id="lx" class="lx" />
+    <g id="line_label" class="text line_label" />
+    <g id="platform" class="platform">
+      <rect x="2270" y="219" width="120" height="10" />
+      <rect x="2270" y="99" width="120" height="10" />
+      <rect x="2270" y="159" width="120" height="10" />
+      <rect x="1550" y="99" width="60" height="10" />
+      <rect x="1550" y="159" width="60" height="10" />
+      <rect x="2270" y="279" width="120" height="10" />
+      </g>
+    <g id="platform_id" class="text platform_id">
+      <text x="2301" y="107">
+        <tspan>1A</tspan>
+      </text>
+      <text x="2282" y="167">
+        <tspan>▲ 2A</tspan>
+      </text>
+      <text x="2313" y="167">
+        <tspan>3A ▼</tspan>
+      </text>
+      <text x="2281" y="227">
+        <tspan>▲ 4A</tspan>
+      </text>
+      <text x="2311" y="227">
+        <tspan>5A ▼</tspan>
+      </text>
+      <text x="2281" y="287">
+        <tspan>▲ 6A</tspan>
+      </text>
+      <text x="2372" y="287">
+        <tspan>6B ▲</tspan>
+      </text>
+      <text x="2361" y="107">
+        <tspan>1B</tspan>
+      </text>
+      <text x="2342" y="167">
+        <tspan>▲ 2B</tspan>
+      </text>
+      <text x="2373" y="167">
+        <tspan>3B ▼</tspan>
+      </text>
+      <text x="2342" y="227">
+        <tspan>▲ 4B</tspan>
+      </text>
+      <text x="2372" y="227">
+        <tspan>5B ▼</tspan>
+      </text>
+      <text x="2327" y="287">
+        <tspan>▼ 7 ▼</tspan>
+      </text>
+      </g>
+    <g id="signal_ids" class="sig_id">
+      <text x="1805" y="342">5045</text>
+      <text x="2235" y="112">5301</text>
+      <text x="2235" y="162">5302</text>
+      <text x="2235" y="172">5053</text>
+      <text x="2425" y="112">5061</text>
+      <text x="2425" y="162">5062</text>
+      <text x="2425" y="172">5063</text>
+      <text x="1431" y="412">5040</text>
+      <text x="1656" y="382">5046</text>
+      <text x="1656" y="412">5044</text>
+      <text x="1835" y="402">5475</text>
+      <text x="1865" y="442">5474</text>
+      <text x="1925" y="282">5049</text>
+      <text x="1945" y="192">5308</text>
+      <text x="1945" y="162">5306</text>
+      <text x="1945" y="132">5304</text>
+      <text x="1945" y="102">5300</text>
+      <text x="1970" y="222">5310</text>
+      <text x="2235" y="222">5054</text>
+      <text x="2235" y="232">5055</text>
+      <text x="2235" y="282">5056</text>
+      <text x="2425" y="222">5064</text>
+      <text x="2425" y="232">5065</text>
+      <text x="2425" y="282">5066</text>
+      <text x="2425" y="292">5487</text>
+      <text x="2425" y="342">5489</text>
+      <text x="2235" y="292">5484</text>
+      <text x="2625" y="252">5488</text>
+      <text x="2625" y="322">5486</text>
+      <text x="2705" y="192">5081</text>
+      <text x="2705" y="162">5079</text>
+      <text x="2705" y="132">5077</text>
+      <text x="2705" y="102">5075</text>
+      <text x="2735" y="232">5076</text>
+      <text x="2735" y="202">5078</text>
+      <text x="2735" y="172">5080</text>
+      <text x="2735" y="142">5082</text>
+      <text x="2775" y="252">5491</text>
+      <text x="2775" y="282">5493</text>
+      <text x="1795" y="232">5311</text>
+      <text x="1795" y="202">5313</text>
+      <text x="1795" y="172">5315</text>
+      <text x="1535" y="102">5321</text>
+      <text x="1535" y="172">5319</text>
+      <text x="2885" y="192">5089</text>
+      <text x="2885" y="162">5087</text>
+      <text x="2885" y="132">5085</text>
+      <text x="2885" y="102">5083</text>
+      </g>
+    <g id="signal_stems" class="stem">
+      <path d="M 1805,348 1785,348" />
+      <path d="M 2255,108 2275,108" />
+      <path d="M 2255,158 2275,158" />
+      <path d="M 2255,168 2275,168" />
+      <path d="M 2385,108 2405,108" />
+      <path d="M 2385,158 2405,158" />
+      <path d="M 2385,168 2405,168" />
+      <path d="M 1430,398 1450,398" />
+      <path d="M 1430,348 1410,348" />
+      <path d="M 1580,398 1560,398" />
+      <path d="M 1615,318 1605,318 1605,328" />
+      <path d="M 1655,368 1675,368" />
+      <path d="M 1655,398 1675,398" />
+      <path d="M 1835,408 1815,408" />
+      <path d="M 1870,428 1875,428 1875,418" />
+      <path d="M 1925,288 1905,288" />
+      <path d="M 1945,198 1925,198" />
+      <path d="M 1945,168 1925,168" />
+      <path d="M 1945,138 1925,138" />
+      <path d="M 1945,108 1925,108" />
+      <path d="M 1970,228 1950,228" />
+      <path d="M 2255,218 2275,218" />
+      <path d="M 2255,228 2275,228" />
+      <path d="M 2255,278 2275,278" />
+      <path d="M 2385,218 2405,218" />
+      <path d="M 2385,228 2405,228" />
+      <path d="M 2385,278 2405,278" />
+      <path d="M 2385,288 2405,288" />
+      <path d="M 2385,338 2405,338" />
+      <path d="M 2255,288 2275,288" />
+      <path d="M 2255,318 2275,318" />
+      <path d="M 2625,258 2645,258" />
+      <path d="M 2625,308 2645,308" />
+      <path d="M 2705,198 2685,198" />
+      <path d="M 2705,168 2685,168" />
+      <path d="M 2705,138 2685,138" />
+      <path d="M 2705,108 2685,108" />
+      <path d="M 2735,218 2755,218" />
+      <path d="M 2735,188 2755,188" />
+      <path d="M 2735,158 2755,158" />
+      <path d="M 2735,128 2755,128" />
+      <path d="M 2775,258 2755,258" />
+      <path d="M 2775,288 2755,288" />
+      <path d="M 2835,278 2840,278 2840,268" />
+      <path d="M 2910,428 2915,428 2915,418" />
+      <path d="M 2050,458 2055,458 2055,448" />
+      <path d="M 2025,438 2015,438 2015,448" />
+      <path d="M 2050,488 2055,488 2055,478" />
+      <path d="M 2025,468 2015,468 2015,478" />
+      <path d="M 2180,288 2170,288 2170,298" />
+      <path d="M 1795,218 1815,218" />
+      <path d="M 1795,188 1815,188" />
+      <path d="M 1795,158 1815,158" />
+      <path d="M 1855,98 1875,98" />
+      <path d="M 2075,78 2080,78 2080,88" />
+      <path d="M 1690,108 1670,108" />
+      <path d="M 1535,108 1555,108" />
+      <path d="M 1535,158 1555,158" />
+      <path d="M 1425,228 1405,228" />
+      <path d="M 1460,78 1440,78" />
+      <path d="M 2885,198 2865,198" />
+      <path d="M 2885,168 2865,168" />
+      <path d="M 2885,138 2865,138" />
+      <path d="M 2885,108 2865,108" />
+      </g>
+    <g id="signal_aspects" class="aspect">
+      <circle cx="1805" cy="348" r="5" id="DYSTD5045" />
+      <circle cx="2255" cy="108" r="5" id="DYSDW5301" />
+      <circle cx="2255" cy="158" r="5" id="DYSDW5302" />
+      <circle cx="2255" cy="168" r="5" id="DYSTD5053" />
+      <circle cx="2405" cy="108" r="5" id="DYSDC5061" />
+      <circle cx="2405" cy="158" r="5" id="DYSDC5062" />
+      <circle cx="2405" cy="168" r="5" id="DYSDC5063" />
+      <circle cx="1430" cy="398" r="5" id="DYSTD5040" />
+      <circle cx="1655" cy="368" r="5" id="DYSTD5046" />
+      <circle cx="1655" cy="398" r="5" id="DYSTD5044" />
+      <circle cx="1835" cy="408" r="5" id="DYSEC5475" />
+      <path id="DYSEC5474" d="m 1870 424 -10,0 c 0,5 5,10 10,10 z" class="aspect" />
+      <circle cx="1925" cy="288" r="5" id="DYSTD5049" />
+      <circle cx="1945" cy="198" r="5" id="DYSDW5308" />
+      <circle cx="1945" cy="168" r="5" id="DYSDW5306" />
+      <circle cx="1945" cy="138" r="5" id="DYSDW5304" />
+      <circle cx="1945" cy="108" r="5" id="DYSDW5300" />
+      <circle cx="1970" cy="228" r="5" id="DYSDW5310" />
+      <circle cx="2255" cy="218" r="5" id="DYSTD5054" />
+      <circle cx="2255" cy="228" r="5" id="DYSTD5055" />
+      <circle cx="2255" cy="278" r="5" id="DYSTD5056" />
+      <circle cx="2405" cy="218" r="5" id="DYSDC5064" />
+      <circle cx="2405" cy="228" r="5" id="DYSDC5065" />
+      <circle cx="2405" cy="278" r="5" id="DYSDC5066" />
+      <circle cx="2405" cy="288" r="5" id="DYSEC5487" />
+      <circle cx="2405" cy="338" r="5" id="DYSEC5489" />
+      <circle cx="2255" cy="288" r="5" id="DYSEC5484" />
+      <circle cx="2625" cy="258" r="5" id="DYSEC5488" />
+      <circle cx="2625" cy="308" r="5" id="DYSEC5486" />
+      <circle cx="2705" cy="198" r="5" id="DYSDC5081" />
+      <circle cx="2705" cy="168" r="5" id="DYSDC5079" />
+      <circle cx="2705" cy="138" r="5" id="DYSDC5077" />
+      <circle cx="2705" cy="108" r="5" id="DYSDC5075" />
+      <circle cx="2735" cy="218" r="5" id="DYSDC5076" />
+      <circle cx="2735" cy="188" r="5" id="DYSDC5078" />
+      <circle cx="2735" cy="158" r="5" id="DYSDC5080" />
+      <circle cx="2735" cy="128" r="5" id="DYSDC5082" />
+      <circle cx="2775" cy="258" r="5" id="DYSEC5491" />
+      <circle cx="2775" cy="288" r="5" id="DYSEC5493" />
+      <g class="clear">
+        </g>
+      <g class="clear">
+        </g>
+      <g class="clear">
+        </g>
+      <g class="clear">
+        </g>
+      <g class="clear">
+        </g>
+      <g class="clear">
+        </g>
+      <g class="clear">
+        </g>
+      <g class="clear">
+        <rect class="bg" x="2040" y="454" width="10" height="10" />
+        <circle class="los" cx="2045" cy="459" r="3" />
+      </g>
+      <g class="clear">
+        <rect class="bg" x="2040" y="484" width="10" height="10" />
+        <circle class="los" cx="2045" cy="489" r="3" />
+      </g>
+      <circle cx="1795" cy="218" r="5" id="DYSDW5311" />
+      <circle cx="1795" cy="188" r="5" id="DYSDW5313" />
+      <circle cx="1795" cy="158" r="5" id="DYSDW5315" />
+      <g class="clear">
+        <rect class="bg" x="2065" y="74" width="10" height="10" />
+        <circle class="los" cx="2070" cy="79" r="3" />
+      </g>
+      <circle cx="1535" cy="108" r="5" id="DYSDW5321" />
+      <circle cx="1535" cy="158" r="5" id="DYSDW5319" />
+      <g class="clear">
+        </g>
+      <circle cx="2885" cy="198" r="5" id="DYSDC5089" />
+      <circle cx="2885" cy="168" r="5" id="DYSDC5087" />
+      <circle cx="2885" cy="138" r="5" id="DYSDC5085" />
+      <circle cx="2885" cy="108" r="5" id="DYSDC5083" />
+      </g>
+    <g id="indications" class="indication">
+      <g class="text" />
+      <g class="graphic" />
+    </g>
+    <g id="route" class="route">
+      <path d="M 2405,118 2705,118" id="DYRDC5061A_M_" />
+      <path d="M 2405,148 2705,148" id="DYRDC5062A_M_" />
+      <path d="M 2405,178 2705,178" id="DYRDC5063A_M_" />
+      <path d="M 2405,178 2505,178 2520,208 2705,208" id="DYRDC5063B_M_" />
+      <path d="M 2405,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2775,268" id="DYRDC5063C_M_" />
+      <path d="M 2405,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2775,298" id="DYRDC5063D_M_" />
+      <path d="M 2405,208 2430,208 2445,178 2705,178" id="DYRDC5064A_M_" />
+      <path d="M 2405,208 2430,208 2445,178 2505,178 2520,208 2705,208" id="DYRDC5064B_M_" />
+      <path d="M 2405,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2775,268" id="DYRDC5064C_M_" />
+      <path d="M 2405,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2775,298" id="DYRDC5064D_M_" />
+      <path d="M 2405,238 2445,238 2475,178 2705,178" id="DYRDC5065A_M_" />
+      <path d="M 2405,238 2445,238 2475,178 2505,178 2520,208 2705,208" id="DYRDC5065B_M_" />
+      <path d="M 2405,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2775,268" id="DYRDC5065C_M_" />
+      <path d="M 2405,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2775,298" id="DYRDC5065D_M_" />
+      <path d="M 2405,268 2460,268 2490,208 2705,208" id="DYRDC5066A_M_" />
+      <path d="M 2405,268 2460,268 2490,208 2550,208 2565,238 2580,238 2595,268 2775,268" id="DYRDC5066B_M_" />
+      <path d="M 2405,268 2460,268 2490,208 2550,208 2565,238 2580,238 2610,298 2775,298" id="DYRDC5066C_M_" />
+      <path d="M 2705,118 2885,118" id="DYRDC5075A_M_" />
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2520,238 2535,208 2735,208" id="DYRDC5076A_M_" />
+      <path d="M 2255,298 2475,298 2505,238 2520,238 2535,208 2735,208" id="DYRDC5076B_M_" />
+      <path d="M 2255,268 2460,268 2490,208 2735,208" id="DYRDC5076C_M_" />
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2735,208" id="DYRDC5076D_M_" />
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2735,208" id="DYRDC5076E_M_" />
+      <path d="M 2255,178 2505,178 2520,208 2735,208" id="DYRDC5076F_M_" />
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2520,238 2535,208 2735,208" id="DYRDC5076A_C_" />
+      <path d="M 2255,298 2475,298 2505,238 2520,238 2535,208 2735,208" id="DYRDC5076B_C_" />
+      <path d="M 2255,268 2460,268 2490,208 2735,208" id="DYRDC5076C_C_" />
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2735,208" id="DYRDC5076D_C_" />
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2735,208" id="DYRDC5076E_C_" />
+      <path d="M 2255,178 2505,178 2520,208 2735,208" id="DYRDC5076F_C_" />
+      <path d="M 2705,148 2885,148" id="DYRDC5077A_M_" />
+      <path d="M 2255,238 2445,238 2475,178 2735,178" id="DYRDC5078A_M_" />
+      <path d="M 2255,208 2430,208 2445,178 2735,178" id="DYRDC5078B_M_" />
+      <path d="M 2255,178 2735,178" id="DYRDC5078C_M_" />
+      <path d="M 2255,238 2445,238 2475,178 2735,178" id="DYRDC5078A_C_" />
+      <path d="M 2255,208 2430,208 2445,178 2735,178" id="DYRDC5078B_C_" />
+      <path d="M 2255,178 2735,178" id="DYRDC5078C_C_" />
+      <path d="M 2705,178 2885,178" id="DYRDC5079A_M_" />
+      <path d="M 2255,148 2735,148" id="DYRDC5080A_M_" />
+      <path d="M 2255,148 2735,148" id="DYRDC5080A_C_" />
+      <path d="M 2705,208 2885,208" id="DYRDC5081A_M_" />
+      <path d="M 2255,118 2735,118" id="DYRDC5082A_M_" />
+      <path d="M 2255,118 2735,118" id="DYRDC5082A_C_" />
+      <path d="M 2885,118 3155,118" id="DYRDC5083A_M_" />
+      <path d="M 2885,148 2930,148 2945,118 3155,118" id="DYRDC5085A_M_" />
+      <path d="M 2885,148 3155,148" id="DYRDC5085B_M_" />
+      <path d="M 2885,148 2975,148 2990,178 3155,178" id="DYRDC5085C_M_" />
+      <path d="M 2885,178 2900,178 2915,148 2930,148 2945,118 3155,118" id="DYRDC5087A_M_" />
+      <path d="M 2885,178 2930,178 2945,148 3155,148" id="DYRDC5087B_M_" />
+      <path d="M 2885,178 2930,178 2945,148 2975,148 2990,178 3155,178" id="DYRDC5087C_M_" />
+      <path d="M 2885,208 2900,208 2915,178 2930,178 2945,148 3155,148" id="DYRDC5089A_M_" />
+      <path d="M 2885,208 2945,208 2960,178 3155,178" id="DYRDC5089B_M_" />
+      <path d="M 2885,208 2945,208 2960,178 3155,178" id="DYRDC5089B_C_" />
+      <path d="M 1945,118 2405,118" id="DYRDW5300A_M_" />
+      <path d="M 1945,118 2405,118" id="DYRDW5300A_C_" />
+      <path d="M 1795,148 2030,148 2045,118 2255,118" id="DYRDW5301A_M_" />
+      <path d="M 1795,148 2255,148" id="DYRDW5302A_M_" />
+      <path d="M 1945,118 2405,118" id="DYRDW5304A_M_" />
+      <path d="M 1945,148 2405,148" id="DYRDW5304B_M_" />
+      <path d="M 1945,118 2405,118" id="DYRDW5304A_C_" />
+      <path d="M 1945,148 2405,148" id="DYRDW5304B_C_" />
+      <path d="M 1945,178 2405,178" id="DYRDW5306A_M_" />
+      <path d="M 1945,178 2075,178 2090,208 2405,208" id="DYRDW5306B_M_" />
+      <path d="M 1945,178 2075,178 2090,208 2405,208" id="DYRDW5306B_C_" />
+      <path d="M 1945,208 2075,208 2090,178 2405,178" id="DYRDW5308A_M_" />
+      <path d="M 1945,208 2075,208 2090,178 2405,178" id="DYRDW5308A_C_" />
+      <path d="M 1945,208 2405,208" id="DYRDW5308B_M_" />
+      <path d="M 1945,208 2405,208" id="DYRDW5308B_C_" />
+      <path d="M 1970,238 1985,238 2000,208 2075,208 2090,178 2405,178" id="DYRDW5310A_M_" />
+      <path d="M 1970,238 1985,238 2000,208 2075,208 2090,178 2405,178" id="DYRDW5310A_C_" />
+      <path d="M 1970,238 1985,238 2000,208 2405,208" id="DYRDW5310B_M_" />
+      <path d="M 1970,238 1985,238 2000,208 2405,208" id="DYRDW5310B_C_" />
+      <path d="M 1535,148 1690,148 1720,208 1795,208" id="DYRDW5311A_M_" />
+      <path d="M 1535,118 1705,118 1720,148 1735,148 1750,178 1765,178 1780,208 1795,208" id="DYRDW5311B_M_" />
+      <path d="M 1535,148 1735,148 1750,178 1795,178" id="DYRDW5313A_M_" />
+      <path d="M 1535,118 1705,118 1720,148 1735,148 1750,178 1795,178" id="DYRDW5313B_M_" />
+      <path d="M 1535,148 1795,148" id="DYRDW5315A_M_" />
+      <path d="M 1535,118 1705,118 1720,148 1795,148" id="DYRDW5315B_M_" />
+      <path d="M 1280,238 1440,238 1485,148 1535,148" id="DYRDW5319A_M_" />
+      <path d="M 1200,178 1440,178 1455,148 1535,148" id="DYRDW5319B_M_" />
+      <path d="M 1200,148 1535,148" id="DYRDW5319C_M_" />
+      <path d="M 1280,238 1440,238 1485,148 1505,148 1520,118 1535,118" id="DYRDW5321A_M_" />
+      <path d="M 1200,178 1440,178 1455,148 1505,148 1520,118 1535,118" id="DYRDW5321B_M_" />
+      <path d="M 1200,148 1505,148 1520,118 1535,118" id="DYRDW5321C_M_" />
+      <path d="M 1835,418 1850,418 1865,388 1970,388 2060,208 2075,208 2090,178 2405,178" id="DYREC5475A_M_" />
+      <path d="M 1835,418 1850,418 1865,388 1970,388 2060,208 2075,208 2090,178 2405,178" id="DYREC5475A_C_" />
+      <path d="M 1835,418 1850,418 1865,388 1970,388 2060,208 2405,208" id="DYREC5475B_M_" />
+      <path d="M 1835,418 1850,418 1865,388 1970,388 2060,208 2405,208" id="DYREC5475B_C_" />
+      <path d="M 1835,418 1850,418 1865,388 2030,388 2090,268 2405,268" id="DYREC5475C_M_" />
+      <path d="M 1835,418 1850,418 1865,388 2030,388 2090,268 2405,268" id="DYREC5475C_C_" />
+      <path d="M 1835,418 2045,418 2105,298 2180,298" id="DYREC5475D_S_" />
+      <path d="M 1835,418 2045,418 2105,298 2405,298" id="DYREC5475E_M_" />
+      <path d="M 2045,478 2135,478 2225,298 2255,298" id="DYREC5484A_S_" />
+      <path d="M 2045,448 2120,448 2195,298 2255,298" id="DYREC5484B_S_" />
+      <path d="M 1865,418 2045,418 2105,298 2255,298" id="DYREC5484C_S_" />
+      <path d="M 1865,418 2045,418 2105,298 2255,298" id="DYREC5484C_SP_" />
+      <path d="M 1655,388 1940,388 1955,418 2045,418 2105,298 2255,298" id="DYREC5484D_M_" />
+      <path d="M 1655,358 1820,358 1835,388 1940,388 1955,418 2045,418 2105,298 2255,298" id="DYREC5484E_M_" />
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2580,238 2610,298 2625,298" id="DYREC5486A_M_" />
+      <path d="M 2255,298 2475,298 2505,238 2580,238 2610,298 2625,298" id="DYREC5486B_M_" />
+      <path d="M 2255,268 2460,268 2490,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486C_M_" />
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486D_M_" />
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486E_M_" />
+      <path d="M 2255,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486F_M_" />
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2580,238 2610,298 2625,298" id="DYREC5486A_C_" />
+      <path d="M 2255,298 2475,298 2505,238 2580,238 2610,298 2625,298" id="DYREC5486B_C_" />
+      <path d="M 2255,268 2460,268 2490,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486C_C_" />
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486D_C_" />
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486E_C_" />
+      <path d="M 2405,298 2475,298 2505,238 2520,238 2535,208 2705,208" id="DYREC5487A_M_" />
+      <path d="M 2405,298 2475,298 2505,238 2580,238 2595,268 2775,268" id="DYREC5487B_M_" />
+      <path d="M 2405,298 2475,298 2505,238 2580,238 2610,298 2775,298" id="DYREC5487C_M_" />
+      <path d="M 2405,298 2475,298 2505,238 2580,238 2595,268 2775,268" id="DYREC5487B_C_" />
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2580,238 2595,268 2625,268" id="DYREC5488A_M_" />
+      <path d="M 2255,298 2475,298 2505,238 2580,238 2595,268 2625,268" id="DYREC5488B_M_" />
+      <path d="M 2255,268 2460,268 2490,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488C_M_" />
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488D_M_" />
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488E_M_" />
+      <path d="M 2255,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488F_M_" />
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2580,238 2595,268 2625,268" id="DYREC5488A_C_" />
+      <path d="M 2255,298 2475,298 2505,238 2580,238 2595,268 2625,268" id="DYREC5488B_C_" />
+      <path d="M 2255,268 2460,268 2490,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488C_C_" />
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488D_C_" />
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488E_C_" />
+      <path d="M 2255,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488F_C_" />
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2520,238 2535,208 2705,208" id="DYREC5489A_M_" />
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2580,238 2595,268 2775,268" id="DYREC5489B_M_" />
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2580,238 2595,268 2775,268" id="DYREC5489B_C_" />
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2580,238 2610,298 2775,298" id="DYREC5489C_M_" />
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2580,238 2610,298 2775,298" id="DYREC5489C_C_" />
+      <path d="M 1280,388 1430,388" id="DYRTD5040A_M_" />
+      <path d="M 1430,388 1655,388" id="DYRTD5044A_M_" />
+      <path d="M 1805,358 1910,358 1925,328 1970,328 2045,178 2405,178" id="DYRTD5045A_M_" />
+      <path d="M 1805,358 1910,358 1925,328 1970,328 2045,178 2405,178" id="DYRTD5045A_C_" />
+      <path d="M 1805,358 1910,358 1925,328 1970,328 2045,178 2075,178 2090,208 2405,208" id="DYRTD5045B-1_M_" />
+      <path d="M 1805,358 1820,358 1835,388 1970,388 2060,208 2405,208" id="DYRTD5045B-2_M_" />
+      <path d="M 1805,358 1910,358 1925,328 1970,328 2045,178 2075,178 2090,208 2405,208" id="DYRTD5045B-1_C_" />
+      <path d="M 1805,358 2015,358 2075,238 2405,238" id="DYRTD5045C_M_" />
+      <path d="M 1805,358 1820,358 1835,388 1940,388 1955,418 2045,418 2105,298 2405,298" id="DYRTD5045E_M_" />
+      <path d="M 1805,358 1820,358 1835,388 2030,388 2090,268 2405,268" id="DYRTD5045D_M_" />
+      <path d="M 1805,358 1820,358 1835,388 2030,388 2090,268 2405,268" id="DYRTD5045D_C_" />
+      <path d="M 1805,358 1820,358 1835,388 1940,388 1955,418 2045,418 2105,298 2405,298" id="DYRTD5045E_C_" />
+      <path d="M 1430,388 1595,388 1610,358 1655,358" id="DYRTD5046A_M_" />
+      <path d="M 1545,328 1625,328 1640,358 1655,358" id="DYRTD5046B_S_" />
+      <path d="M 1955,298 1925,298" id="DYRTD5049A_S_" />
+      <path d="M 1925,298 1940,298 1955,328 1970,328 2045,178 2405,178" id="DYRTD5049B_M_" />
+      <path d="M 1925,298 1940,298 1955,328 1970,328 2045,178 2075,178 2090,208 2405,208" id="DYRTD5049C_M_" />
+      <path d="M 1925,298 1940,298 1955,328 1970,328 2045,178 2405,178" id="DYRTD5049B_C_" />
+      <path d="M 1925,298 1940,298 1955,328 1970,328 2045,178 2075,178 2090,208 2405,208" id="DYRTD5049C_C_" />
+      <path d="M 1655,388 1970,388 2060,208 2075,208 2090,178 2255,178" id="DYRTD5053B_M_" />
+      <path d="M 1655,358 1910,358 1925,328 1970,328 2045,178 2255,178" id="DYRTD5053C_M_" />
+      <path d="M 1850,298 1940,298 1955,328 1970,328 2045,178 2255,178" id="DYRTD5053D_S_" />
+      <path d="M 1895,238 1985,238 2000,208 2075,208 2090,178 2255,178" id="DYRTD5053E_S_" />
+      <path d="M 1795,208 2075,208 2090,178 2255,178" id="DYRTD5053F_M_" />
+      <path d="M 1795,178 2255,178" id="DYRTD5053G_M_" />
+      <path d="M 1760,418 1850,418 1865,388 1970,388 2060,208 2255,208" id="DYRTD5054A_S_" />
+      <path d="M 1655,388 1970,388 2060,208 2255,208" id="DYRTD5054B_M_" />
+      <path d="M 1655,358 1820,358 1835,388 1970,388 2060,208 2255,208" id="DYRTD5054C-1_M_" />
+      <path d="M 1655,358 1910,358 1925,328 1970,328 2045,178 2075,178 2090,208 2255,208" id="DYRTD5054C-2_M_" />
+      <path d="M 1849,298 1940,298 1955,328 1970,328 2045,178 2075,178 2090,208 2255,208" id="DYRTD5054D_S_" />
+      <path d="M 1895,238 1985,238 2000,208 2255,208" id="DYRTD5054E_S_" />
+      <path d="M 1795,208 2255,208" id="DYRTD5054F_M_" />
+      <path d="M 1795,178 2075,178 2090,208 2255,208" id="DYRTD5054G_M_" />
+      <path d="M 1655,358 2015,358 2075,238 2255,238" id="DYRTD5055A_M_" />
+      <path d="M 1760,418 1850,418 1865,388 2030,388 2090,268 2255,268" id="DYRTD5056A_S_" />
+      <path d="M 1655,388 2030,388 2090,268 2255,268" id="DYRTD5056B_M_" />
+      <path d="M 1655,358 1820,358 1835,388 2030,388 2090,268 2255,268" id="DYRTD5056C_M_" />
+      <path d="M 1760,418 1865,418" id="DYREC5474A_S_" />
+      <path d="M 2970,268 2775,268" id="DYREC5491A_S_" />
+      <path d="M 3185,328 3085,328 3070,358 2850,358 2805,268 2775,268" id="DYREC5491B_S_" />
+      <path d="M 3185,358 2850,358 2805,268 2775,268" id="DYREC5491C_S_" />
+      <path d="M 3185,388 3070,388 3055,358 2850,358 2805,268 2775,268" id="DYREC5491D_S_" />
+      <path d="M 3185,418 3085,418 3055,358 2850,358 2805,268 2775,268" id="DYREC5491E_S_" />
+      <path d="M 3045,418 2895,418 2865,358 2850,358 2805,268 2775,268" id="DYREC5491F_S_" />
+      <path d="M 2775,298 2790,298 2820,358 3070,358 3085,328 3185,328" id="DYREC5493A_S_" />
+      <path d="M 2775,298 2790,298 2820,358 3185,358" id="DYREC5493B_S_" />
+      <path d="M 2775,298 2790,298 2820,358 3055,358 3070,388 3185,388" id="DYREC5493C_S_" />
+      <path d="M 2775,298 2790,298 2820,358 3055,358 3085,418 3185,418" id="DYREC5493D_S_" />
+      <path d="M 2775,298 2790,298 2820,358 2865,358 2895,418 3045,418" id="DYREC5493E_S_" />
+      <path d="M 1760,418 1850,418 1865,388 1970,388 2060,208 2075,208 2090,178 2255,178" id="DYRTD5053A_S_" />
+      </g>
+    <g id="tc" class="tc" />
+    <g id="berths">
+      <rect x="1735" y="349" width="50" height="20" id="B_DY5045" />
+      <rect x="2275" y="109" width="50" height="20" id="B_DY5301" />
+      <rect x="2275" y="139" width="50" height="20" id="B_DY5302" />
+      <rect x="2275" y="169" width="50" height="20" id="B_DY5053" />
+      <rect x="2335" y="109" width="50" height="20" id="B_DY5061" />
+      <rect x="2335" y="139" width="50" height="20" id="B_DY5062" />
+      <rect x="2335" y="169" width="50" height="20" id="B_DY5063" />
+      <rect x="1450" y="379" width="50" height="20" id="B_DY5040" />
+      <rect x="1675" y="349" width="50" height="20" id="B_DY5046" />
+      <rect x="1675" y="379" width="50" height="20" id="B_DY5044" />
+      <rect x="1765" y="409" width="50" height="20" id="B_DY5475" />
+      <rect x="1855" y="289" width="50" height="20" id="B_DY5049" />
+      <rect x="1875" y="199" width="50" height="20" id="B_DY5308" />
+      <rect x="1875" y="169" width="50" height="20" id="B_DY5306" />
+      <rect x="1875" y="139" width="50" height="20" id="B_DY5304" />
+      <rect x="1875" y="109" width="50" height="20" id="B_DY5300" />
+      <rect x="1900" y="229" width="50" height="20" id="B_DY5310" />
+      <rect x="2275" y="199" width="50" height="20" id="B_DY5054" />
+      <rect x="2275" y="229" width="50" height="20" id="B_DY5055" />
+      <rect x="2275" y="259" width="50" height="20" id="B_DY5056" />
+      <rect x="2335" y="199" width="50" height="20" id="B_DY5064" />
+      <rect x="2335" y="229" width="50" height="20" id="B_DY5065" />
+      <rect x="2335" y="259" width="50" height="20" id="B_DY5066" />
+      <rect x="2335" y="289" width="50" height="20" id="B_DY5487" />
+      <rect x="2335" y="319" width="50" height="20" id="B_DY5489" />
+      <rect x="2275" y="289" width="50" height="20" id="B_DY5484" />
+      <rect x="2645" y="259" width="50" height="20" id="B_DY5488" />
+      <rect x="2645" y="289" width="50" height="20" id="B_DY5486" />
+      <rect x="2635" y="199" width="50" height="20" id="B_DY5081" />
+      <rect x="2635" y="169" width="50" height="20" id="B_DY5079" />
+      <rect x="2635" y="139" width="50" height="20" id="B_DY5077" />
+      <rect x="2635" y="109" width="50" height="20" id="B_DY5075" />
+      <rect x="2755" y="199" width="50" height="20" id="B_DY5076" />
+      <rect x="2755" y="169" width="50" height="20" id="B_DY5078" />
+      <rect x="2755" y="139" width="50" height="20" id="B_DY5080" />
+      <rect x="2755" y="109" width="50" height="20" id="B_DY5082" />
+      <rect x="2705" y="259" width="50" height="20" id="B_DY5491" />
+      <rect x="2705" y="289" width="50" height="20" id="B_DY5493" />
+      <rect x="1815" y="199" width="50" height="20" id="B_DY5311" />
+      <rect x="1815" y="169" width="50" height="20" id="B_DY5313" />
+      <rect x="1815" y="139" width="50" height="20" id="B_DY5315" />
+      <rect x="1555" y="109" width="50" height="20" id="B_DY5321" />
+      <rect x="1555" y="139" width="50" height="20" id="B_DY5319" />
+      <rect x="2815" y="199" width="50" height="20" id="B_DY5089" />
+      <rect x="2815" y="169" width="50" height="20" id="B_DY5087" />
+      <rect x="2815" y="139" width="50" height="20" id="B_DY5085" />
+      <rect x="2815" y="109" width="50" height="20" id="B_DY5083" />
+      </g>
+    <g id="descrs" class="berth">
+      <text id="DY5045" x="1741" y="364">    </text>
+      <text id="DY5301" x="2281" y="124">    </text>
+      <text id="DY5302" x="2281" y="154">    </text>
+      <text id="DY5053" x="2281" y="184">    </text>
+      <text id="DY5061" x="2341" y="124">    </text>
+      <text id="DY5062" x="2341" y="154">    </text>
+      <text id="DY5063" x="2341" y="184">    </text>
+      <text id="DY5040" x="1456" y="394">    </text>
+      <text id="DY5046" x="1681" y="364">    </text>
+      <text id="DY5044" x="1681" y="394">    </text>
+      <text id="DY5475" x="1771" y="424">    </text>
+      <text id="DY5049" x="1861" y="304">    </text>
+      <text id="DY5308" x="1881" y="214">    </text>
+      <text id="DY5306" x="1881" y="184">    </text>
+      <text id="DY5304" x="1881" y="154">    </text>
+      <text id="DY5300" x="1881" y="124">    </text>
+      <text id="DY5310" x="1906" y="244">    </text>
+      <text id="DY5054" x="2281" y="214">    </text>
+      <text id="DY5055" x="2281" y="244">    </text>
+      <text id="DY5056" x="2281" y="274">    </text>
+      <text id="DY5064" x="2341" y="214">    </text>
+      <text id="DY5065" x="2341" y="244">    </text>
+      <text id="DY5066" x="2341" y="274">    </text>
+      <text id="DY5487" x="2341" y="304">    </text>
+      <text id="DY5489" x="2341" y="334">    </text>
+      <text id="DY5484" x="2281" y="304">    </text>
+      <text id="DY5488" x="2651" y="274">    </text>
+      <text id="DY5486" x="2651" y="304">    </text>
+      <text id="DY5081" x="2641" y="214">    </text>
+      <text id="DY5079" x="2641" y="184">    </text>
+      <text id="DY5077" x="2641" y="154">    </text>
+      <text id="DY5075" x="2641" y="124">    </text>
+      <text id="DY5076" x="2761" y="214">    </text>
+      <text id="DY5078" x="2761" y="184">    </text>
+      <text id="DY5080" x="2761" y="154">    </text>
+      <text id="DY5082" x="2761" y="124">    </text>
+      <text id="DY5491" x="2711" y="274">    </text>
+      <text id="DY5493" x="2711" y="304">    </text>
+      <text id="DY5311" x="1821" y="214">    </text>
+      <text id="DY5313" x="1821" y="184">    </text>
+      <text id="DY5315" x="1821" y="154">    </text>
+      <text id="DY5321" x="1561" y="124">    </text>
+      <text id="DY5319" x="1561" y="154">    </text>
+      <text id="DY5089" x="2821" y="214">    </text>
+      <text id="DY5087" x="2821" y="184">    </text>
+      <text id="DY5085" x="2821" y="154">    </text>
+      <text id="DY5083" x="2821" y="124">    </text>
+      </g>
+    <g id="base" class="text">
+      <text x="2330" y="80" class="station" id="T_DRBY">
+        <tspan>DERBY</tspan>
+      </text>
+      <text x="1580" y="195" class="station" id="T_PEARTRE">
+        <tspan>PEARTREE</tspan>
+      </text>
+      <text x="1575" y="296" class="feature" id="text9280">
+        <tspan>RTC Sidings South</tspan>
+      </text>
+      <text x="1880" y="321" class="feature" id="text11554">
+        <tspan>RTC Sidings North</tspan>
+      </text>
+      <text x="1930" y="261" class="feature" id="T_DRBYALL">
+        <tspan>Litchurch Lane Works</tspan>
+      </text>
+      <text x="1495" y="47" class="feature" id="T_MELBRNJ">
+        <tspan>Melbourne Junction</tspan>
+      </text>
+      <text x="1901" y="66" class="feature" id="T_DRBYEL">
+        <tspan>St Andrews Siding</tspan>
+      </text>
+      <text x="1790" y="447" class="feature" id="T_DRBYEPS">
+        <tspan>Etches Park CS</tspan>
+      </text>
+      <text x="2030" y="521" class="feature" id="text11574">
+        <tspan>Derby 4 Shed</tspan>
+      </text>
+      <text x="2082" y="22" class="feature" id="T_DRBYLNW">
+        <tspan>London Road Jn.</tspan>
+      </text>
+      </g>
+  </g>
+</svg>
