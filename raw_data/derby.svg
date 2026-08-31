@@ -1,0 +1,1630 @@
+<?xml version="1.0"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" style="display:inline;width:inherit;max-width: inherit; height: inherit; min-height: inherit; max-height: inherit;" width="5205" height="557">
+  <metadata id="license" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:cc="http://creativecommons.org/ns#">
+    <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/">
+      <rdf:Description rdf:title="Track Diagram" rdf:publisher="OpenTrainTimes Ltd." rdf:date="2024-01-14" rdf:format="image/svg+xml" rdf:language="en"/>
+    </rdf:RDF>
+  </metadata>
+  <defs>
+    <marker id="arrow_l">
+      <path d="M 0,0 -10,0 0,-10 c 5,0 10,5 10,10 z" style="stroke:#000000;stroke-width:1pt"/>
+    </marker>
+  </defs>
+  <style type="text/css"><![CDATA[svg { background: rgba(0,0,0,0); }
+.berth { font-size:1.15em;fill:#ffff00;font-family:monospace }
+.track { stroke:#000;fill:none;stroke-width:4px; }
+.semaphore.stop { fill:#c00000;fill-opacity:1;stroke:none }
+.semaphore.stop.band { fill:#ffffff;fill-opacity:1;stroke:none }
+.semaphore.distant { stroke:#000;fill:none;stroke-width:4px; }
+.lx { fill:#e000e0;fill-opacity:0.5;stroke:none }
+.stem { stroke:#000;fill:none;stroke-width:2px; }
+.sig_id { font-size:10px;font-family:sans-serif;text-anchor:middle }
+.text { font-style:normal;font-family:sans-serif;text-anchor:middle }
+.feature { font-size:12px;font-weight:bold;fill:#0000ff }
+.station { font-size:16px;font-weight:bold;fill:#0000ff }
+.map_link { fill-opacity:0;stroke:none }
+.map_link_active { fill-opacity:0;stroke:blue }
+.link { font-size:10px;fill:#000000 }
+.label { font-size:10px;font-weight:bold;fill:#000000 }
+.portal { stroke:#808080;stroke-width:4px;fill:none }
+.platform { stroke:none;fill:#40c040;fill-opacity:1 }
+.platform_id { font-size:10px;font-weight:bold;fill:#ffffff }
+.divide { fill:none;stroke:#000000;stroke-width:2;stroke-dasharray:2,2;stroke-opacity:1 }
+.divide_text { font-size:14px;font-weight:bold;fill:#0000e0 }
+.line_label { font-size:10px;font-weight:bold;fill:#000000 }
+.marker .fg { stroke:#ffffff;stroke-width:1;fill:#e0e000 }
+.marker .bg { stroke:#0000e0;stroke-width:2;fill:#0000e0 }
+.los { stroke:none;fill:#ff0000 }
+.shunt .fg { stroke:#ffffff;stroke-width:1;fill:none }
+.shunt .bg { stroke:#000000;stroke-width:1;fill:#e000e0 }
+.clear .fg { fill:#e00000 }
+.clear .bg { stroke:#000000;stroke-width:1;fill:#ffffff }
+.arrow_l { marker-end:url(#arrow_l) }
+.arrow_r { marker-end:url(#arrow_l) }
+.tc { stroke:#ffff00;stroke-width:2;fill:none;stroke-dasharray:2;stroke-opacity:1 }
+.aspect { stroke:#000000;fill:#ffffff;stroke-width:1; }
+.aspect .green { fill:#008800 }
+.aspect .yellow { fill:#ffff00 }
+.aspect .red { fill:#ff0000 }
+.route { stroke:#00ff00;stroke-width:2;fill:none;visibility:hidden }
+.route .callon { stroke-dasharray:3,1 }
+.route .warner { stroke-dasharray:3,3 }
+.route .shunt { stroke-dasharray:5,1 }
+.route .called { visibility:visible }
+.indication .graphic { stroke:#000000;stroke-width:1;fill:#888888 }
+.indication .graphic .on { fill:#ff0000 }
+.indication .graphic .off { fill:#ffffff }
+.indication .text { font-size:10px;fill:#ff0000;font-weight:bold }
+.indication .text .on { visibility:visible }
+.indication .text .off { visibility:hidden }]]></style>
+  <g id="layers">
+    <g id="tracks" class="track">
+      <path d="M 2060,208 2000,328 1970,388"/>
+      <path d="M 1760,418 2045,418 2105,298 2475,298 2505,238 2580,238 2610,298 2790,298 2820,358 3185,358"/>
+      <path d="M 2980,268 2995,298 3075,298 3090,268"/>
+      <path d="M 3185,508 3100,508 3055,418 2895,418 2865,358"/>
+      <path d="M 3185,418 3085,418 3055,358"/>
+      <path d="M 2445,178 2430,208 1720,208 1690,148"/>
+      <path d="M 2945,148 2930,178 1750,178 1735,148"/>
+      <path d="M 4640,118 4625,88 4445,88 4430,118"/>
+      <path d="M 4640,148 4625,178 4445,178 4430,148"/>
+      <path d="M 4670,118 4655,148"/>
+      <path d="M 4910,28 4730,28 4685,118"/>
+      <path d="M 85,148 5100,148"/>
+      <path d="M 85,118 5100,118"/>
+      <path d="M 1485,148 1440,238 1190,238"/>
+      <path d="M 1610,358 1595,388"/>
+      <path d="M 1640,358 1625,328 1545,328"/>
+      <path d="M 1820,358 1835,388"/>
+      <path d="M 1955,298 1849,298"/>
+      <path d="M 1895,238 1985,238 2000,208"/>
+      <path d="M 2075,178 2090,208"/>
+      <path d="M 2090,178 2075,208"/>
+      <path d="M 2045,178 1970,328 1925,328 1910,358"/>
+      <path d="M 85,358 2015,358 2075,238 2445,238 2475,178"/>
+      <path d="M 85,388 2030,388 2090,268 2460,268 2490,208 2945,208 2960,178 3395,178 3410,148"/>
+      <path d="M 1955,478 2165,478 2240,328 2430,328 2445,298"/>
+      <path d="M 2505,178 2520,208"/>
+      <path d="M 2550,208 2565,238"/>
+      <path d="M 2805,268 2850,358"/>
+      <path d="M 3185,328 3085,328 3070,358"/>
+      <path d="M 3185,388 3070,388"/>
+      <path d="M 3185,448 3070,448"/>
+      <path d="M 3185,478 3085,478"/>
+      <path d="M 3185,268 2595,268"/>
+      <path d="M 2225,358 2210,388"/>
+      <path d="M 2225,298 2135,478"/>
+      <path d="M 1955,448 2120,448 2195,298"/>
+      <path d="M 1940,388 1955,418"/>
+      <path d="M 1940,298 1955,328"/>
+      <path d="M 1865,388 1850,418"/>
+      <path d="M 1895,238 1985,238 2000,208"/>
+      <path d="M 2045,118 2030,148"/>
+      <path d="M 1825,118 1840,88 2140,88"/>
+      <path d="M 1960,88 1975,58 2045,58 2060,88"/>
+      <path d="M 1765,178 1780,208"/>
+      <path d="M 1705,118 1720,148"/>
+      <path d="M 1520,118 1505,148"/>
+      <path d="M 1487,118 1472,88 1294,88 1279,118"/>
+      <path d="M 1455,148 1440,178 1185,178 1170,148"/>
+      <path d="M 2915,148 2900,178"/>
+      <path d="M 2915,178 2900,208"/>
+      <path d="M 2945,118 2930,148"/>
+      <path d="M 2975,148 2990,178"/>
+      <path d="M 3185,118 3170,148"/>
+      <path d="M 3200,118 3215,88 3535,88 3550,118"/>
+      <path d="M 3440,118 3425,148"/>
+      <path d="M 3520,118 3535,148"/>
+      <path d="M 2535,208 2520,238"/>
+      <path d="M 780,118 765,148"/>
+      <path d="M 865,118 910,208 880,268 85,268"/>
+      <path d="M 850,148 880,208 865,238 85,238"/>
+      <path d="M 265,58 530,58 575,148"/>
+      <path d="M 265,28 545,28 590,118"/>
+    </g>
+    <g id="portals" class="portal">
+      <path d="M 4880,103 4890,108 4890,158 4880,163"/>
+      <path d="M 4920,103 4910,108 4910,158 4920,163"/>
+      <path d="M 4055,103 4065,108 4065,158 4055,163"/>
+      <path d="M 4095,103 4085,108 4085,158 4095,163"/>
+    </g>
+    <g id="lx" class="lx"/>
+    <g id="line_label" class="text line_label"/>
+    <g id="platform" class="platform">
+      <rect x="2270" y="219" width="120" height="10"/>
+      <rect x="180" y="339" width="60" height="10"/>
+      <rect x="180" y="399" width="60" height="10"/>
+      <rect x="1015" y="339" width="60" height="10"/>
+      <rect x="1015" y="399" width="60" height="10"/>
+      <rect x="2270" y="99" width="120" height="10"/>
+      <rect x="2270" y="159" width="120" height="10"/>
+      <rect x="4760" y="39" width="120" height="10"/>
+      <rect x="3900" y="129" width="60" height="10"/>
+      <rect x="4275" y="159" width="60" height="10"/>
+      <rect x="4275" y="99" width="60" height="10"/>
+      <rect x="1550" y="99" width="60" height="10"/>
+      <rect x="1550" y="159" width="60" height="10"/>
+      <rect x="2270" y="279" width="120" height="10"/>
+      <rect x="365" y="99" width="60" height="10"/>
+      <rect x="365" y="159" width="60" height="10"/>
+    </g>
+    <g id="platform_id" class="text platform_id">
+      <text x="-22489" y="-508">
+        <tspan/>
+      </text>
+      <text x="216" y="347">
+        <tspan>2</tspan>
+      </text>
+      <text x="216" y="407">
+        <tspan>1</tspan>
+      </text>
+      <text x="1051" y="347">
+        <tspan>2</tspan>
+      </text>
+      <text x="1051" y="407">
+        <tspan>1</tspan>
+      </text>
+      <text x="2301" y="107">
+        <tspan>1A</tspan>
+      </text>
+      <text x="2282" y="167">
+        <tspan>&#x25B2; 2A</tspan>
+      </text>
+      <text x="2313" y="167">
+        <tspan>3A &#x25BC;</tspan>
+      </text>
+      <text x="2281" y="227">
+        <tspan>&#x25B2; 4A</tspan>
+      </text>
+      <text x="2311" y="227">
+        <tspan>5A &#x25BC;</tspan>
+      </text>
+      <text x="2281" y="287">
+        <tspan>&#x25B2; 6A</tspan>
+      </text>
+      <text x="2372" y="287">
+        <tspan>6B &#x25B2;</tspan>
+      </text>
+      <text x="2361" y="107">
+        <tspan>1B</tspan>
+      </text>
+      <text x="2342" y="167">
+        <tspan>&#x25B2; 2B</tspan>
+      </text>
+      <text x="2373" y="167">
+        <tspan>3B &#x25BC;</tspan>
+      </text>
+      <text x="2342" y="227">
+        <tspan>&#x25B2; 4B</tspan>
+      </text>
+      <text x="2372" y="227">
+        <tspan>5B &#x25BC;</tspan>
+      </text>
+      <text x="2327" y="287">
+        <tspan>&#x25BC; 7 &#x25BC;</tspan>
+      </text>
+      <text x="401" y="107">
+        <tspan>2</tspan>
+      </text>
+      <text x="401" y="167">
+        <tspan>1</tspan>
+      </text>
+    </g>
+    <g id="signal_ids" class="sig_id">
+      <text x="-17163" y="-702"/>
+      <text x="-20820" y="-114"/>
+      <text x="-22465" y="233"/>
+      <text x="165" y="342">4427</text>
+      <text x="101" y="412">4426</text>
+      <text x="320" y="342">4429</text>
+      <text x="256" y="412">4428</text>
+      <text x="405" y="342">4431</text>
+      <text x="341" y="412">4430</text>
+      <text x="490" y="342">4433</text>
+      <text x="426" y="412">4432</text>
+      <text x="575" y="342">4435</text>
+      <text x="511" y="412">4434</text>
+      <text x="660" y="342">4437</text>
+      <text x="681" y="412">4436</text>
+      <text x="745" y="342">4439</text>
+      <text x="766" y="412">4438</text>
+      <text x="915" y="342">5027</text>
+      <text x="851" y="412">4440</text>
+      <text x="1090" y="342">5029</text>
+      <text x="936" y="412">5030</text>
+      <text x="1111" y="412">5032</text>
+      <text x="1196" y="412">5036</text>
+      <text x="1260" y="342">5033</text>
+      <text x="1281" y="412">5038</text>
+      <text x="1345" y="342">5035</text>
+      <text x="1805" y="342">5045</text>
+      <text x="2235" y="112">5301</text>
+      <text x="2235" y="162">5302</text>
+      <text x="2235" y="172">5053</text>
+      <text x="2425" y="112">5061</text>
+      <text x="2425" y="162">5062</text>
+      <text x="2425" y="172">5063</text>
+      <text x="4461" y="202">559</text>
+      <text x="4461" y="172">557</text>
+      <text x="4610" y="102">564</text>
+      <text x="4610" y="72">562</text>
+      <text x="4716" y="172">569</text>
+      <text x="4746" y="52">571</text>
+      <text x="3736" y="172">5106</text>
+      <text x="3976" y="172">551</text>
+      <text x="4040" y="102">552</text>
+      <text x="4196" y="172">555</text>
+      <text x="4175" y="102">554</text>
+      <text x="4415" y="102">556</text>
+      <text x="4801" y="172">581</text>
+      <text x="4780" y="102">574</text>
+      <text x="5000" y="102">584</text>
+      <text x="5021" y="172">583</text>
+      <text x="5085" y="102">586</text>
+      <text x="4895" y="12">572</text>
+      <text x="1431" y="412">5040</text>
+      <text x="1430" y="342">5037</text>
+      <text x="1580" y="412">5039</text>
+      <text x="1615" y="312">5043</text>
+      <text x="1656" y="382">5046</text>
+      <text x="1656" y="412">5044</text>
+      <text x="1835" y="402">5475</text>
+      <text x="1865" y="442">5474</text>
+      <text x="1925" y="282">5049</text>
+      <text x="1945" y="192">5308</text>
+      <text x="1945" y="162">5306</text>
+      <text x="1945" y="132">5304</text>
+      <text x="1945" y="102">5300</text>
+      <text x="1970" y="222">5310</text>
+      <text x="2235" y="222">5054</text>
+      <text x="2235" y="232">5055</text>
+      <text x="2235" y="282">5056</text>
+      <text x="2425" y="222">5064</text>
+      <text x="2425" y="232">5065</text>
+      <text x="2425" y="282">5066</text>
+      <text x="2425" y="292">5487</text>
+      <text x="2425" y="342">5489</text>
+      <text x="2235" y="292">5484</text>
+      <text x="2255" y="312">5480</text>
+      <text x="2625" y="252">5488</text>
+      <text x="2625" y="322">5486</text>
+      <text x="2705" y="192">5081</text>
+      <text x="2705" y="162">5079</text>
+      <text x="2705" y="132">5077</text>
+      <text x="2705" y="102">5075</text>
+      <text x="2735" y="232">5076</text>
+      <text x="2735" y="202">5078</text>
+      <text x="2735" y="172">5080</text>
+      <text x="2735" y="142">5082</text>
+      <text x="2775" y="252">5491</text>
+      <text x="2775" y="282">5493</text>
+      <text x="2835" y="292">5490</text>
+      <text x="3115" y="352">5501</text>
+      <text x="3115" y="382">5502</text>
+      <text x="3115" y="412">5503</text>
+      <text x="3115" y="442">5504</text>
+      <text x="3115" y="472">5505</text>
+      <text x="3115" y="502">5506</text>
+      <text x="3118" y="532">5507</text>
+      <text x="2905" y="442">5496</text>
+      <text x="3045" y="402">5497</text>
+      <text x="2970" y="252">5495</text>
+      <text x="3008" y="292">5494</text>
+      <text x="3008" y="322">5492</text>
+      <text x="2048" y="472">5476</text>
+      <text x="2025" y="432">5481</text>
+      <text x="2048" y="502">5478</text>
+      <text x="2025" y="462">5483</text>
+      <text x="2180" y="282">5477</text>
+      <text x="1795" y="232">5311</text>
+      <text x="1795" y="202">5313</text>
+      <text x="1795" y="172">5315</text>
+      <text x="1855" y="112">5309</text>
+      <text x="2070" y="72">5303</text>
+      <text x="1690" y="102">5316</text>
+      <text x="1535" y="102">5321</text>
+      <text x="1535" y="172">5319</text>
+      <text x="1425" y="222">5318</text>
+      <text x="1283" y="262">5323</text>
+      <text x="1260" y="222">5320</text>
+      <text x="1460" y="72">5322</text>
+      <text x="1375" y="102">5324</text>
+      <text x="1265" y="102">5328</text>
+      <text x="1201" y="172">5331</text>
+      <text x="1201" y="202">5329</text>
+      <text x="1070" y="102">5330</text>
+      <text x="1091" y="172">5333</text>
+      <text x="985" y="102">5332</text>
+      <text x="1006" y="172">312</text>
+      <text x="921" y="172">308</text>
+      <text x="2885" y="192">5089</text>
+      <text x="2885" y="162">5087</text>
+      <text x="2885" y="132">5085</text>
+      <text x="2885" y="102">5083</text>
+      <text x="3005" y="202">5084</text>
+      <text x="3005" y="172">5088</text>
+      <text x="3005" y="142">5090</text>
+      <text x="3155" y="162">5097</text>
+      <text x="3155" y="132">5095</text>
+      <text x="3155" y="102">5093</text>
+      <text x="3230" y="172">5094</text>
+      <text x="3230" y="142">5096</text>
+      <text x="3230" y="112">5098</text>
+      <text x="3230" y="202">5092</text>
+      <text x="3380" y="132">5103</text>
+      <text x="3380" y="102">5101</text>
+      <text x="3380" y="72">5099</text>
+      <text x="3380" y="162">5105</text>
+      <text x="3520" y="72">5107</text>
+      <text x="3565" y="102">5102</text>
+      <text x="3565" y="172">5104</text>
+      <text x="3715" y="102">5109</text>
+      <text x="3800" y="102">5111</text>
+      <text x="3820" y="172">5108</text>
+      <text x="3885" y="102">544</text>
+      <text x="850" y="222">354</text>
+      <text x="786" y="292">353</text>
+      <text x="765" y="222">352</text>
+      <text x="701" y="292">349</text>
+      <text x="680" y="222">348</text>
+      <text x="616" y="292">347</text>
+      <text x="595" y="222">346</text>
+      <text x="531" y="292">345</text>
+      <text x="510" y="222">344</text>
+      <text x="446" y="292">341</text>
+      <text x="425" y="222">342</text>
+      <text x="361" y="292">335</text>
+      <text x="340" y="222">334</text>
+      <text x="276" y="292">333</text>
+      <text x="255" y="222">332</text>
+      <text x="191" y="292">329</text>
+      <text x="170" y="222">328</text>
+      <text x="106" y="292">4460</text>
+      <text x="670" y="102">305</text>
+      <text x="606" y="172">304</text>
+      <text x="515" y="12">299</text>
+      <text x="451" y="82">298</text>
+      <text x="430" y="12">297</text>
+      <text x="366" y="82">296</text>
+      <text x="345" y="12">297</text>
+      <text x="281" y="82">13</text>
+      <text x="515" y="102">303</text>
+      <text x="451" y="172">302</text>
+      <text x="340" y="102">189</text>
+      <text x="276" y="172">188</text>
+      <text x="255" y="102">187</text>
+      <text x="191" y="172">186</text>
+      <text x="170" y="102">185</text>
+      <text x="106" y="172">184</text>
+      <text x="750" y="172">300</text>
+      <text x="790" y="102">306</text>
+    </g>
+    <g id="signal_stems" class="stem">
+      <path d="M 3040,408 3035,408 3035,418"/>
+      <path d="M 165,348 145,348"/>
+      <path d="M 100,398 120,398"/>
+      <path d="M 320,348 300,348"/>
+      <path d="M 255,398 275,398"/>
+      <path d="M 405,348 385,348"/>
+      <path d="M 340,398 360,398"/>
+      <path d="M 490,348 470,348"/>
+      <path d="M 425,398 445,398"/>
+      <path d="M 575,348 555,348"/>
+      <path d="M 510,398 530,398"/>
+      <path d="M 660,348 640,348"/>
+      <path d="M 680,398 700,398"/>
+      <path d="M 745,348 725,348"/>
+      <path d="M 765,398 785,398"/>
+      <path d="M 915,348 895,348"/>
+      <path d="M 850,398 870,398"/>
+      <path d="M 1090,348 1070,348"/>
+      <path d="M 935,398 955,398"/>
+      <path d="M 1110,398 1130,398"/>
+      <path d="M 1195,398 1215,398"/>
+      <path d="M 1260,348 1240,348"/>
+      <path d="M 1280,398 1300,398"/>
+      <path d="M 1345,348 1325,348"/>
+      <path d="M 1805,348 1785,348"/>
+      <path d="M 2255,108 2275,108"/>
+      <path d="M 2255,158 2275,158"/>
+      <path d="M 2255,168 2275,168"/>
+      <path d="M 2385,108 2405,108"/>
+      <path d="M 2385,158 2405,158"/>
+      <path d="M 2385,168 2405,168"/>
+      <path d="M 4460,188 4480,188"/>
+      <path d="M 4460,158 4480,158"/>
+      <path d="M 4590,108 4610,108"/>
+      <path d="M 4590,78 4610,78"/>
+      <path d="M 4715,158 4735,158"/>
+      <path d="M 4745,38 4765,38"/>
+      <path d="M 3735,158 3750,158 3750,148"/>
+      <path d="M 3975,158 3995,158"/>
+      <path d="M 4020,108 4040,108"/>
+      <path d="M 4195,158 4215,158"/>
+      <path d="M 4155,108 4175,108"/>
+      <path d="M 4395,108 4415,108"/>
+      <path d="M 4800,158 4820,158"/>
+      <path d="M 4760,108 4780,108"/>
+      <path d="M 4980,108 5000,108"/>
+      <path d="M 5020,158 5040,158"/>
+      <path d="M 5065,108 5085,108"/>
+      <path d="M 4875,18 4895,18"/>
+      <path d="M 1430,398 1450,398"/>
+      <path d="M 1430,348 1410,348"/>
+      <path d="M 1580,398 1560,398"/>
+      <path d="M 1615,318 1605,318 1605,328"/>
+      <path d="M 1655,368 1675,368"/>
+      <path d="M 1655,398 1675,398"/>
+      <path d="M 1835,408 1815,408"/>
+      <path d="M 1870,428 1875,428 1875,418"/>
+      <path d="M 1925,288 1905,288"/>
+      <path d="M 1945,198 1925,198"/>
+      <path d="M 1945,168 1925,168"/>
+      <path d="M 1945,138 1925,138"/>
+      <path d="M 1945,108 1925,108"/>
+      <path d="M 1970,228 1950,228"/>
+      <path d="M 2255,218 2275,218"/>
+      <path d="M 2255,228 2275,228"/>
+      <path d="M 2255,278 2275,278"/>
+      <path d="M 2385,218 2405,218"/>
+      <path d="M 2385,228 2405,228"/>
+      <path d="M 2385,278 2405,278"/>
+      <path d="M 2385,288 2405,288"/>
+      <path d="M 2385,338 2405,338"/>
+      <path d="M 2255,288 2275,288"/>
+      <path d="M 2255,318 2275,318"/>
+      <path d="M 2625,258 2645,258"/>
+      <path d="M 2625,308 2645,308"/>
+      <path d="M 2705,198 2685,198"/>
+      <path d="M 2705,168 2685,168"/>
+      <path d="M 2705,138 2685,138"/>
+      <path d="M 2705,108 2685,108"/>
+      <path d="M 2735,218 2755,218"/>
+      <path d="M 2735,188 2755,188"/>
+      <path d="M 2735,158 2755,158"/>
+      <path d="M 2735,128 2755,128"/>
+      <path d="M 2775,258 2755,258"/>
+      <path d="M 2775,288 2755,288"/>
+      <path d="M 2835,278 2840,278 2840,268"/>
+      <path d="M 3120,338 3125,338 3125,328"/>
+      <path d="M 3120,368 3125,368 3125,358"/>
+      <path d="M 3120,398 3125,398 3125,388"/>
+      <path d="M 3120,428 3125,428 3125,418"/>
+      <path d="M 3120,458 3125,458 3125,448"/>
+      <path d="M 3120,488 3125,488 3125,478"/>
+      <path d="M 3120,518 3125,518 3125,508"/>
+      <path d="M 2910,428 2915,428 2915,418"/>
+      <path d="M 2965,258 2960,258 2960,268"/>
+      <path d="M 3010,278 3015,278 3015,268"/>
+      <path d="M 3010,308 3015,308 3015,298"/>
+      <path d="M 2050,458 2055,458 2055,448"/>
+      <path d="M 2025,438 2015,438 2015,448"/>
+      <path d="M 2050,488 2055,488 2055,478"/>
+      <path d="M 2025,468 2015,468 2015,478"/>
+      <path d="M 2180,288 2170,288 2170,298"/>
+      <path d="M 1795,218 1815,218"/>
+      <path d="M 1795,188 1815,188"/>
+      <path d="M 1795,158 1815,158"/>
+      <path d="M 1855,98 1875,98"/>
+      <path d="M 2075,78 2080,78 2080,88"/>
+      <path d="M 1690,108 1670,108"/>
+      <path d="M 1535,108 1555,108"/>
+      <path d="M 1535,158 1555,158"/>
+      <path d="M 1425,228 1405,228"/>
+      <path d="M 1285,248 1290,248 1290,238"/>
+      <path d="M 1260,228 1250,228 1250,238"/>
+      <path d="M 1460,78 1440,78"/>
+      <path d="M 1375,108 1355,108"/>
+      <path d="M 1265,108 1245,108"/>
+      <path d="M 1200,158 1220,158"/>
+      <path d="M 1200,188 1220,188"/>
+      <path d="M 1070,108 1050,108"/>
+      <path d="M 1090,158 1110,158"/>
+      <path d="M 985,108 965,108"/>
+      <path d="M 1005,158 1025,158"/>
+      <path d="M 920,158 940,158"/>
+      <path d="M 2885,198 2865,198"/>
+      <path d="M 2885,168 2865,168"/>
+      <path d="M 2885,138 2865,138"/>
+      <path d="M 2885,108 2865,108"/>
+      <path d="M 3005,188 3025,188"/>
+      <path d="M 3005,158 3025,158"/>
+      <path d="M 3005,128 3025,128"/>
+      <path d="M 3155,168 3135,168"/>
+      <path d="M 3155,138 3135,138"/>
+      <path d="M 3155,108 3135,108"/>
+      <path d="M 3230,158 3250,158"/>
+      <path d="M 3230,128 3250,128"/>
+      <path d="M 3230,98 3250,98"/>
+      <path d="M 3230,188 3250,188"/>
+      <path d="M 3380,138 3360,138"/>
+      <path d="M 3380,108 3360,108"/>
+      <path d="M 3380,78 3360,78"/>
+      <path d="M 3380,168 3360,168"/>
+      <path d="M 3520,78 3500,78"/>
+      <path d="M 3565,108 3585,108"/>
+      <path d="M 3565,158 3585,158"/>
+      <path d="M 3715,108 3695,108"/>
+      <path d="M 3800,108 3780,108"/>
+      <path d="M 3820,158 3840,158"/>
+      <path d="M 3885,108 3865,108"/>
+      <path d="M 850,228 830,228"/>
+      <path d="M 785,278 805,278"/>
+      <path d="M 765,228 745,228"/>
+      <path d="M 700,278 720,278"/>
+      <path d="M 680,228 660,228"/>
+      <path d="M 615,278 635,278"/>
+      <path d="M 595,228 575,228"/>
+      <path d="M 530,278 550,278"/>
+      <path d="M 510,228 490,228"/>
+      <path d="M 445,278 465,278"/>
+      <path d="M 425,228 405,228"/>
+      <path d="M 360,278 380,278"/>
+      <path d="M 340,228 320,228"/>
+      <path d="M 275,278 295,278"/>
+      <path d="M 255,228 235,228"/>
+      <path d="M 190,278 210,278"/>
+      <path d="M 170,228 150,228"/>
+      <path d="M 105,278 125,278"/>
+      <path d="M 670,108 650,108"/>
+      <path d="M 605,158 625,158"/>
+      <path d="M 515,18 495,18"/>
+      <path d="M 450,68 470,68"/>
+      <path d="M 430,18 410,18"/>
+      <path d="M 365,68 385,68"/>
+      <path d="M 345,18 325,18"/>
+      <path d="M 280,68 300,68"/>
+      <path d="M 515,108 495,108"/>
+      <path d="M 450,158 470,158"/>
+      <path d="M 340,108 320,108"/>
+      <path d="M 275,158 295,158"/>
+      <path d="M 255,108 235,108"/>
+      <path d="M 190,158 210,158"/>
+      <path d="M 170,108 150,108"/>
+      <path d="M 105,158 125,158"/>
+      <path d="M 750,158 740,158 740,148"/>
+      <path d="M 795,108 800,108 800,118"/>
+    </g>
+    <g id="signal_aspects" class="aspect">
+      <circle cx="165" cy="348" r="5" id="NES4427"/>
+      <circle cx="100" cy="398" r="5" id="NES4426"/>
+      <circle cx="320" cy="348" r="5" id="NES4429"/>
+      <circle cx="255" cy="398" r="5" id="NES4428"/>
+      <circle cx="405" cy="348" r="5" id="NES4431"/>
+      <circle cx="340" cy="398" r="5" id="NES4430"/>
+      <circle cx="490" cy="348" r="5" id="NES4433"/>
+      <circle cx="425" cy="398" r="5" id="NES4432"/>
+      <circle cx="575" cy="348" r="5" id="NES4435"/>
+      <circle cx="510" cy="398" r="5" id="NES4434"/>
+      <circle cx="660" cy="348" r="5" id="NES4437"/>
+      <circle cx="680" cy="398" r="5" id="NES4436"/>
+      <circle cx="745" cy="348" r="5" id="NES4439"/>
+      <circle cx="765" cy="398" r="5" id="NES4438"/>
+      <circle cx="915" cy="348" r="5" id="DYSTD5027"/>
+      <circle cx="850" cy="398" r="5" id="NES4440"/>
+      <circle cx="1090" cy="348" r="5" id="DYSTD5029"/>
+      <circle cx="935" cy="398" r="5" id="DYSTD5030"/>
+      <circle cx="1110" cy="398" r="5" id="DYSTD5032"/>
+      <circle cx="1195" cy="398" r="5" id="DYSTD5036"/>
+      <circle cx="1260" cy="348" r="5" id="DYSTD5033"/>
+      <circle cx="1280" cy="398" r="5" id="DYSTD5038"/>
+      <circle cx="1345" cy="348" r="5" id="DYSTD5035"/>
+      <circle cx="1805" cy="348" r="5" id="DYSTD5045"/>
+      <circle cx="2255" cy="108" r="5" id="DYSDW5301"/>
+      <circle cx="2255" cy="158" r="5" id="DYSDW5302"/>
+      <circle cx="2255" cy="168" r="5" id="DYSTD5053"/>
+      <circle cx="2405" cy="108" r="5" id="DYSDC5061"/>
+      <circle cx="2405" cy="158" r="5" id="DYSDC5062"/>
+      <circle cx="2405" cy="168" r="5" id="DYSDC5063"/>
+      <circle cx="4460" cy="188" r="5" id="DYSDY559"/>
+      <circle cx="4460" cy="158" r="5" id="DYSDY557"/>
+      <circle cx="4610" cy="108" r="5" id="DYSDY564"/>
+      <circle cx="4610" cy="78" r="5" id="DYSDY562"/>
+      <circle cx="4715" cy="158" r="5" id="DYSDY569"/>
+      <circle cx="4745" cy="38" r="5" id="DYSDY571"/>
+      <circle cx="3735" cy="158" r="5" id="DYSDC5106"/>
+      <circle cx="3975" cy="158" r="5" id="DYSDY551"/>
+      <circle cx="4040" cy="108" r="5" id="DYSDY552"/>
+      <circle cx="4195" cy="158" r="5" id="DYSDY555"/>
+      <circle cx="4175" cy="108" r="5" id="DYSDY554"/>
+      <circle cx="4415" cy="108" r="5" id="DYSDY556"/>
+      <circle cx="4800" cy="158" r="5" id="DYSDY581"/>
+      <circle cx="4780" cy="108" r="5" id="DYSDY574"/>
+      <circle cx="5000" cy="108" r="5" id="DYSDY584"/>
+      <circle cx="5020" cy="158" r="5" id="DYSDY583"/>
+      <circle cx="5085" cy="108" r="5" id="DYSDY586"/>
+      <circle cx="4895" cy="18" r="5" id="DYSDY572"/>
+      <circle cx="1430" cy="398" r="5" id="DYSTD5040"/>
+      <circle cx="1430" cy="348" r="5" id="DYSTD5037"/>
+      <circle cx="1580" cy="398" r="5" id="DYSTD5039"/>
+      <path id="DYSTD5043" d="m 1610 314 0,10 10,0 c 0,-5 -5,-10 -10,-10 z" class="aspect"/>
+      <circle cx="1655" cy="368" r="5" id="DYSTD5046"/>
+      <circle cx="1655" cy="398" r="5" id="DYSTD5044"/>
+      <circle cx="1835" cy="408" r="5" id="DYSEC5475"/>
+      <path id="DYSEC5474" d="m 1870 424 -10,0 c 0,5 5,10 10,10 z" class="aspect"/>
+      <circle cx="1925" cy="288" r="5" id="DYSTD5049"/>
+      <circle cx="1945" cy="198" r="5" id="DYSDW5308"/>
+      <circle cx="1945" cy="168" r="5" id="DYSDW5306"/>
+      <circle cx="1945" cy="138" r="5" id="DYSDW5304"/>
+      <circle cx="1945" cy="108" r="5" id="DYSDW5300"/>
+      <circle cx="1970" cy="228" r="5" id="DYSDW5310"/>
+      <circle cx="2255" cy="218" r="5" id="DYSTD5054"/>
+      <circle cx="2255" cy="228" r="5" id="DYSTD5055"/>
+      <circle cx="2255" cy="278" r="5" id="DYSTD5056"/>
+      <circle cx="2405" cy="218" r="5" id="DYSDC5064"/>
+      <circle cx="2405" cy="228" r="5" id="DYSDC5065"/>
+      <circle cx="2405" cy="278" r="5" id="DYSDC5066"/>
+      <circle cx="2405" cy="288" r="5" id="DYSEC5487"/>
+      <circle cx="2405" cy="338" r="5" id="DYSEC5489"/>
+      <circle cx="2255" cy="288" r="5" id="DYSEC5484"/>
+      <circle cx="2255" cy="318" r="5" id="DYSEC5480"/>
+      <circle cx="2625" cy="258" r="5" id="DYSEC5488"/>
+      <circle cx="2625" cy="308" r="5" id="DYSEC5486"/>
+      <circle cx="2705" cy="198" r="5" id="DYSDC5081"/>
+      <circle cx="2705" cy="168" r="5" id="DYSDC5079"/>
+      <circle cx="2705" cy="138" r="5" id="DYSDC5077"/>
+      <circle cx="2705" cy="108" r="5" id="DYSDC5075"/>
+      <circle cx="2735" cy="218" r="5" id="DYSDC5076"/>
+      <circle cx="2735" cy="188" r="5" id="DYSDC5078"/>
+      <circle cx="2735" cy="158" r="5" id="DYSDC5080"/>
+      <circle cx="2735" cy="128" r="5" id="DYSDC5082"/>
+      <circle cx="2775" cy="258" r="5" id="DYSEC5491"/>
+      <circle cx="2775" cy="288" r="5" id="DYSEC5493"/>
+      <path id="DYSEC5490" d="m 2835 274 -10,0 c 0,5 5,10 10,10 z" class="aspect"/>
+      <path id="DYSEC5501" d="m 3120 334 -10,0 c 0,5 5,10 10,10 z" class="aspect"/>
+      <path id="DYSEC5502" d="m 3120 364 -10,0 c 0,5 5,10 10,10 z" class="aspect"/>
+      <path id="DYSEC5503" d="m 3120 394 -10,0 c 0,5 5,10 10,10 z" class="aspect"/>
+      <path id="DYSEC5504" d="m 3120 424 -10,0 c 0,5 5,10 10,10 z" class="aspect"/>
+      <g class="clear">
+        <rect class="bg" x="3110" y="454" width="10" height="10"/>
+        <circle class="los" cx="3115" cy="459" r="3"/>
+      </g>
+      <g class="clear">
+        <rect class="bg" x="3110" y="484" width="10" height="10"/>
+        <circle class="los" cx="3115" cy="489" r="3"/>
+      </g>
+      <g class="clear">
+        <rect class="bg" x="3110" y="514" width="10" height="10"/>
+        <circle class="los" cx="3115" cy="519" r="3"/>
+      </g>
+      <path id="DYSEC5496" d="m 2910 424 -10,0 c 0,5 5,10 10,10 z" class="aspect"/>
+      <g class="clear">
+        <rect class="bg" x="3040" y="404" width="10" height="10"/>
+        <circle class="los" cx="3045" cy="409" r="3"/>
+      </g>
+      <g class="clear">
+        <rect class="bg" x="2965" y="254" width="10" height="10"/>
+        <circle class="los" cx="2970" cy="259" r="3"/>
+      </g>
+      <g class="clear">
+        <rect class="bg" x="3000" y="274" width="10" height="10"/>
+        <circle class="los" cx="3005" cy="279" r="3"/>
+      </g>
+      <g class="clear">
+        <rect class="bg" x="3000" y="304" width="10" height="10"/>
+        <circle class="los" cx="3005" cy="309" r="3"/>
+      </g>
+      <g class="clear">
+        <rect class="bg" x="2040" y="454" width="10" height="10"/>
+        <circle class="los" cx="2045" cy="459" r="3"/>
+      </g>
+      <path id="DYSEC5481" d="m 2020 434 0,10 10,0 c 0,-5 -5,-10 -10,-10 z" class="aspect"/>
+      <g class="clear">
+        <rect class="bg" x="2040" y="484" width="10" height="10"/>
+        <circle class="los" cx="2045" cy="489" r="3"/>
+      </g>
+      <path id="DYSEC5483" d="m 2020 464 0,10 10,0 c 0,-5 -5,-10 -10,-10 z" class="aspect"/>
+      <path id="SEC5477" d="m 2175 284 0,10 10,0 c 0,-5 -5,-10 -10,-10 z" class="aspect"/>
+      <circle cx="1795" cy="218" r="5" id="DYSDW5311"/>
+      <circle cx="1795" cy="188" r="5" id="DYSDW5313"/>
+      <circle cx="1795" cy="158" r="5" id="DYSDW5315"/>
+      <circle cx="1855" cy="98" r="5" id="DYSDW5309"/>
+      <g class="clear">
+        <rect class="bg" x="2065" y="74" width="10" height="10"/>
+        <circle class="los" cx="2070" cy="79" r="3"/>
+      </g>
+      <circle cx="1690" cy="108" r="5" id="DYSDW5316"/>
+      <circle cx="1535" cy="108" r="5" id="DYSDW5321"/>
+      <circle cx="1535" cy="158" r="5" id="DYSDW5319"/>
+      <circle cx="1425" cy="228" r="5" id="DYSDW5318"/>
+      <g class="clear">
+        <rect class="bg" x="1275" y="244" width="10" height="10"/>
+        <circle class="los" cx="1280" cy="249" r="3"/>
+      </g>
+      <path id="DYSDW5320" d="m 1255 224 0,10 10,0 c 0,-5 -5,-10 -10,-10 z" class="aspect"/>
+      <circle cx="1460" cy="78" r="5" id="DYSDW5322"/>
+      <circle cx="1375" cy="108" r="5" id="DYSDW5324"/>
+      <circle cx="1265" cy="108" r="5" id="DYSDW5328"/>
+      <circle cx="1200" cy="158" r="5" id="DYSDW5331"/>
+      <circle cx="1200" cy="188" r="5" id="DYSDW5329"/>
+      <circle cx="1070" cy="108" r="5" id="DYSDW5330"/>
+      <circle cx="1090" cy="158" r="5" id="DYSDW5333"/>
+      <circle cx="985" cy="108" r="5" id="DYSDW5332"/>
+      <circle cx="1005" cy="158" r="5" id="BUS312"/>
+      <circle cx="920" cy="158" r="5" id="BUS308"/>
+      <circle cx="2885" cy="198" r="5" id="DYSDC5089"/>
+      <circle cx="2885" cy="168" r="5" id="DYSDC5087"/>
+      <circle cx="2885" cy="138" r="5" id="DYSDC5085"/>
+      <circle cx="2885" cy="108" r="5" id="DYSDC5083"/>
+      <circle cx="3005" cy="188" r="5" id="DYSDC5084"/>
+      <circle cx="3005" cy="158" r="5" id="DYSDC5088"/>
+      <circle cx="3005" cy="128" r="5" id="DYSDC5090"/>
+      <circle cx="3155" cy="168" r="5" id="DYSDC5097"/>
+      <circle cx="3155" cy="138" r="5" id="DYSDC5095"/>
+      <circle cx="3155" cy="108" r="5" id="DYSDC5093"/>
+      <circle cx="3230" cy="158" r="5" id="DYSDC5094"/>
+      <circle cx="3230" cy="128" r="5" id="DYSDC5096"/>
+      <circle cx="3230" cy="98" r="5" id="DYSDC5098"/>
+      <circle cx="3230" cy="188" r="5" id="DYSDC5092"/>
+      <circle cx="3380" cy="138" r="5" id="DYSDC5103"/>
+      <circle cx="3380" cy="108" r="5" id="DYSDC5101"/>
+      <circle cx="3380" cy="78" r="5" id="DYSDC5099"/>
+      <circle cx="3380" cy="168" r="5" id="DYSDC5105"/>
+      <circle cx="3520" cy="78" r="5" id="DYSDC5107"/>
+      <circle cx="3565" cy="108" r="5" id="DYSDC5102"/>
+      <circle cx="3565" cy="158" r="5" id="DYSDC5104"/>
+      <circle cx="3715" cy="108" r="5" id="DYSDC5109"/>
+      <circle cx="3800" cy="108" r="5" id="DYSDC5111"/>
+      <circle cx="3820" cy="158" r="5" id="DYSDC5108"/>
+      <circle cx="3885" cy="108" r="5" id="DYSDY544"/>
+      <circle cx="850" cy="228" r="5" id="BUS354"/>
+      <circle cx="785" cy="278" r="5"/>
+      <circle cx="765" cy="228" r="5"/>
+      <circle cx="700" cy="278" r="5"/>
+      <circle cx="680" cy="228" r="5"/>
+      <circle cx="615" cy="278" r="5"/>
+      <circle cx="595" cy="228" r="5"/>
+      <circle cx="530" cy="278" r="5"/>
+      <circle cx="510" cy="228" r="5"/>
+      <circle cx="445" cy="278" r="5"/>
+      <circle cx="425" cy="228" r="5"/>
+      <circle cx="360" cy="278" r="5"/>
+      <circle cx="340" cy="228" r="5"/>
+      <circle cx="275" cy="278" r="5"/>
+      <circle cx="255" cy="228" r="5"/>
+      <circle cx="190" cy="278" r="5"/>
+      <circle cx="170" cy="228" r="5"/>
+      <circle cx="105" cy="278" r="5" id="NES4460"/>
+      <circle cx="670" cy="108" r="5" id="BUS305"/>
+      <circle cx="605" cy="158" r="5" id="BUS304"/>
+      <circle cx="515" cy="18" r="5" id="BUS299"/>
+      <circle cx="450" cy="68" r="5"/>
+      <circle cx="430" cy="18" r="5"/>
+      <circle cx="365" cy="68" r="5"/>
+      <circle cx="345" cy="18" r="5"/>
+      <circle cx="280" cy="68" r="5"/>
+      <circle cx="515" cy="108" r="5" id="BUS303"/>
+      <circle cx="450" cy="158" r="5"/>
+      <circle cx="340" cy="108" r="5"/>
+      <circle cx="275" cy="158" r="5"/>
+      <circle cx="255" cy="108" r="5"/>
+      <circle cx="190" cy="158" r="5"/>
+      <circle cx="170" cy="108" r="5"/>
+      <circle cx="105" cy="158" r="5" id="BUS184"/>
+      <path id="BUS300" d="m 745 153 0,10 10,0 c 0,-5 -5,-10 -10,-10 z" class="aspect"/>
+      <path id="BUS306" d="m 795 104 -10,0 c 0,5 5,10 10,10 z" class="aspect"/>
+    </g>
+    <g id="indications" class="indication">
+      <g class="text"/>
+      <g class="graphic"/>
+    </g>
+    <g id="route" class="route">
+      <path d="M 2405,118 2705,118" id="DYRDC5061A_M_"/>
+      <path d="M 2405,148 2705,148" id="DYRDC5062A_M_"/>
+      <path d="M 2405,178 2705,178" id="DYRDC5063A_M_"/>
+      <path d="M 2405,178 2505,178 2520,208 2705,208" id="DYRDC5063B_M_"/>
+      <path d="M 2405,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2775,268" id="DYRDC5063C_M_"/>
+      <path d="M 2405,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2775,298" id="DYRDC5063D_M_"/>
+      <path d="M 2405,208 2430,208 2445,178 2705,178" id="DYRDC5064A_M_"/>
+      <path d="M 2405,208 2430,208 2445,178 2505,178 2520,208 2705,208" id="DYRDC5064B_M_"/>
+      <path d="M 2405,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2775,268" id="DYRDC5064C_M_"/>
+      <path d="M 2405,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2775,298" id="DYRDC5064D_M_"/>
+      <path d="M 2405,238 2445,238 2475,178 2705,178" id="DYRDC5065A_M_"/>
+      <path d="M 2405,238 2445,238 2475,178 2505,178 2520,208 2705,208" id="DYRDC5065B_M_"/>
+      <path d="M 2405,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2775,268" id="DYRDC5065C_M_"/>
+      <path d="M 2405,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2775,298" id="DYRDC5065D_M_"/>
+      <path d="M 2405,268 2460,268 2490,208 2705,208" id="DYRDC5066A_M_"/>
+      <path d="M 2405,268 2460,268 2490,208 2550,208 2565,238 2580,238 2595,268 2775,268" id="DYRDC5066B_M_"/>
+      <path d="M 2405,268 2460,268 2490,208 2550,208 2565,238 2580,238 2610,298 2775,298" id="DYRDC5066C_M_"/>
+      <path d="M 2705,118 2885,118" id="DYRDC5075A_M_"/>
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2520,238 2535,208 2735,208" id="DYRDC5076A_M_"/>
+      <path d="M 2255,298 2475,298 2505,238 2520,238 2535,208 2735,208" id="DYRDC5076B_M_"/>
+      <path d="M 2255,268 2460,268 2490,208 2735,208" id="DYRDC5076C_M_"/>
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2735,208" id="DYRDC5076D_M_"/>
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2735,208" id="DYRDC5076E_M_"/>
+      <path d="M 2255,178 2505,178 2520,208 2735,208" id="DYRDC5076F_M_"/>
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2520,238 2535,208 2735,208" id="DYRDC5076A_C_"/>
+      <path d="M 2255,298 2475,298 2505,238 2520,238 2535,208 2735,208" id="DYRDC5076B_C_"/>
+      <path d="M 2255,268 2460,268 2490,208 2735,208" id="DYRDC5076C_C_"/>
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2735,208" id="DYRDC5076D_C_"/>
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2735,208" id="DYRDC5076E_C_"/>
+      <path d="M 2255,178 2505,178 2520,208 2735,208" id="DYRDC5076F_C_"/>
+      <path d="M 2705,148 2885,148" id="DYRDC5077A_M_"/>
+      <path d="M 2255,238 2445,238 2475,178 2735,178" id="DYRDC5078A_M_"/>
+      <path d="M 2255,208 2430,208 2445,178 2735,178" id="DYRDC5078B_M_"/>
+      <path d="M 2255,178 2735,178" id="DYRDC5078C_M_"/>
+      <path d="M 2255,238 2445,238 2475,178 2735,178" id="DYRDC5078A_C_"/>
+      <path d="M 2255,208 2430,208 2445,178 2735,178" id="DYRDC5078B_C_"/>
+      <path d="M 2255,178 2735,178" id="DYRDC5078C_C_"/>
+      <path d="M 2705,178 2885,178" id="DYRDC5079A_M_"/>
+      <path d="M 2255,148 2735,148" id="DYRDC5080A_M_"/>
+      <path d="M 2255,148 2735,148" id="DYRDC5080A_C_"/>
+      <path d="M 2705,208 2885,208" id="DYRDC5081A_M_"/>
+      <path d="M 2255,118 2735,118" id="DYRDC5082A_M_"/>
+      <path d="M 2255,118 2735,118" id="DYRDC5082A_C_"/>
+      <path d="M 2885,118 3155,118" id="DYRDC5083A_M_"/>
+      <path d="M 2735,208 2945,208 2960,178 3005,178" id="DYRDC5084A_M_"/>
+      <path d="M 2735,178 2930,178 2945,148 2975,148 2990,178 3005,178" id="DYRDC5084B_M_"/>
+      <path d="M 2735,148 2975,148 2990,178 3005,178" id="DYRDC5084C_M_"/>
+      <path d="M 2885,148 2930,148 2945,118 3155,118" id="DYRDC5085A_M_"/>
+      <path d="M 2885,148 3155,148" id="DYRDC5085B_M_"/>
+      <path d="M 2885,148 2975,148 2990,178 3155,178" id="DYRDC5085C_M_"/>
+      <path d="M 2885,178 2900,178 2915,148 2930,148 2945,118 3155,118" id="DYRDC5087A_M_"/>
+      <path d="M 2885,178 2930,178 2945,148 3155,148" id="DYRDC5087B_M_"/>
+      <path d="M 2885,178 2930,178 2945,148 2975,148 2990,178 3155,178" id="DYRDC5087C_M_"/>
+      <path d="M 2735,208 2900,208 2915,178 2930,178 2945,148 3005,148" id="DYRDC5088A_M_"/>
+      <path d="M 2735,178 2930,178 2945,148 3005,148" id="DYRDC5088B_M_"/>
+      <path d="M 2735,148 3005,148" id="DYRDC5088C_M_"/>
+      <path d="M 2885,208 2900,208 2915,178 2930,178 2945,148 3155,148" id="DYRDC5089A_M_"/>
+      <path d="M 2885,208 2945,208 2960,178 3155,178" id="DYRDC5089B_M_"/>
+      <path d="M 2885,208 2945,208 2960,178 3155,178" id="DYRDC5089B_C_"/>
+      <path d="M 2735,178 2900,178 2915,148 2930,148 2945,118 3005,118" id="DYRDC5090A_M_"/>
+      <path d="M 2735,148 2930,148 2945,118 3005,118" id="DYRDC5090B_M_"/>
+      <path d="M 2735,118 3005,118" id="DYRDC5090C_M_"/>
+      <path d="M 3005,178 3230,178" id="DYRDC5092A_M_"/>
+      <path d="M 3155,118 3200,118 3215,88 3380,88" id="DYRDC5093A_M_"/>
+      <path d="M 3155,118 3200,118 3215,88 3380,88" id="DYRDC5093A_C_"/>
+      <path d="M 3155,118 3380,118" id="DYRDC5093B_M_"/>
+      <path d="M 3005,148 3230,148" id="DYRDC5094A_M_"/>
+      <path d="M 3155,148 3170,148 3185,118 3200,118 3215,88 3380,88" id="DYRDC5095A_M_"/>
+      <path d="M 3155,148 3170,148 3185,118 3380,118" id="DYRDC5095B_M_"/>
+      <path d="M 3155,148 3380,148" id="DYRDC5095C_M_"/>
+      <path d="M 3005,148 3170,148 3185,118 3230,118" id="DYRDC5096A_M_"/>
+      <path d="M 3005,118 3230,118" id="DYRDC5096B_M_"/>
+      <path d="M 3155,178 3380,178" id="DYRDC5097A_M_"/>
+      <path d="M 3005,148 3170,148 3185,118 3200,118 3215,88 3230,88" id="DYRDC5098A_M_"/>
+      <path d="M 3005,118 3200,118 3215,88 3230,88" id="DYRDC5098B_M_"/>
+      <path d="M 3380,118 3715,118" id="DYRDC5101A_M_"/>
+      <path d="M 3230,178 3395,178 3410,148 3425,148 3440,118 3565,118" id="DYRDC5102A_M_"/>
+      <path d="M 3230,178 3395,178 3410,148 3425,148 3440,118 3565,118" id="DYRDC5102A_C_"/>
+      <path d="M 3230,148 3425,148 3440,118 3565,118" id="DYRDC5102B_M_"/>
+      <path d="M 3230,118 3565,118" id="DYRDC5102C_M_"/>
+      <path d="M 3230,88 3535,88 3550,118 3565,118" id="DYRDC5102D_M_"/>
+      <path d="M 3380,148 3425,148 3440,118 3715,118" id="DYRDC5103A_M_"/>
+      <path d="M 3230,178 3395,178 3410,148 3565,148" id="DYRDC5104A_M_"/>
+      <path d="M 3230,148 3565,148" id="DYRDC5104B_M_"/>
+      <path d="M 3230,118 3520,118 3535,148 3565,148" id="DYRDC5104C_M_"/>
+      <path d="M 3380,178 3395,178 3410,148 3425,148 3440,118 3715,118" id="DYRDC5105A_M_"/>
+      <path d="M 3520,88 3535,88 3550,118 3715,118" id="DYRDC5107A_M_"/>
+      <path d="M 1945,118 2405,118" id="DYRDW5300A_M_"/>
+      <path d="M 1945,118 2405,118" id="DYRDW5300A_C_"/>
+      <path d="M 1795,148 2030,148 2045,118 2255,118" id="DYRDW5301A_M_"/>
+      <path d="M 1795,148 2255,148" id="DYRDW5302A_M_"/>
+      <path d="M 1945,118 2405,118" id="DYRDW5304A_M_"/>
+      <path d="M 1945,148 2405,148" id="DYRDW5304B_M_"/>
+      <path d="M 1945,118 2405,118" id="DYRDW5304A_C_"/>
+      <path d="M 1945,148 2405,148" id="DYRDW5304B_C_"/>
+      <path d="M 1945,178 2405,178" id="DYRDW5306A_M_"/>
+      <path d="M 1945,178 2075,178 2090,208 2405,208" id="DYRDW5306B_M_"/>
+      <path d="M 1945,178 2075,178 2090,208 2405,208" id="DYRDW5306B_C_"/>
+      <path d="M 1945,208 2075,208 2090,178 2405,178" id="DYRDW5308A_M_"/>
+      <path d="M 1945,208 2075,208 2090,178 2405,178" id="DYRDW5308A_C_"/>
+      <path d="M 1945,208 2405,208" id="DYRDW5308B_M_"/>
+      <path d="M 1945,208 2405,208" id="DYRDW5308B_C_"/>
+      <path d="M 1535,118 1825,118 1840,88 1855,88" id="DYRDW5309A_M_"/>
+      <path d="M 1970,238 1985,238 2000,208 2075,208 2090,178 2405,178" id="DYRDW5310A_M_"/>
+      <path d="M 1970,238 1985,238 2000,208 2075,208 2090,178 2405,178" id="DYRDW5310A_C_"/>
+      <path d="M 1970,238 1985,238 2000,208 2405,208" id="DYRDW5310B_M_"/>
+      <path d="M 1970,238 1985,238 2000,208 2405,208" id="DYRDW5310B_C_"/>
+      <path d="M 1535,148 1690,148 1720,208 1795,208" id="DYRDW5311A_M_"/>
+      <path d="M 1535,118 1705,118 1720,148 1735,148 1750,178 1765,178 1780,208 1795,208" id="DYRDW5311B_M_"/>
+      <path d="M 1535,148 1735,148 1750,178 1795,178" id="DYRDW5313A_M_"/>
+      <path d="M 1535,118 1705,118 1720,148 1735,148 1750,178 1795,178" id="DYRDW5313B_M_"/>
+      <path d="M 1535,148 1795,148" id="DYRDW5315A_M_"/>
+      <path d="M 1535,118 1705,118 1720,148 1795,148" id="DYRDW5315B_M_"/>
+      <path d="M 1690,118 1945,118" id="DYRDW5316B_M_"/>
+      <path d="M 1690,118 1705,118 1720,148 1945,148" id="DYRDW5316C_M_"/>
+      <path d="M 1690,118 1705,118 1720,148 1735,148 1750,178 1945,178" id="DYRDW5316D_M_"/>
+      <path d="M 1690,118 1705,118 1720,148 1735,148 1750,178 1765,178 1780,208 1945,208" id="DYRDW5316E_M_"/>
+      <path d="M 1425,238 1440,238 1485,148 1505,148 1520,118 1690,118" id="DYRDW5318A_M_"/>
+      <path d="M 1280,238 1440,238 1485,148 1535,148" id="DYRDW5319A_M_"/>
+      <path d="M 1200,178 1440,178 1455,148 1535,148" id="DYRDW5319B_M_"/>
+      <path d="M 1200,148 1535,148" id="DYRDW5319C_M_"/>
+      <path d="M 1280,238 1440,238 1485,148 1505,148 1520,118 1535,118" id="DYRDW5321A_M_"/>
+      <path d="M 1200,178 1440,178 1455,148 1505,148 1520,118 1535,118" id="DYRDW5321B_M_"/>
+      <path d="M 1200,148 1505,148 1520,118 1535,118" id="DYRDW5321C_M_"/>
+      <path d="M 1460,88 1473,88 1488,118 1691,118" id="DYRDW5322A_M_"/>
+      <path d="M 1375,118 1690,118" id="DYRDW5324A_M_"/>
+      <path d="M 1265,118 1280,118 1295,88 1460,88" id="DYRDW5328A_M_"/>
+      <path d="M 1265,118 1375,118" id="DYRDW5328B_M_"/>
+      <path d="M 1090,148 1200,148" id="DYRDW5331A_M_"/>
+      <path d="M 1090,148 1170,148 1185,178 1200,178" id="DYRDW5329A_M_"/>
+      <path d="M 1835,418 1850,418 1865,388 1970,388 2060,208 2075,208 2090,178 2405,178" id="DYREC5475A_M_"/>
+      <path d="M 1835,418 1850,418 1865,388 1970,388 2060,208 2075,208 2090,178 2405,178" id="DYREC5475A_C_"/>
+      <path d="M 1835,418 1850,418 1865,388 1970,388 2060,208 2405,208" id="DYREC5475B_M_"/>
+      <path d="M 1835,418 1850,418 1865,388 1970,388 2060,208 2405,208" id="DYREC5475B_C_"/>
+      <path d="M 1835,418 1850,418 1865,388 2030,388 2090,268 2405,268" id="DYREC5475C_M_"/>
+      <path d="M 1835,418 1850,418 1865,388 2030,388 2090,268 2405,268" id="DYREC5475C_C_"/>
+      <path d="M 1835,418 2045,418 2105,298 2180,298" id="DYREC5475D_S_"/>
+      <path d="M 1835,418 2045,418 2105,298 2405,298" id="DYREC5475E_M_"/>
+      <path d="M 2045,478 2165,478 2240,328 2255,328" id="DYREC5480A_S_"/>
+      <path d="M 2045,478 2135,478 2225,298 2255,298" id="DYREC5484A_S_"/>
+      <path d="M 2045,448 2120,448 2195,298 2255,298" id="DYREC5484B_S_"/>
+      <path d="M 1865,418 2045,418 2105,298 2255,298" id="DYREC5484C_S_"/>
+      <path d="M 1865,418 2045,418 2105,298 2255,298" id="DYREC5484C_SP_"/>
+      <path d="M 1655,388 1940,388 1955,418 2045,418 2105,298 2255,298" id="DYREC5484D_M_"/>
+      <path d="M 1655,358 1820,358 1835,388 1940,388 1955,418 2045,418 2105,298 2255,298" id="DYREC5484E_M_"/>
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2580,238 2610,298 2625,298" id="DYREC5486A_M_"/>
+      <path d="M 2255,298 2475,298 2505,238 2580,238 2610,298 2625,298" id="DYREC5486B_M_"/>
+      <path d="M 2255,268 2460,268 2490,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486C_M_"/>
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486D_M_"/>
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486E_M_"/>
+      <path d="M 2255,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486F_M_"/>
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2580,238 2610,298 2625,298" id="DYREC5486A_C_"/>
+      <path d="M 2255,298 2475,298 2505,238 2580,238 2610,298 2625,298" id="DYREC5486B_C_"/>
+      <path d="M 2255,268 2460,268 2490,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486C_C_"/>
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486D_C_"/>
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2610,298 2625,298" id="DYREC5486E_C_"/>
+      <path d="M 2405,298 2475,298 2505,238 2520,238 2535,208 2705,208" id="DYREC5487A_M_"/>
+      <path d="M 2405,298 2475,298 2505,238 2580,238 2595,268 2775,268" id="DYREC5487B_M_"/>
+      <path d="M 2405,298 2475,298 2505,238 2580,238 2610,298 2775,298" id="DYREC5487C_M_"/>
+      <path d="M 2405,298 2475,298 2505,238 2580,238 2595,268 2775,268" id="DYREC5487B_C_"/>
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2580,238 2595,268 2625,268" id="DYREC5488A_M_"/>
+      <path d="M 2255,298 2475,298 2505,238 2580,238 2595,268 2625,268" id="DYREC5488B_M_"/>
+      <path d="M 2255,268 2460,268 2490,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488C_M_"/>
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488D_M_"/>
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488E_M_"/>
+      <path d="M 2255,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488F_M_"/>
+      <path d="M 2255,328 2430,328 2445,298 2475,298 2505,238 2580,238 2595,268 2625,268" id="DYREC5488A_C_"/>
+      <path d="M 2255,298 2475,298 2505,238 2580,238 2595,268 2625,268" id="DYREC5488B_C_"/>
+      <path d="M 2255,268 2460,268 2490,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488C_C_"/>
+      <path d="M 2255,238 2445,238 2475,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488D_C_"/>
+      <path d="M 2255,208 2430,208 2445,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488E_C_"/>
+      <path d="M 2255,178 2505,178 2520,208 2550,208 2565,238 2580,238 2595,268 2625,268" id="DYREC5488F_C_"/>
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2520,238 2535,208 2705,208" id="DYREC5489A_M_"/>
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2580,238 2595,268 2775,268" id="DYREC5489B_M_"/>
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2580,238 2595,268 2775,268" id="DYREC5489B_C_"/>
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2580,238 2610,298 2775,298" id="DYREC5489C_M_"/>
+      <path d="M 2405,328 2430,328 2445,298 2475,298 2505,238 2580,238 2610,298 2775,298" id="DYREC5489C_C_"/>
+      <path d="M 1090,358 1260,358" id="DYRTD5029A_M_"/>
+      <path d="M 935,388 1110,388" id="DYRTD5032A_M_"/>
+      <path d="M 1430,358 1805,358" id="DYRTD5037A_M_"/>
+      <path d="M 1580,388 1595,388 1610,358 1805,358" id="DYRTD5039A_M_"/>
+      <path d="M 1280,388 1430,388" id="DYRTD5040A_M_"/>
+      <path d="M 1430,388 1655,388" id="DYRTD5044A_M_"/>
+      <path d="M 1805,358 1910,358 1925,328 1970,328 2045,178 2405,178" id="DYRTD5045A_M_"/>
+      <path d="M 1805,358 1910,358 1925,328 1970,328 2045,178 2405,178" id="DYRTD5045A_C_"/>
+      <path d="M 1805,358 1910,358 1925,328 1970,328 2045,178 2075,178 2090,208 2405,208" id="DYRTD5045B-1_M_"/>
+      <path d="M 1805,358 1820,358 1835,388 1970,388 2060,208 2405,208" id="DYRTD5045B-2_M_"/>
+      <path d="M 1805,358 1910,358 1925,328 1970,328 2045,178 2075,178 2090,208 2405,208" id="DYRTD5045B-1_C_"/>
+      <path d="M 1805,358 2015,358 2075,238 2405,238" id="DYRTD5045C_M_"/>
+      <path d="M 1805,358 1820,358 1835,388 1940,388 1955,418 2045,418 2105,298 2405,298" id="DYRTD5045E_M_"/>
+      <path d="M 1805,358 1820,358 1835,388 2030,388 2090,268 2405,268" id="DYRTD5045D_M_"/>
+      <path d="M 1805,358 1820,358 1835,388 2030,388 2090,268 2405,268" id="DYRTD5045D_C_"/>
+      <path d="M 1805,358 1820,358 1835,388 1940,388 1955,418 2045,418 2105,298 2405,298" id="DYRTD5045E_C_"/>
+      <path d="M 1430,388 1595,388 1610,358 1655,358" id="DYRTD5046A_M_"/>
+      <path d="M 1545,328 1625,328 1640,358 1655,358" id="DYRTD5046B_S_"/>
+      <path d="M 1955,298 1925,298" id="DYRTD5049A_S_"/>
+      <path d="M 1925,298 1940,298 1955,328 1970,328 2045,178 2405,178" id="DYRTD5049B_M_"/>
+      <path d="M 1925,298 1940,298 1955,328 1970,328 2045,178 2075,178 2090,208 2405,208" id="DYRTD5049C_M_"/>
+      <path d="M 1925,298 1940,298 1955,328 1970,328 2045,178 2405,178" id="DYRTD5049B_C_"/>
+      <path d="M 1925,298 1940,298 1955,328 1970,328 2045,178 2075,178 2090,208 2405,208" id="DYRTD5049C_C_"/>
+      <path d="M 1655,388 1970,388 2060,208 2075,208 2090,178 2255,178" id="DYRTD5053B_M_"/>
+      <path d="M 1655,358 1910,358 1925,328 1970,328 2045,178 2255,178" id="DYRTD5053C_M_"/>
+      <path d="M 1850,298 1940,298 1955,328 1970,328 2045,178 2255,178" id="DYRTD5053D_S_"/>
+      <path d="M 1895,238 1985,238 2000,208 2075,208 2090,178 2255,178" id="DYRTD5053E_S_"/>
+      <path d="M 1795,208 2075,208 2090,178 2255,178" id="DYRTD5053F_M_"/>
+      <path d="M 1795,178 2255,178" id="DYRTD5053G_M_"/>
+      <path d="M 1760,418 1850,418 1865,388 1970,388 2060,208 2255,208" id="DYRTD5054A_S_"/>
+      <path d="M 1655,388 1970,388 2060,208 2255,208" id="DYRTD5054B_M_"/>
+      <path d="M 1655,358 1820,358 1835,388 1970,388 2060,208 2255,208" id="DYRTD5054C-1_M_"/>
+      <path d="M 1655,358 1910,358 1925,328 1970,328 2045,178 2075,178 2090,208 2255,208" id="DYRTD5054C-2_M_"/>
+      <path d="M 1849,298 1940,298 1955,328 1970,328 2045,178 2075,178 2090,208 2255,208" id="DYRTD5054D_S_"/>
+      <path d="M 1895,238 1985,238 2000,208 2255,208" id="DYRTD5054E_S_"/>
+      <path d="M 1795,208 2255,208" id="DYRTD5054F_M_"/>
+      <path d="M 1795,178 2075,178 2090,208 2255,208" id="DYRTD5054G_M_"/>
+      <path d="M 1655,358 2015,358 2075,238 2255,238" id="DYRTD5055A_M_"/>
+      <path d="M 1760,418 1850,418 1865,388 2030,388 2090,268 2255,268" id="DYRTD5056A_S_"/>
+      <path d="M 1655,388 2030,388 2090,268 2255,268" id="DYRTD5056B_M_"/>
+      <path d="M 1655,358 1820,358 1835,388 2030,388 2090,268 2255,268" id="DYRTD5056C_M_"/>
+      <path d="M 1690,118 1825,118 1840,88 2070,88" id="DYRDW5316A_S_"/>
+      <path d="M 1260,238 1425,238" id="DYRDW5320A_S_"/>
+      <path d="M 1760,418 1865,418" id="DYREC5474A_S_"/>
+      <path d="M 2180,298 2405,298" id="DYREC5477A_S_"/>
+      <path d="M 2180,298 2405,298" id="DYREC5477A_SP_"/>
+      <path d="M 2025,448 2120,448 2195,298 2405,298" id="DYREC5481A_S_"/>
+      <path d="M 2025,448 2120,448 2195,298 2405,298" id="DYREC5481A_SP_"/>
+      <path d="M 2405,298 2225,298 2135,478 2025,478" id="DYREC5483A_S_"/>
+      <path d="M 2405,298 2225,298 2135,478 2025,478" id="DYREC5483A_SP_"/>
+      <path d="M 2405,328 2240,328 2165,478 2025,478" id="DYREC5483B_S_"/>
+      <path d="M 2405,328 2240,328 2165,478 2025,478" id="DYREC5483B_SP_"/>
+      <path d="M 2830,268 2625,268" id="DYREC5490A_S_"/>
+      <path d="M 2970,268 2775,268" id="DYREC5491A_S_"/>
+      <path d="M 3185,328 3085,328 3070,358 2850,358 2805,268 2775,268" id="DYREC5491B_S_"/>
+      <path d="M 3185,358 2850,358 2805,268 2775,268" id="DYREC5491C_S_"/>
+      <path d="M 3185,388 3070,388 3055,358 2850,358 2805,268 2775,268" id="DYREC5491D_S_"/>
+      <path d="M 3185,418 3085,418 3055,358 2850,358 2805,268 2775,268" id="DYREC5491E_S_"/>
+      <path d="M 3045,418 2895,418 2865,358 2850,358 2805,268 2775,268" id="DYREC5491F_S_"/>
+      <path d="M 2775,298 2790,298 2820,358 3070,358 3085,328 3185,328" id="DYREC5493A_S_"/>
+      <path d="M 2775,298 2790,298 2820,358 3185,358" id="DYREC5493B_S_"/>
+      <path d="M 2775,298 2790,298 2820,358 3055,358 3070,388 3185,388" id="DYREC5493C_S_"/>
+      <path d="M 2775,298 2790,298 2820,358 3055,358 3085,418 3185,418" id="DYREC5493D_S_"/>
+      <path d="M 2775,298 2790,298 2820,358 2865,358 2895,418 3045,418" id="DYREC5493E_S_"/>
+      <path d="M 2625,298 2790,298 2820,358 2865,358 2895,418 2905,418" id="DYREC5496A_S_"/>
+      <path d="M 2625,268 2805,268 2850,358 2865,358 2895,418 2905,418" id="DYREC5496B_S_"/>
+      <path d="M 2625,298 2790,298 2820,358 3070,358 3085,328 3115,328" id="DYREC5501A_S_"/>
+      <path d="M 2625,268 2805,268 2850,358 3070,358 3085,328 3115,328" id="DYREC5501B_S_"/>
+      <path d="M 2625,298 2790,298 2820,358 3115,358" id="DYREC5502A_S_"/>
+      <path d="M 2625,268 2805,268 2850,358 3115,358" id="DYREC5502B_S_"/>
+      <path d="M 2625,298 2790,298 2820,358 3055,358 3070,388 3115,388" id="DYREC5503A_S_"/>
+      <path d="M 2625,268 2805,268 2850,358 3055,358 3070,388 3115,388" id="DYREC5503B_S_"/>
+      <path d="M 2625,298 2790,298 2820,358 3055,358 3085,418 3115,418" id="DYREC5504A_S_"/>
+      <path d="M 2625,268 2805,268 2850,358 3055,358 3085,418 3115,418" id="DYREC5504B_S_"/>
+      <path d="M 1615,328 1625,328 1640,358 1805,358" id="DYRTD5043A_S_"/>
+      <path d="M 1760,418 1850,418 1865,388 1970,388 2060,208 2075,208 2090,178 2255,178" id="DYRTD5053A_S_"/>
+      <path d="M 3885,118 4040,118" id="DYRDY544B_M_"/>
+      <path d="M 4715,148 4800,148" id="DYRDY581A_M_"/>
+      <path d="M 3820,148 3975,148" id="DYRDY551A_M_"/>
+      <path d="M 4415,118 4430,118 4445,88 4610,88" id="DYRDY556A_M_"/>
+      <path d="M 4415,118 4610,118" id="DYRDY556B_M_"/>
+      <path d="M 4415,118 4430,118 4445,88 4610,88" id="DYRDY556A_C_"/>
+      <path d="M 4195,148 4460,148" id="DYRDY557A_M_"/>
+      <path d="M 4195,148 4430,148 4445,178 4460,178" id="DYRDY559A_M_"/>
+      <path d="M 4610,88 4625,88 4640,118 4685,118 4730,28 4895,28" id="DYRDY562A_M_"/>
+      <path d="M 4610,88 4625,88 4640,118 4780,118" id="DYRDY562B_M_"/>
+      <path d="M 4610,118 4685,118 4730,28 4895,28" id="DYRDY564A_M_"/>
+      <path d="M 4610,118 4780,118" id="DYRDY564B_M_"/>
+      <path d="M 4460,178 4625,178 4640,148 4715,148" id="DYRDY569B_M_"/>
+      <path d="M 4460,148 4715,148" id="DYRDY569A_M_"/>
+      <path d="M 4460,178 4625,178 4640,148 4715,148" id="DYRDY569B_C_"/>
+      <path d="M 4460,178 4625,178 4640,148 4655,148 4670,118 4685,118 4730,28 4745,28" id="DYRDY571B_M_"/>
+      <path d="M 4460,148 4655,148 4670,118 4685,118 4730,28 4745,28" id="DYRDY571A_M_"/>
+      <path d="M 4460,178 4625,178 4640,148 4655,148 4670,118 4685,118 4730,28 4745,28" id="DYRDY571B_C_"/>
+      <path d="M 4895,28 4910,28" id="DYRDY572A_M_"/>
+      <path d="M 515,28 545,28 590,118 670,118" id="BUR299AM"/>
+      <path d="M 750,148 765,148 780,118 985,118" id="BUR300AS"/>
+      <path d="M 750,148 765,148 780,118 865,118 910,208 880,268 785,268" id="BUR300BS"/>
+      <path d="M 515,118 670,118" id="BUR303AM"/>
+      <path d="M 450,148 605,148" id="BUR304BM"/>
+      <path d="M 450,58 530,58 575,148 605,148" id="BUR304AM"/>
+      <path d="M 670,118 985,118" id="BUR305AM"/>
+      <path d="M 670,118 865,118 910,208 880,268 785,268" id="BUR305BM"/>
+      <path d="M 605,148 765,148 780,118 790,118" id="BUR306AS"/>
+      <path d="M 605,148 920,148" id="BUR308AM"/>
+      <path d="M 850,238 865,238 880,208 850,148 605,148" id="BUR354AM"/>
+    </g>
+    <g id="tc" class="tc"/>
+    <g id="berths">
+      <rect x="95" y="349" width="50" height="20" id="B_NE4427"/>
+      <rect x="120" y="379" width="50" height="20" id="B_NE4426"/>
+      <rect x="250" y="349" width="50" height="20" id="B_NE4429"/>
+      <rect x="275" y="379" width="50" height="20" id="B_NE4428"/>
+      <rect x="335" y="349" width="50" height="20" id="B_NE4431"/>
+      <rect x="360" y="379" width="50" height="20" id="B_NE4430"/>
+      <rect x="420" y="349" width="50" height="20" id="B_NE4433"/>
+      <rect x="445" y="379" width="50" height="20" id="B_NE4432"/>
+      <rect x="505" y="349" width="50" height="20" id="B_NE4435"/>
+      <rect x="530" y="379" width="50" height="20" id="B_NE4434"/>
+      <rect x="590" y="349" width="50" height="20" id="B_NE4437"/>
+      <rect x="700" y="379" width="50" height="20" id="B_NE4436"/>
+      <rect x="675" y="349" width="50" height="20" id="B_NE4439"/>
+      <rect x="785" y="379" width="50" height="20" id="B_NE4438"/>
+      <rect x="845" y="349" width="50" height="20" id="B_DY5027"/>
+      <rect x="870" y="379" width="50" height="20" id="B_NE4440"/>
+      <rect x="1020" y="349" width="50" height="20" id="B_DY5029"/>
+      <rect x="955" y="379" width="50" height="20" id="B_DY5030"/>
+      <rect x="1130" y="379" width="50" height="20" id="B_DY5032"/>
+      <rect x="1215" y="379" width="50" height="20" id="B_DY5036"/>
+      <rect x="1190" y="349" width="50" height="20" id="B_DY5033"/>
+      <rect x="1300" y="379" width="50" height="20" id="B_DY5038"/>
+      <rect x="1275" y="349" width="50" height="20" id="B_DY5035"/>
+      <rect x="1735" y="349" width="50" height="20" id="B_DY5045"/>
+      <rect x="2275" y="109" width="50" height="20" id="B_DY5301"/>
+      <rect x="2275" y="139" width="50" height="20" id="B_DY5302"/>
+      <rect x="2275" y="169" width="50" height="20" id="B_DY5053"/>
+      <rect x="2335" y="109" width="50" height="20" id="B_DY5061"/>
+      <rect x="2335" y="139" width="50" height="20" id="B_DY5062"/>
+      <rect x="2335" y="169" width="50" height="20" id="B_DY5063"/>
+      <rect x="4480" y="169" width="50" height="20" id="B_DYA559"/>
+      <rect x="4540" y="169" width="50" height="20" id="B_DYB559"/>
+      <rect x="4480" y="139" width="50" height="20" id="B_DY0557"/>
+      <rect x="4540" y="109" width="50" height="20" id="B_DY0564"/>
+      <rect x="4540" y="79" width="50" height="20" id="B_DYA562"/>
+      <rect x="4480" y="79" width="50" height="20" id="B_DYB562"/>
+      <rect x="4735" y="139" width="50" height="20" id="B_DY0569"/>
+      <rect x="4765" y="19" width="50" height="20" id="B_DY0571"/>
+      <rect x="3995" y="139" width="50" height="20" id="B_DY0551"/>
+      <rect x="3970" y="109" width="50" height="20" id="B_DY0552"/>
+      <rect x="4215" y="139" width="50" height="20" id="B_DY0555"/>
+      <rect x="4105" y="109" width="50" height="20" id="B_DY0554"/>
+      <rect x="4345" y="109" width="50" height="20" id="B_DY0556"/>
+      <rect x="4820" y="139" width="50" height="20" id="B_DY0581"/>
+      <rect x="4710" y="109" width="50" height="20" id="B_DY0574"/>
+      <rect x="4930" y="109" width="50" height="20" id="B_DY0584"/>
+      <rect x="5040" y="139" width="50" height="20" id="B_DY0583"/>
+      <rect x="5015" y="109" width="50" height="20" id="B_DY0586"/>
+      <rect x="4825" y="19" width="50" height="20" id="B_DY0572"/>
+      <rect x="1450" y="379" width="50" height="20" id="B_DY5040"/>
+      <rect x="1360" y="349" width="50" height="20" id="B_DY5037"/>
+      <rect x="1510" y="379" width="50" height="20" id="B_DY5039"/>
+      <rect x="1675" y="349" width="50" height="20" id="B_DY5046"/>
+      <rect x="1675" y="379" width="50" height="20" id="B_DY5044"/>
+      <rect x="1765" y="409" width="50" height="20" id="B_DY5475"/>
+      <rect x="1855" y="289" width="50" height="20" id="B_DY5049"/>
+      <rect x="1875" y="199" width="50" height="20" id="B_DY5308"/>
+      <rect x="1875" y="169" width="50" height="20" id="B_DY5306"/>
+      <rect x="1875" y="139" width="50" height="20" id="B_DY5304"/>
+      <rect x="1875" y="109" width="50" height="20" id="B_DY5300"/>
+      <rect x="1900" y="229" width="50" height="20" id="B_DY5310"/>
+      <rect x="2275" y="199" width="50" height="20" id="B_DY5054"/>
+      <rect x="2275" y="229" width="50" height="20" id="B_DY5055"/>
+      <rect x="2275" y="259" width="50" height="20" id="B_DY5056"/>
+      <rect x="2335" y="199" width="50" height="20" id="B_DY5064"/>
+      <rect x="2335" y="229" width="50" height="20" id="B_DY5065"/>
+      <rect x="2335" y="259" width="50" height="20" id="B_DY5066"/>
+      <rect x="2335" y="289" width="50" height="20" id="B_DY5487"/>
+      <rect x="2335" y="319" width="50" height="20" id="B_DY5489"/>
+      <rect x="2275" y="289" width="50" height="20" id="B_DY5484"/>
+      <rect x="2275" y="319" width="50" height="20" id="B_DY5480"/>
+      <rect x="2645" y="259" width="50" height="20" id="B_DY5488"/>
+      <rect x="2645" y="289" width="50" height="20" id="B_DY5486"/>
+      <rect x="2635" y="199" width="50" height="20" id="B_DY5081"/>
+      <rect x="2635" y="169" width="50" height="20" id="B_DY5079"/>
+      <rect x="2635" y="139" width="50" height="20" id="B_DY5077"/>
+      <rect x="2635" y="109" width="50" height="20" id="B_DY5075"/>
+      <rect x="2755" y="199" width="50" height="20" id="B_DY5076"/>
+      <rect x="2755" y="169" width="50" height="20" id="B_DY5078"/>
+      <rect x="2755" y="139" width="50" height="20" id="B_DY5080"/>
+      <rect x="2755" y="109" width="50" height="20" id="B_DY5082"/>
+      <rect x="2705" y="259" width="50" height="20" id="B_DY5491"/>
+      <rect x="2705" y="289" width="50" height="20" id="B_DY5493"/>
+      <rect x="2845" y="259" width="50" height="20" id="B_DY5490"/>
+      <rect x="3130" y="319" width="50" height="20" id="B_DY5501"/>
+      <rect x="3130" y="349" width="50" height="20" id="B_DY5502"/>
+      <rect x="3130" y="379" width="50" height="20" id="B_DY5503"/>
+      <rect x="3130" y="409" width="50" height="20" id="B_DY5504"/>
+      <rect x="3130" y="439" width="50" height="20" id="B_DY5505"/>
+      <rect x="3130" y="469" width="50" height="20" id="B_DY5506"/>
+      <rect x="3130" y="499" width="50" height="20" id="B_DY5507"/>
+      <rect x="2920" y="409" width="50" height="20" id="B_DY5496"/>
+      <rect x="2980" y="409" width="50" height="20" id="B_DY5497"/>
+      <rect x="2905" y="259" width="50" height="20" id="B_DY5495"/>
+      <rect x="3020" y="259" width="50" height="20" id="B_DY5494"/>
+      <rect x="3020" y="289" width="50" height="20" id="B_DY5492"/>
+      <rect x="1550" y="319" width="50" height="20" id="B_DY5043"/>
+      <rect x="1880" y="409" width="50" height="20" id="B_DY5074"/>
+      <rect x="2060" y="439" width="50" height="20" id="B_DY5476"/>
+      <rect x="1960" y="439" width="50" height="20" id="B_DY5481"/>
+      <rect x="2060" y="469" width="50" height="20" id="B_DY5478"/>
+      <rect x="1960" y="469" width="50" height="20" id="B_DY5483"/>
+      <rect x="2115" y="289" width="50" height="20" id="B_DY5477"/>
+      <rect x="1815" y="199" width="50" height="20" id="B_DY5311"/>
+      <rect x="1815" y="169" width="50" height="20" id="B_DY5313"/>
+      <rect x="1815" y="139" width="50" height="20" id="B_DY5315"/>
+      <rect x="1875" y="79" width="50" height="20" id="B_DY5309"/>
+      <rect x="2085" y="79" width="50" height="20" id="B_DY5303"/>
+      <rect x="1620" y="109" width="50" height="20" id="B_DY5316"/>
+      <rect x="1555" y="109" width="50" height="20" id="B_DY5321"/>
+      <rect x="1555" y="139" width="50" height="20" id="B_DY5319"/>
+      <rect x="1355" y="229" width="50" height="20" id="B_DY5318"/>
+      <rect x="1295" y="229" width="50" height="20" id="B_DY5323"/>
+      <rect x="1195" y="229" width="50" height="20" id="B_DY5320"/>
+      <rect x="1390" y="79" width="50" height="20" id="B_DY5322"/>
+      <rect x="1305" y="109" width="50" height="20" id="B_DY5324"/>
+      <rect x="1195" y="109" width="50" height="20" id="B_DY5328"/>
+      <rect x="1220" y="139" width="50" height="20" id="B_DY5331"/>
+      <rect x="1220" y="169" width="50" height="20" id="B_DY5329"/>
+      <rect x="1000" y="109" width="50" height="20" id="B_DY5330"/>
+      <rect x="1110" y="139" width="50" height="20" id="B_DY5333"/>
+      <rect x="915" y="109" width="50" height="20" id="B_DY5332"/>
+      <rect x="1025" y="139" width="50" height="20" id="B_BU0312"/>
+      <rect x="940" y="139" width="50" height="20" id="B_BU0308"/>
+      <rect x="2815" y="199" width="50" height="20" id="B_DY5089"/>
+      <rect x="2815" y="169" width="50" height="20" id="B_DY5087"/>
+      <rect x="2815" y="139" width="50" height="20" id="B_DY5085"/>
+      <rect x="2815" y="109" width="50" height="20" id="B_DY5083"/>
+      <rect x="3025" y="169" width="50" height="20" id="B_DY5084"/>
+      <rect x="3025" y="139" width="50" height="20" id="B_DY5088"/>
+      <rect x="3025" y="109" width="50" height="20" id="B_DY5090"/>
+      <rect x="3085" y="169" width="50" height="20" id="B_DY5097"/>
+      <rect x="3085" y="139" width="50" height="20" id="B_DY5095"/>
+      <rect x="3085" y="109" width="50" height="20" id="B_DY5093"/>
+      <rect x="3250" y="139" width="50" height="20" id="B_DY5094"/>
+      <rect x="3250" y="109" width="50" height="20" id="B_DY5096"/>
+      <rect x="3250" y="79" width="50" height="20" id="B_DY5098"/>
+      <rect x="3250" y="169" width="50" height="20" id="B_DY5092"/>
+      <rect x="3310" y="139" width="50" height="20" id="B_DY5103"/>
+      <rect x="3310" y="109" width="50" height="20" id="B_DY5101"/>
+      <rect x="3310" y="79" width="50" height="20" id="B_DY5099"/>
+      <rect x="3310" y="169" width="50" height="20" id="B_DY5105"/>
+      <rect x="3450" y="79" width="50" height="20" id="B_DY5107"/>
+      <rect x="3585" y="109" width="50" height="20" id="B_DY5102"/>
+      <rect x="3585" y="139" width="50" height="20" id="B_DY5104"/>
+      <rect x="3645" y="109" width="50" height="20" id="B_DY5109"/>
+      <rect x="3730" y="109" width="50" height="20" id="B_DY5111"/>
+      <rect x="3840" y="139" width="50" height="20" id="B_DY5108"/>
+      <rect x="3815" y="109" width="50" height="20" id="B_DY0544"/>
+      <rect x="4920" y="19" width="50" height="20" id="B_DYMKSB"/>
+      <rect x="780" y="229" width="50" height="20" id="B_BU0354"/>
+      <rect x="805" y="259" width="50" height="20" id="B_BU0353"/>
+      <rect x="695" y="229" width="50" height="20" id="B_BU0352"/>
+      <rect x="720" y="259" width="50" height="20" id="B_BU0349"/>
+      <rect x="610" y="229" width="50" height="20" id="B_BU0348"/>
+      <rect x="635" y="259" width="50" height="20" id="B_BU0347"/>
+      <rect x="525" y="229" width="50" height="20" id="B_BU0346"/>
+      <rect x="550" y="259" width="50" height="20" id="B_BU0345"/>
+      <rect x="440" y="229" width="50" height="20" id="B_BU0344"/>
+      <rect x="465" y="259" width="50" height="20" id="B_BU0341"/>
+      <rect x="355" y="229" width="50" height="20" id="B_BU0342"/>
+      <rect x="380" y="259" width="50" height="20" id="B_BU0335"/>
+      <rect x="270" y="229" width="50" height="20" id="B_BU0334"/>
+      <rect x="295" y="259" width="50" height="20" id="B_BU0333"/>
+      <rect x="185" y="229" width="50" height="20" id="B_BU0332"/>
+      <rect x="210" y="259" width="50" height="20" id="B_BU0329"/>
+      <rect x="100" y="229" width="50" height="20" id="B_BU0328"/>
+      <rect x="125" y="259" width="50" height="20" id="B_NE4460"/>
+      <rect x="600" y="109" width="50" height="20" id="B_BU0305"/>
+      <rect x="625" y="139" width="50" height="20" id="B_BU0304"/>
+      <rect x="685" y="139" width="50" height="20" id="B_BU0300"/>
+      <rect x="445" y="19" width="50" height="20" id="B_BU0299"/>
+      <rect x="470" y="49" width="50" height="20" id="B_BU0298"/>
+      <rect x="360" y="19" width="50" height="20" id="B_BU0297"/>
+      <rect x="385" y="49" width="50" height="20" id="B_BU0296"/>
+      <rect x="275" y="19" width="50" height="20" id="B_BU0295"/>
+      <rect x="300" y="49" width="50" height="20" id="B_BUEN13"/>
+      <rect x="445" y="109" width="50" height="20" id="B_BU0303"/>
+      <rect x="470" y="139" width="50" height="20" id="B_BU0302"/>
+      <rect x="270" y="109" width="50" height="20" id="B_BU0189"/>
+      <rect x="295" y="139" width="50" height="20" id="B_BU0188"/>
+      <rect x="185" y="109" width="50" height="20" id="B_BU0187"/>
+      <rect x="210" y="139" width="50" height="20" id="B_BU0186"/>
+      <rect x="100" y="109" width="50" height="20" id="B_BU0185"/>
+      <rect x="125" y="139" width="50" height="20" id="B_BU0184"/>
+      <rect x="805" y="109" width="50" height="20" id="B_BU0306"/>
+    </g>
+    <g id="descrs" class="berth">
+      <text id="NE4427" x="101" y="364">    </text>
+      <text id="NE4426" x="126" y="394">    </text>
+      <text id="NE4429" x="256" y="364">    </text>
+      <text id="NE4428" x="281" y="394">    </text>
+      <text id="NE4431" x="341" y="364">    </text>
+      <text id="NE4430" x="366" y="394">    </text>
+      <text id="NE4433" x="426" y="364">    </text>
+      <text id="NE4432" x="451" y="394">    </text>
+      <text id="NE4435" x="511" y="364">    </text>
+      <text id="NE4434" x="536" y="394">    </text>
+      <text id="NE4437" x="596" y="364">    </text>
+      <text id="NE4436" x="706" y="394">    </text>
+      <text id="NE4439" x="681" y="364">    </text>
+      <text id="NE4438" x="791" y="394">    </text>
+      <text id="DY5027" x="851" y="364">    </text>
+      <text id="NE4440" x="876" y="394">    </text>
+      <text id="DY5029" x="1026" y="364">    </text>
+      <text id="DY5030" x="961" y="394">    </text>
+      <text id="DY5032" x="1136" y="394">    </text>
+      <text id="DY5036" x="1221" y="394">    </text>
+      <text id="DY5033" x="1196" y="365">    </text>
+      <text id="DY5038" x="1306" y="394">    </text>
+      <text id="DY5035" x="1281" y="364">    </text>
+      <text id="DY5045" x="1741" y="364">    </text>
+      <text id="DY5301" x="2281" y="124">    </text>
+      <text id="DY5302" x="2281" y="154">    </text>
+      <text id="DY5053" x="2281" y="184">    </text>
+      <text id="DY5061" x="2341" y="124">    </text>
+      <text id="DY5062" x="2341" y="154">    </text>
+      <text id="DY5063" x="2341" y="184">    </text>
+      <text id="DYA559" x="4486" y="184">    </text>
+      <text id="DYB559" x="4546" y="184">    </text>
+      <text id="DY0557" x="4486" y="154">    </text>
+      <text id="DY0564" x="4546" y="124">    </text>
+      <text id="DYA562" x="4546" y="94">    </text>
+      <text id="DYB562" x="4486" y="94">    </text>
+      <text id="DY0569" x="4741" y="154">    </text>
+      <text id="DY0571" x="4771" y="34">    </text>
+      <text id="DY0551" x="4001" y="154">    </text>
+      <text id="DY0552" x="3976" y="124">    </text>
+      <text id="DY0555" x="4221" y="154">    </text>
+      <text id="DY0554" x="4111" y="124">    </text>
+      <text id="DY0556" x="4351" y="124">    </text>
+      <text id="DY0581" x="4826" y="154">    </text>
+      <text id="DY0574" x="4716" y="124">    </text>
+      <text id="DY0584" x="4936" y="124">    </text>
+      <text id="DY0583" x="5046" y="154">    </text>
+      <text id="DY0586" x="5021" y="124">    </text>
+      <text id="DY0572" x="4831" y="34">    </text>
+      <text id="DY5040" x="1456" y="394">    </text>
+      <text id="DY5037" x="1366" y="364">    </text>
+      <text id="DY5039" x="1516" y="394">    </text>
+      <text id="DY5046" x="1681" y="364">    </text>
+      <text id="DY5044" x="1681" y="394">    </text>
+      <text id="DY5475" x="1771" y="424">    </text>
+      <text id="DY5049" x="1861" y="304">    </text>
+      <text id="DY5308" x="1881" y="214">    </text>
+      <text id="DY5306" x="1881" y="184">    </text>
+      <text id="DY5304" x="1881" y="154">    </text>
+      <text id="DY5300" x="1881" y="124">    </text>
+      <text id="DY5310" x="1906" y="244">    </text>
+      <text id="DY5054" x="2281" y="214">    </text>
+      <text id="DY5055" x="2281" y="244">    </text>
+      <text id="DY5056" x="2281" y="274">    </text>
+      <text id="DY5064" x="2341" y="214">    </text>
+      <text id="DY5065" x="2341" y="244">    </text>
+      <text id="DY5066" x="2341" y="274">    </text>
+      <text id="DY5487" x="2341" y="304">    </text>
+      <text id="DY5489" x="2341" y="334">    </text>
+      <text id="DY5484" x="2281" y="304">    </text>
+      <text id="DY5480" x="2281" y="334">    </text>
+      <text id="DY5488" x="2651" y="274">    </text>
+      <text id="DY5486" x="2651" y="304">    </text>
+      <text id="DY5081" x="2641" y="214">    </text>
+      <text id="DY5079" x="2641" y="184">    </text>
+      <text id="DY5077" x="2641" y="154">    </text>
+      <text id="DY5075" x="2641" y="124">    </text>
+      <text id="DY5076" x="2761" y="214">    </text>
+      <text id="DY5078" x="2761" y="184">    </text>
+      <text id="DY5080" x="2761" y="154">    </text>
+      <text id="DY5082" x="2761" y="124">    </text>
+      <text id="DY5491" x="2711" y="274">    </text>
+      <text id="DY5493" x="2711" y="304">    </text>
+      <text id="DY5490" x="2851" y="274">    </text>
+      <text id="DY5501" x="3136" y="334">    </text>
+      <text id="DY5502" x="3136" y="364">    </text>
+      <text id="DY5503" x="3136" y="394">    </text>
+      <text id="DY5504" x="3136" y="424">    </text>
+      <text id="DY5505" x="3136" y="454">    </text>
+      <text id="DY5506" x="3136" y="484">    </text>
+      <text id="DY5507" x="3136" y="514">    </text>
+      <text id="DY5496" x="2926" y="424">    </text>
+      <text id="DY5497" x="2986" y="424">    </text>
+      <text id="DY5495" x="2911" y="274">    </text>
+      <text id="DY5494" x="3026" y="274">    </text>
+      <text id="DY5492" x="3026" y="304">    </text>
+      <text id="DY5043" x="1556" y="334">    </text>
+      <text id="DY5074" x="1886" y="424">    </text>
+      <text id="DY5476" x="2066" y="454">    </text>
+      <text id="DY5481" x="1966" y="454">    </text>
+      <text id="DY5478" x="2066" y="484">    </text>
+      <text id="DY5483" x="1966" y="484">    </text>
+      <text id="DY5477" x="2121" y="304">    </text>
+      <text id="DY5311" x="1821" y="214">    </text>
+      <text id="DY5313" x="1821" y="184">    </text>
+      <text id="DY5315" x="1821" y="154">    </text>
+      <text id="DY5309" x="1881" y="94">    </text>
+      <text id="DY5303" x="2091" y="94">    </text>
+      <text id="DY5316" x="1626" y="124">    </text>
+      <text id="DY5321" x="1561" y="124">    </text>
+      <text id="DY5319" x="1561" y="154">    </text>
+      <text id="DY5318" x="1361" y="244">    </text>
+      <text id="DY5323" x="1301" y="244">    </text>
+      <text id="DY5320" x="1201" y="244">    </text>
+      <text id="DY5322" x="1396" y="94">    </text>
+      <text id="DY5324" x="1311" y="124">    </text>
+      <text id="DY5328" x="1201" y="124">    </text>
+      <text id="DY5331" x="1226" y="154">    </text>
+      <text id="DY5329" x="1226" y="184">    </text>
+      <text id="DY5330" x="1006" y="124">    </text>
+      <text id="DY5333" x="1116" y="154">    </text>
+      <text id="DY5332" x="921" y="124">    </text>
+      <text id="BU0312" x="1031" y="154">    </text>
+      <text id="BU0308" x="946" y="154">    </text>
+      <text id="DY5089" x="2821" y="214">    </text>
+      <text id="DY5087" x="2821" y="184">    </text>
+      <text id="DY5085" x="2821" y="154">    </text>
+      <text id="DY5083" x="2821" y="124">    </text>
+      <text id="DY5084" x="3031" y="184">    </text>
+      <text id="DY5088" x="3031" y="154">    </text>
+      <text id="DY5090" x="3031" y="124">    </text>
+      <text id="DY5097" x="3091" y="184">    </text>
+      <text id="DY5095" x="3091" y="154">    </text>
+      <text id="DY5093" x="3091" y="124">    </text>
+      <text id="DY5094" x="3256" y="154">    </text>
+      <text id="DY5096" x="3256" y="124">    </text>
+      <text id="DY5098" x="3256" y="94">    </text>
+      <text id="DY5092" x="3256" y="184">    </text>
+      <text id="DY5103" x="3316" y="154">    </text>
+      <text id="DY5101" x="3316" y="124">    </text>
+      <text id="DY5099" x="3316" y="94">    </text>
+      <text id="DY5105" x="3316" y="184">    </text>
+      <text id="DY5107" x="3456" y="94">    </text>
+      <text id="DY5102" x="3591" y="124">    </text>
+      <text id="DY5104" x="3591" y="154">    </text>
+      <text id="DY5109" x="3651" y="124">    </text>
+      <text id="DY5111" x="3736" y="124">    </text>
+      <text id="DY5108" x="3846" y="154">    </text>
+      <text id="DY0544" x="3821" y="124">    </text>
+      <text id="DYMKSB" x="4926" y="34">    </text>
+      <text id="BU0354" x="786" y="244">    </text>
+      <text id="BU0353" x="811" y="274">    </text>
+      <text id="BU0352" x="701" y="244">    </text>
+      <text id="BU0349" x="726" y="274">    </text>
+      <text id="BU0348" x="616" y="244">    </text>
+      <text id="BU0347" x="641" y="274">    </text>
+      <text id="BU0346" x="531" y="244">    </text>
+      <text id="BU0345" x="556" y="274">    </text>
+      <text id="BU0344" x="446" y="244">    </text>
+      <text id="BU0341" x="471" y="274">    </text>
+      <text id="BU0342" x="361" y="244">    </text>
+      <text id="BU0335" x="386" y="274">    </text>
+      <text id="BU0334" x="276" y="244">    </text>
+      <text id="BU0333" x="301" y="274">    </text>
+      <text id="BU0332" x="191" y="244">    </text>
+      <text id="BU0329" x="216" y="274">    </text>
+      <text id="BU0328" x="106" y="244">    </text>
+      <text id="NE4460" x="131" y="274">    </text>
+      <text id="BU0305" x="606" y="124">    </text>
+      <text id="BU0304" x="631" y="154">    </text>
+      <text id="BU0300" x="691" y="154">    </text>
+      <text id="BU0299" x="451" y="34">    </text>
+      <text id="BU0298" x="476" y="64">    </text>
+      <text id="BU0297" x="366" y="34">    </text>
+      <text id="BU0296" x="391" y="64">    </text>
+      <text id="BU0295" x="281" y="34">    </text>
+      <text id="BUEN13" x="306" y="64">    </text>
+      <text id="BU0303" x="451" y="124">    </text>
+      <text id="BU0302" x="476" y="154">    </text>
+      <text id="BU0189" x="276" y="124">    </text>
+      <text id="BU0188" x="301" y="154">    </text>
+      <text id="BU0187" x="191" y="124">    </text>
+      <text id="BU0186" x="216" y="154">    </text>
+      <text id="BU0185" x="106" y="124">    </text>
+      <text id="BU0184" x="131" y="154">    </text>
+      <text id="BU0306" x="811" y="124">    </text>
+    </g>
+    <g id="base" class="text">
+      <text x="210" y="435" class="station" id="T_LNGEATN">
+        <tspan>LONG EATON</tspan>
+      </text>
+      <text x="40" y="367" class="link">
+        <tspan>To/From</tspan>
+      </text>
+      <text x="40" y="377" class="link">
+        <tspan>Sheet Stores</tspan>
+      </text>
+      <text x="40" y="387" class="link">
+        <tspan>Junction</tspan>
+      </text>
+      <text x="1045" y="435" class="station" id="T_SPDN">
+        <tspan>SPONDON</tspan>
+      </text>
+      <text x="2330" y="80" class="station" id="T_DRBY">
+        <tspan>DERBY</tspan>
+      </text>
+      <text x="4820" y="75" class="station" id="T_AMBERGT">
+        <tspan>AMBERGATE</tspan>
+      </text>
+      <text x="3930" y="190" class="station" id="T_DUFIELD">
+        <tspan>DUFFIELD</tspan>
+      </text>
+      <text x="4304" y="195" class="station" id="T_BELPER">
+        <tspan>BELPER</tspan>
+      </text>
+      <text x="5145" y="132" class="link">
+        <tspan>To/From</tspan>
+      </text>
+      <text x="5145" y="142" class="link">
+        <tspan>Chesterfield</tspan>
+      </text>
+      <text x="1145" y="237" class="link">
+        <tspan>To/From</tspan>
+      </text>
+      <text x="1145" y="247" class="link">
+        <tspan>Sinfin Central</tspan>
+      </text>
+      <text x="1580" y="195" class="station" id="T_PEARTRE">
+        <tspan>PEARTREE</tspan>
+      </text>
+      <text x="220" y="42" class="link">
+        <tspan>To/From</tspan>
+      </text>
+      <text x="220" y="52" class="link">
+        <tspan>Uttoxeter</tspan>
+      </text>
+      <text x="5015" y="27" class="link">
+        <tspan>To/From</tspan>
+      </text>
+      <text x="5015" y="37" class="link">
+        <tspan>Matlock</tspan>
+      </text>
+      <text x="4900" y="186" class="feature" id="T_RDGLNJ">
+        <tspan>Wingfield Tunnel</tspan>
+      </text>
+      <text x="4075" y="197" class="feature" id="text20098">
+        <tspan>Milford Tunnel</tspan>
+      </text>
+      <text x="1575" y="296" class="feature" id="text9280">
+        <tspan>RTC Sidings South</tspan>
+      </text>
+      <text x="1880" y="321" class="feature" id="text11554">
+        <tspan>RTC Sidings North</tspan>
+      </text>
+      <text x="1930" y="261" class="feature" id="T_DRBYALL">
+        <tspan>Litchurch Lane Works</tspan>
+      </text>
+      <text x="1495" y="47" class="feature" id="T_MELBRNJ">
+        <tspan>Melbourne Junction</tspan>
+      </text>
+      <text x="1901" y="66" class="feature" id="T_DRBYEL">
+        <tspan>St Andrews Siding</tspan>
+      </text>
+      <text x="1790" y="447" class="feature" id="T_DRBYEPS">
+        <tspan>Etches Park CS</tspan>
+      </text>
+      <text x="2030" y="521" class="feature" id="text11574">
+        <tspan>Derby 4 Shed</tspan>
+      </text>
+      <text x="2925" y="81" class="feature" id="T_DRBYSMJ">
+        <tspan>St Marys South Junction</tspan>
+      </text>
+      <text x="3205" y="61" class="feature" id="text11582">
+        <tspan>St Marys North Junction</tspan>
+      </text>
+      <text x="3550" y="192" class="feature" id="T_BREADSL">
+        <tspan>Breadsall Junction</tspan>
+      </text>
+      <text x="4535" y="66" class="feature" id="T_BROHLME">
+        <tspan>Broadholme Loops</tspan>
+      </text>
+      <text x="4680" y="206" class="feature" id="T_AMBERGJ">
+        <tspan>Ambergate Junction</tspan>
+      </text>
+      <text x="3140" y="256" class="feature" id="text11598">
+        <tspan>Outside Siding</tspan>
+      </text>
+      <text x="2970" y="466" class="feature" id="T_DRBYCHS">
+        <tspan>Chaddesden Sidings</tspan>
+      </text>
+      <text x="3240" y="361" class="feature" id="text11606">
+        <tspan>Carriage Siding 2</tspan>
+      </text>
+      <text x="3240" y="391" class="feature" id="text11610">
+        <tspan>Carriage Siding 3</tspan>
+      </text>
+      <text x="3240" y="421" class="feature" id="text11614">
+        <tspan>Carriage Siding 4</tspan>
+      </text>
+      <text x="3240" y="451" class="feature" id="text11618">
+        <tspan>Storage Siding 5</tspan>
+      </text>
+      <text x="3240" y="481" class="feature" id="text11622">
+        <tspan>Storage Siding 6</tspan>
+      </text>
+      <text x="3240" y="511" class="feature" id="text11626">
+        <tspan>Storage Siding 7</tspan>
+      </text>
+      <text x="2082" y="22" class="feature" id="T_DRBYLNW">
+        <tspan>London Road Jn.</tspan>
+      </text>
+      <text x="3240" y="331" class="feature" id="text11634">
+        <tspan>Carriage Siding 1</tspan>
+      </text>
+      <text x="396" y="195" class="station" id="T_WLNTNON">
+        <tspan>WILLINGTON</tspan>
+      </text>
+      <text x="40" y="132" class="link">
+        <tspan>To/From</tspan>
+      </text>
+      <text x="40" y="142" class="link">
+        <tspan>Burton-on-Trent</tspan>
+      </text>
+      <text x="40" y="247" class="link">
+        <tspan>To/From</tspan>
+      </text>
+      <text x="40" y="257" class="link">
+        <tspan>Sheet Stores</tspan>
+      </text>
+      <text x="845" y="72" class="feature" id="T_STSNJN">
+        <tspan>Stenson Junction</tspan>
+      </text>
+      <text x="40" y="267" class="link">
+        <tspan>Junction</tspan>
+      </text>
+      <rect x="5" y="354" width="70" height="40" class="map_link" id="LINK_1"/>
+      <rect x="5110" y="114" width="70" height="40" class="map_link" id="LINK_2"/>
+      <rect x="1110" y="219" width="70" height="40" class="map_link" id="rect7834"/>
+      <rect x="185" y="24" width="70" height="40" class="map_link" id="rect6037"/>
+      <rect x="4980" y="9" width="70" height="40" class="map_link" id="rect6112"/>
+      <rect x="5" y="114" width="70" height="40" class="map_link" id="LINK_3"/>
+      <rect x="5" y="234" width="70" height="40" class="map_link" id="rect4491"/>
+    </g>
+  </g>
+</svg>
