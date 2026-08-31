@@ -51,14 +51,19 @@ failure case are in `figures/pub/` and the changelogs.
 derbysim/            core library
   sim/               simulator: engine, interlocking, blocking-time env, rewards
   learn/             features, encoders, BC, PPO/A2C, IQL, rollout, baselines
-scripts/             numbered pipeline steps (01 data build → 42 figures), one per stage
+scripts/             numbered pipeline steps (01 data build → 45 figures), one per stage
 notebooks/           server-side training/eval launchers (72-core parallel runs; d84_sens_rerun.ipynb
                      is the hyperparameter-sensitivity sweep, resumable via --resume)
-artifacts/           processed datasets, calibration, checkpoints, result JSONs
-figures/pub/         publication figures F1–F14 + system overview (SVG/PDF/PNG)
+artifacts/
+  subset/            region-filtered TD/TRUST/CIF parquets (~17 MB) — all the data the pipeline reads
+  calib/             calibrated occupation/dwell parameters and per-signal decision-advance windows
+  reports/           result JSONs for every run + the key checkpoints (BC warm start, stage-3 init,
+                     deployed policy); larger intermediate checkpoints are not committed
+figures/pub/         publication figures F1–F17 (incl. sensitivity F15–F17) + system overview
 demo/                Rail Route-style playback web demo (Flask + SVG board)
 tests/               unit tests
 docs/                design documents (historical; the changelogs are authoritative)
+*.csv (repo root)    junction topology: signals, track circuits, routes, platforms
 ```
 
 `CHANGELOG.md` and `chinese_change_log.md` record every decision (D-numbered) and are the
@@ -67,19 +72,28 @@ authoritative project history.
 ## Getting started
 
 ```bash
-pip install -e .                      # Python 3.10+, torch required for training only
+pip install -r requirements.txt       # Python 3.10+; torch needed for training/eval only
 python -m pytest tests/               # unit tests (no torch needed for most)
 python scripts/13_train_ppo.py --help # training entry point (all flags documented)
-python scripts/40_pub_figures.py      # regenerate all publication figures
+python scripts/40_pub_figures.py      # regenerate the publication figures
 cd demo && python app.py              # interactive playback demo (localhost)
 ```
 
-Training was run on a 72-core CPU server; evaluation and figure generation run locally.
+The repository is self-contained for reproduction: the committed `artifacts/subset` parquets,
+calibration files and infrastructure CSVs are everything the simulator needs, and the committed
+checkpoints let you evaluate the deployed policy (`ppo_d73_AB_s0_best.pt`) or re-launch the final
+training stage and the sensitivity sweep (`notebooks/d84_sens_rerun.ipynb`, resumable) without
+rebuilding anything. Only rebuilding the subsets from the raw feeds (`scripts/01–05`) or the BC
+dataset (`scripts/30`) requires data that is not distributed here. Training was run on a 72-core
+CPU server; evaluation and figure generation run locally.
 
 ## Data statement
 
-Raw TD/TRUST/CIF data were provided by Network Rail through BCRRE for research use and are not
-redistributed here; `artifacts/` contains only derived, processed forms used by the pipeline.
+Raw TD/TRUST/CIF feeds were provided by Network Rail through BCRRE for research use and are not
+redistributed here. The repository includes only derived, region-filtered forms (the
+`artifacts/subset` parquets and calibration files) — the minimum needed to run the simulator and
+reproduce the results. The ~7 GB behaviour-cloning dataset is likewise excluded; the committed BC
+checkpoint substitutes for it.
 
 ## Acknowledgements
 
