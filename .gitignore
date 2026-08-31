@@ -46,3 +46,16 @@ __pycache__/
 !artifacts/reports/ppo_push_AB_s0_best.pt
 !artifacts/reports/ppo_d73_AB_s0_best.pt
 !artifacts/reports/ppo_8192_anchor_s0_last.pt
+
+# 放行最小可运行数据集(衍生数据; 原始 TD/TRUST/CIF 与 7GB dataset 不入库)
+!Derby_info.csv
+!route_to_tc_all.csv
+!platform_tc_map.csv
+!platform_end_signals.csv
+!artifacts/calib/*.json
+!artifacts/subset/*.parquet
+!artifacts/reports/*.json
+!artifacts/reports/bc_fullpanel_gnn.pt
+!artifacts/reports/ppo_push_AB_s0_best.pt
+!artifacts/reports/ppo_d73_AB_s0_best.pt
+!artifacts/reports/ppo_8192_anchor_s0_last.pt
