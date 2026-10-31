@@ -59,3 +59,6 @@ __pycache__/
 !artifacts/reports/ppo_push_AB_s0_best.pt
 !artifacts/reports/ppo_d73_AB_s0_best.pt
 !artifacts/reports/ppo_8192_anchor_s0_last.pt
+
+raw_data/Schedule.CIF
+raw_data/Train_Describer_data.csv
